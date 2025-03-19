@@ -28,10 +28,14 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+         className="bg-gray-50 text-gray-900"
+        // className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
         <NavBar />
-        {children}
+        <div className="max-w-7xl mx-auto pt-16 p-4 min-h-screen">
+          {children}
+        </div>
+        
         </body>
       </html>
     </ClerkProvider>
