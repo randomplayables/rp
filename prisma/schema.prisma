@@ -12,3 +12,14 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Profile {
+  id String @id @default(uuid())
+  userId String @unique
+  email String
+  subscriptionActive Boolean @default(false)
+  subscriptionTier String?
+  stripeSubscriptionId String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
