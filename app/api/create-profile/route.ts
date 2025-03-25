@@ -28,7 +28,7 @@ export async function POST() {
 
         if(existingProfile) {
             return NextResponse.json(
-                {message: "Profile already exists."},
+                {message: "Profile already exists."}
             )
         }
 
