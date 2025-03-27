@@ -1,6 +1,61 @@
+import { useUser } from "@clerk/nextjs";
 import { availablePlans } from "@/lib/plans";
+import { useMutation } from "@tanstack/react-query";
+
+type SubscribeResponse = {
+    url: string
+}
+
+type SubscribeError = {
+    error: string
+}
+
+async function subscribeToPlan(
+    planType: string,
+    userId: string,
+    email: string): Promise<SubscribeResponse> {
+
+        const response = await fetch("/api/checkout", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                body: JSON.stringify({
+                    planType,
+                    userId,
+                    email
+                })
+
+            }
+        })
+        
+        if (!response.ok){
+            const errorData: SubscribeError = await response.json()
+            throw new Error(errorData.error || "Something went wrong.")
+        }
+
+        const data: SubscribeResponse = await response.json()
+
+        return data
+}
 
 export default function Subscribe() {
+
+    const {user} = useUser()
+
+    const userId = user?.id
+    const email = user?.emailAddresses[0].emailAddress || ""
+
+    const {} = useMutation<SubscribeResponse, Error, {planType: string}>({
+        mutationFn: async ({planType}) => {
+
+            if (!userId) {
+                throw new Error("User not signed in.")
+            }
+
+            return subscribeToPlan(planType, userId, email)
+
+        }
+    })
     return (
         <div className="px-4 py-8 sm:py-12 lg:py-16">
             <div>
