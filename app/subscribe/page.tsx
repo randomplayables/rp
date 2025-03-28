@@ -1,6 +1,9 @@
+"use client"
+
 import { useUser } from "@clerk/nextjs";
 import { availablePlans } from "@/lib/plans";
 import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 type SubscribeResponse = {
     url: string
@@ -41,13 +44,13 @@ async function subscribeToPlan(
 export default function Subscribe() {
 
     const {user} = useUser()
+    const router = useRouter()
 
     const userId = user?.id
     const email = user?.emailAddresses[0].emailAddress || ""
 
-    const {} = useMutation<SubscribeResponse, Error, {planType: string}>({
+    const { mutate, isPending } = useMutation<SubscribeResponse, Error, {planType: string}>({
         mutationFn: async ({planType}) => {
-
             if (!userId) {
                 throw new Error("User not signed in.")
             }
@@ -56,6 +59,14 @@ export default function Subscribe() {
 
         }
     })
+
+    function handleSubscribe(planType: string) {
+        if (!userId) {
+            router.push("/sign-up")
+            return
+        }
+        mutate({planType})
+    }
     return (
         <div className="px-4 py-8 sm:py-12 lg:py-16">
             <div>
@@ -123,8 +134,11 @@ export default function Subscribe() {
                                 ? "bg-emerald-500 text-white  hover:bg-emerald-600 "
                                 : "bg-emerald-100 text-emerald-700  hover:bg-emerald-200 "
                             }  mt-8 block w-full py-3 px-6 border border-transparent rounded-md text-center font-medium disabled:bg-gray-400 disabled:cursor-not-allowed`}
+
+                            onClick={() => handleSubscribe(plan.interval)}
+                            disabled={isPending}
                             > 
-                            Subscribe {plan.name} 
+                            {isPending ? "Please wait..." : `Subscribe ${plan.name}`}
                           </button>
                     </div>
                 ))}
