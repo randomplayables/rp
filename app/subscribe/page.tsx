@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { availablePlans } from "@/lib/plans";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import toast, { Toaster } from "react-hot-toast";
 
 type SubscribeResponse = {
     url: string
@@ -21,14 +22,13 @@ async function subscribeToPlan(
         const response = await fetch("/api/checkout", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                body: JSON.stringify({
-                    planType,
-                    userId,
-                    email
-                })
-
-            }
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                planType,
+                userId,
+                email
+            })
         })
         
         if (!response.ok){
@@ -57,7 +57,16 @@ export default function Subscribe() {
 
             return subscribeToPlan(planType, userId, email)
 
-        }
+        },
+        onMutate: () => {
+            toast.loading("Processing your subscription...")
+        },
+        onSuccess: (data) => {
+            window.location.href = data.url
+        },
+        onError: () => {
+            toast.error("Something went wrong.")
+        },
     })
 
     function handleSubscribe(planType: string) {
