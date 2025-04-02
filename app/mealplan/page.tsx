@@ -97,7 +97,12 @@ export default function MealPlanDashboard() {
 
                         {/* Submit Button */}
                         <div>
-                            <button type="submit">Generate Meal Plan</button>
+                            <button
+                                type="submit"
+                                className={`w-full bg-emerald-500 text-white py-2 px-4 rounded-md hover:bg-emerald-600 transition-colors`}
+                            >
+                                Generate Meal Plan
+                            </button>
                         </div>
                     </form>
                 </div>
