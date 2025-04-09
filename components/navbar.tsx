@@ -21,11 +21,11 @@ export default function NavBar() {
         <div className="space-x-6 flex items-center">
             {" "}
             <SignedIn>
-                <Link 
+                {/* <Link 
                     href = '/mealplan'
                     className="text-gray-700 hover:text-emerald-500 transition-colors">
                     Mealplan
-                </Link>
+                </Link> */}
                 {user?.imageUrl ? (
                     <Link href = "/profile">
                         {" "}
@@ -52,12 +52,12 @@ export default function NavBar() {
                     >
                         Home
                 </Link>
-                <Link
+                {/* <Link
                     href = {isSignedIn ? "/subscribe" : "/sign-up"}
                     className="text-gray-700 hover:text-emerald-500 transition-colors"
                     >
                         Subscribe
-                </Link>
+                </Link> */}
                 <Link
                     href = "/sign-up"
                     className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 transition"

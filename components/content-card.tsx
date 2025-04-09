@@ -1,5 +1,3 @@
-
-
 interface Props {
     "id": number,
     "image": string,
@@ -16,10 +14,6 @@ const ContentCard = ({ id, image, name, year }: Props) => {
         ></div>
         <div className="p-4">
           <h3 className="font-bold text-lg mb-2">{name}</h3>
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>Year: {year}</span>
-            <span>ID: {id}</span>
-          </div>
         </div>
       </div>
     );

@@ -9,12 +9,6 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="bg-gradient-to-r from-emerald-400 to-emerald-600 text-white rounded-lg mb-12 p-8 text-center">
         <h1 className="text-4xl font-bold mb-4">Random Playables</h1>
-        {/* <Link
-          href="/sign-up"
-          className="inline-block bg-white text-emerald-500 font-medium px-5 py-3 rounded hover:bg-gray-100 transition-colors"
-        >
-          Get Started
-        </Link> */}
       </section>
 
       <section>
