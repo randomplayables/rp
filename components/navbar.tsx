@@ -16,7 +16,7 @@ export default function NavBar() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
             <Link href = "/">
                 <Image className="text-xl font-bold text-emerald-700 cursor-pointer"
-                src = "/logo.png" width = {60} height = {60} alt = "Logo"/>
+                src = "/RPLogo2.png" width = {60} height = {60} alt = "Logo"/>
             </Link>
         <div className="space-x-6 flex items-center">
             {" "}
