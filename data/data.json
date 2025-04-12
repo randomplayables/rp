@@ -3,60 +3,70 @@
     "id": 1,
     "image": "https://picsum.photos/200.jpg",
     "name": "Galaxy Explorer",
-    "year": 2018
+    "year": 2018,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 2,
     "image": "https://picsum.photos/200.jpg",
     "name": "Foldit",
-    "year": 2008
+    "year": 2008,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 3,
     "image": "https://picsum.photos/200.jpg",
     "name": "EyeWire",
-    "year": 2012
+    "year": 2012,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 4,
     "image": "https://picsum.photos/200.jpg",
     "name": "Quantum Moves",
-    "year": 2016
+    "year": 2016,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 5,
     "image": "https://picsum.photos/200.jpg",
     "name": "Project Discovery",
-    "year": 2015
+    "year": 2015,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 6,
     "image": "https://picsum.photos/200.jpg",
     "name": "NeMO-Net",
-    "year": 2020
+    "year": 2020,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 7,
     "image": "https://picsum.photos/200.jpg",
     "name": "Sea Hero Quest",
-    "year": 2017
+    "year": 2017,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 8,
     "image": "https://picsum.photos/200.jpg",
     "name": "Stall Catchers",
-    "year": 2016
+    "year": 2016,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 9,
     "image": "https://picsum.photos/200.jpg",
     "name": "Phylo",
-    "year": 2010
+    "year": 2010,
+    "link": "https://mightymetrika.com"
   },
   {
     "id": 10,
     "image": "https://picsum.photos/200.jpg",
     "name": "eteRNA",
-    "year": 2011
+    "year": 2011,
+    "link": "https://mightymetrika.com"
   }
 ]
