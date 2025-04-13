@@ -4,7 +4,17 @@
     "image": "https://picsum.photos/200.jpg",
     "name": "Galaxy Explorer",
     "year": 2018,
-    "link": "https://mightymetrika.com"
+    "link": "https://mightymetrika.com",
+    "irlInstructions": [
+      {
+        "title": "Basic Setup",
+        "url": "https://github.com/randomplayables/gothamloops/blob/main/irl/GothamLoops.md"
+      },
+      {
+        "title": "Advanced Setup",
+        "url": "https://github.com/randomplayables/gothamloops/blob/main/irl/GothamLoops.md"
+      }
+    ]
   },
   {
     "id": 2,
