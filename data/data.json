@@ -2,16 +2,16 @@
   {
     "id": 1,
     "image": "https://picsum.photos/200.jpg",
-    "name": "Galaxy Explorer",
+    "name": "Gotham Loops",
     "year": 2018,
     "link": "https://mightymetrika.com",
     "irlInstructions": [
       {
-        "title": "Basic Setup",
+        "title": "GothamLoops",
         "url": "https://github.com/randomplayables/gothamloops/blob/main/irl/GothamLoops.md"
       },
       {
-        "title": "Advanced Setup",
+        "title": "GothamLoops",
         "url": "https://github.com/randomplayables/gothamloops/blob/main/irl/GothamLoops.md"
       }
     ]
@@ -19,9 +19,15 @@
   {
     "id": 2,
     "image": "https://picsum.photos/200.jpg",
-    "name": "Foldit",
+    "name": "Apophenia",
     "year": 2008,
-    "link": "https://mightymetrika.com"
+    "link": "https://mightymetrika.com",
+    "irlInstructions": [
+      {
+        "title": "N Decks",
+        "url": "https://github.com/randomplayables/apophenia/blob/main/irl/Apophenia.md"
+      }
+    ]
   },
   {
     "id": 3,
