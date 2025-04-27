@@ -1,23 +1,25 @@
-import Image from "next/image"
-import Link from "next/link";
-import data from "../data/data.json"
-import ContentCard from "../components/content-card"
+import ContentCard from "../components/content-card";
+import { connectToDatabase } from "@/lib/mongodb";
+import Game from "@/models/Game";
+import { IGame } from "@/types/Game";
 
-export default function HomePage() {
+export default async function HomePage() {
+  await connectToDatabase();
+
+  const data = await Game
+    .find({}, { _id: 0, __v: 0 })
+    .lean<IGame[]>();
+
   return (
     <div className="px-4 py-8 sm:py-12 lg:py-16 max-w-7xl mx-auto">
-      {/* Hero Section */}
-      {/* <section className="bg-gradient-to-r from-emerald-400 to-emerald-600 text-white rounded-lg mb-12 p-8 text-center">
-        <h1 className="text-4xl font-bold mb-4">Random Playables</h1>
-      </section> */}
-
       <section>
-        <div  className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {data.map((item) => {
-            return<ContentCard {...item} key={item.id}/>
-          })}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {data.map((item) => (
+            <ContentCard {...item} key={item.id} />
+          ))}
         </div>
       </section>
     </div>
   );
 }
+
