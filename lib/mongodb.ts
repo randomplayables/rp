@@ -10,12 +10,39 @@ if (!cached) {
   cached = (global as any).mongoose = { conn: null, promise: null };
 }
 
+// export async function connectToDatabase() {
+//   if (cached.conn) return cached.conn;
+//   if (!cached.promise) {
+//     cached.promise = mongoose.connect(MONGODB_URI!, { dbName: "Game" }).then((mongoose) => mongoose);
+//     // cached.promise = mongoose
+//   }
+//   cached.conn = await cached.promise;
+//   return cached.conn;
+// }
+
+// In lib/mongodb.ts
 export async function connectToDatabase() {
-  if (cached.conn) return cached.conn;
-  if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI!, { dbName: "Game" }).then((mongoose) => mongoose);
-    // cached.promise = mongoose
+  if (cached.conn) {
+    console.log("Using cached MongoDB connection");
+    return cached.conn;
   }
-  cached.conn = await cached.promise;
-  return cached.conn;
+  
+  if (!cached.promise) {
+    console.log("Connecting to MongoDB with URI:", MONGODB_URI?.substring(0, 20) + "...");
+    cached.promise = mongoose.connect(MONGODB_URI!, { dbName: "Game" }).then((mongoose) => {
+      console.log("MongoDB connection successful");
+      return mongoose;
+    }).catch(error => {
+      console.error("MongoDB connection error:", error);
+      throw error;
+    });
+  }
+  
+  try {
+    cached.conn = await cached.promise;
+    return cached.conn;
+  } catch (error) {
+    console.error("Failed to establish MongoDB connection:", error);
+    throw error;
+  }
 }
