@@ -7,9 +7,9 @@ const isPublicRoute = createRouteMatcher([
   "/subscribe(.*)",
   "/api/webhook(.*)",
   "/api/check-subscription(.*)",
-  "/api/game-session(.*)",  // Add this line
-  "/api/game-data(.*)",     // Add this line
-  "/api/games(.*)",         // Add this line
+  "/api/game-session(.*)",
+  "/api/game-data(.*)",
+  "/api/games(.*)",
 ])
 
 const isSignUpRoute = createRouteMatcher(["/sign-up(.*)"])

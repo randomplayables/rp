@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
     const userId = clerkUser?.id || null;
     const isGuest = !userId;
     
+    console.log("Creating game session with userId:", userId);
+    
     // Create a unique session ID
     const sessionId = uuidv4();
     

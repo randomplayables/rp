@@ -24,7 +24,8 @@ const GameDataSchema = new mongoose.Schema({
 GameDataSchema.index({ sessionId: 1 });
 GameDataSchema.index({ gameId: 1, userId: 1 });
 
+// Explicitly set the collection name to avoid pluralization issues
 const GameDataModel: Model<IGameData> =
-  mongoose.models.GameData || mongoose.model("GameData", GameDataSchema);
+  mongoose.models.GameData || mongoose.model("GameData", GameDataSchema, "gamedata");
 
 export default GameDataModel;
