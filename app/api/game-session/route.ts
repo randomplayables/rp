@@ -1,20 +1,22 @@
-// app/api/game-session/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameSessionModel from "@/models/GameSession";
 import { currentUser } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from "uuid";
 
+// Define CORS headers once to reuse
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '86400'
+};
+
 // Add this OPTIONS handler for preflight requests
 export async function OPTIONS(request: NextRequest) {
   return NextResponse.json({}, {
     status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400'
-    }
+    headers: corsHeaders
   });
 }
 
@@ -26,11 +28,7 @@ export async function POST(request: NextRequest) {
     if (!gameId) {
       return NextResponse.json({ error: "Missing gameId." }, { 
         status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-        }
+        headers: corsHeaders
       });
     }
     
@@ -62,21 +60,13 @@ export async function POST(request: NextRequest) {
       isGuest,
       gameId
     }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-      }
+      headers: corsHeaders
     });
   } catch (error: any) {
     console.error("Error creating game session:", error);
     return NextResponse.json({ error: "Internal Error." }, { 
       status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-      }
+      headers: corsHeaders
     });
   }
 }
@@ -90,11 +80,7 @@ export async function GET(request: NextRequest) {
     if (!sessionId) {
       return NextResponse.json({ error: "Missing sessionId." }, { 
         status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-        }
+        headers: corsHeaders
       });
     }
     
@@ -104,11 +90,7 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Session not found." }, { 
         status: 404,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-        }
+        headers: corsHeaders
       });
     }
     
@@ -118,21 +100,13 @@ export async function GET(request: NextRequest) {
       gameId: session.gameId,
       sessionId: session.sessionId
     }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-      }
+      headers: corsHeaders
     });
   } catch (error: any) {
     console.error("Error verifying game session:", error);
     return NextResponse.json({ error: "Internal Error." }, { 
       status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-      }
+      headers: corsHeaders
     });
   }
 }
