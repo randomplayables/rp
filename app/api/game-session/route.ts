@@ -3,23 +3,12 @@ import { connectToDatabase } from "@/lib/mongodb";
 import GameSessionModel from "@/models/GameSession";
 import { currentUser } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from "uuid";
+import { allowedOrigins } from "../../../lib/corsConfig";
 
 // Define dynamicCorsHeaders function to set origin based on request
 function getDynamicCorsHeaders(request: NextRequest) {
   // Get the origin from the request
   const origin = request.headers.get('origin');
-  
-  // List of allowed origins for game API endpoints
-  const allowedOrigins = [
-    'http://localhost:5173',         // Vite dev server
-    'http://localhost:3000',         // Next.js dev server
-    'http://172.31.12.157:5173',     // EC2 Vite dev server
-    'http://172.31.12.157:3000',     // EC2 Next.js dev server
-    'http://54.176.104.229:5173',    // EC2 public IP Vite dev server
-    'http://54.176.104.229:3000',    // EC2 public IP Next.js dev server
-    'https://randomplayables.com',
-    'https://gothamloops.randomplayables.com'
-  ];
   
   let headers = {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
