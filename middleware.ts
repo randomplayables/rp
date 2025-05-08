@@ -17,10 +17,43 @@ const isSignUpRoute = createRouteMatcher(["/sign-up(.*)"])
 const isMealPlanRoute = createRouteMatcher(["/mealplan(.*)"])
 
 // Apply CORS headers to all responses
-function applyCorsHeaders(response: NextResponse) {
-  response.headers.set('Access-Control-Allow-Origin', '*');
+function applyCorsHeaders(response: NextResponse, request: Request) {
+  const origin = request.headers.get('origin');
+  
+  // For game API endpoints, allow specific origins
+  if (request.url.includes('/api/game-')) {
+    // List of allowed origins for game API endpoints
+    const allowedOrigins = [
+      'http://localhost:5173',         // Vite dev server
+      'http://localhost:3000',         // Next.js dev server
+      'http://172.31.12.157:5173',     // EC2 Vite dev server
+      'http://172.31.12.157:3000',     // EC2 Next.js dev server
+      'http://54.176.104.229:5173',    // EC2 public IP Vite dev server
+      'http://54.176.104.229:3000',    // EC2 public IP Next.js dev server
+      'https://randomplayables.com',
+      'https://gothamloops.randomplayables.com'
+    ];
+    
+    // If the origin is in our allowed list, set it specifically
+    if (origin && allowedOrigins.includes(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+    } else {
+      // For other origins, use a wildcard (but credentials won't work)
+      response.headers.set('Access-Control-Allow-Origin', '*');
+    }
+  } else {
+    // For non-game API endpoints, use a wildcard
+    response.headers.set('Access-Control-Allow-Origin', '*');
+  }
+  
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Only set Allow-Credentials for specific origins
+  if (origin && origin !== '*') {
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+  
   return response;
 }
 
@@ -32,13 +65,13 @@ export default clerkMiddleware(async (auth, req) => {
   // Handle OPTIONS requests for CORS preflight
   if (req.method === 'OPTIONS') {
     const response = NextResponse.json({}, { status: 200 });
-    return applyCorsHeaders(response);
+    return applyCorsHeaders(response, req);
   }
 
   // Apply CORS to game API endpoints
   if (pathname.startsWith('/api/game-')) {
     const response = NextResponse.next();
-    return applyCorsHeaders(response);
+    return applyCorsHeaders(response, req);
   }
 
   if (pathname === "/api/check-subscription") {
