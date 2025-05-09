@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import GameSessionModel from "@/models/GameSession";
 import GameDataModel from "@/models/GameData";
 import { allowedOrigins } from "../../../lib/corsConfig";
+import { prisma } from "@/lib/prisma";
 
 // Define dynamicCorsHeaders function to set origin based on request
 function getDynamicCorsHeaders(request: NextRequest) {
@@ -42,7 +43,7 @@ export async function OPTIONS(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { sessionId, roundNumber, roundData, passedUserId } = body;
+    const { sessionId, roundNumber, roundData, passedUserId, passedUsername } = body;
     
     if (!sessionId || roundNumber === undefined || !roundData) {
       return NextResponse.json({ error: "Missing required fields." }, { 
@@ -64,25 +65,47 @@ export async function POST(request: NextRequest) {
     
     // If passedUserId is provided and session has no userId, update it
     let userId = session.userId;
+    let username = session.username;
     let isGuest = session.isGuest;
     
     if (!userId && passedUserId) {
       userId = passedUserId;
       isGuest = false;
       
-      // Update the session with the user ID
+      // If passedUsername is provided, use it
+      if (passedUsername) {
+        username = passedUsername;
+      }
+      // Otherwise try to fetch username from Prisma
+      else if (passedUserId) {
+        try {
+          const profile = await prisma.profile.findUnique({
+            where: { userId: passedUserId },
+            select: { username: true }
+          });
+          
+          if (profile?.username) {
+            username = profile.username;
+          }
+        } catch (err) {
+          console.error("Error fetching username from Prisma:", err);
+        }
+      }
+      
+      // Update the session with the user ID and username
       await GameSessionModel.updateOne(
         { sessionId },
-        { $set: { userId: passedUserId, isGuest: false } }
+        { $set: { userId: passedUserId, username, isGuest: false } }
       );
       
-      console.log("Updated session with userId from request:", passedUserId);
+      console.log("Updated session with userId from request:", passedUserId, "Username:", username);
     }
     
     // Log for debugging
     console.log("Saving data for session:", {
       sessionId,
       userId,
+      username,
       isGuest,
       gameId: session.gameId
     });
@@ -92,9 +115,10 @@ export async function POST(request: NextRequest) {
       sessionId,
       gameId: session.gameId,
       userId,
-      isGuest,
+      username,
       roundNumber,
-      roundData
+      roundData,
+      isGuest
     });
     
     return NextResponse.json({ 

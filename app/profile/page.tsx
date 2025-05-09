@@ -125,6 +125,7 @@ export default function Profile() {
                             />
                         )}
                         <h1  className="text-2xl font-bold mb-2"> {user.firstName} {user.lastName} </h1>
+                        <p className="mb-1 text-lg">@{user.username || "No username set"}</p>
                         <p className="mb-4"> {user.primaryEmailAddress?.emailAddress}</p>
                     </div>
                     <div  className="w-full md:w-2/3 p-6 bg-gray-50">
@@ -200,12 +201,8 @@ export default function Profile() {
                             <p> You are not subscribed to any plan.</p>
                         )}
                     </div>
-
-
-                    
                 </div>
             </div>
         </div>
     )
-
 }

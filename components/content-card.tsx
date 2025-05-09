@@ -27,9 +27,10 @@ const ContentCard = ({ id, image, name, year, link, irlInstructions }: Props) =>
   const getGameLink = async (e: React.MouseEvent) => {
     e.preventDefault(); // Prevent default link behavior
     
-    // Get the user ID from the user object if available
+    // Get the user ID and username from the user object if available
     const userId = user?.id;
-    console.log("Opening game link with auth. User ID:", userId);
+    const username = user?.username;
+    console.log("Opening game link with auth. User ID:", userId, "Username:", username);
     
     // If user is logged in, get a token
     if (isSignedIn && userId) {
@@ -38,9 +39,9 @@ const ContentCard = ({ id, image, name, year, link, irlInstructions }: Props) =>
         const token = await getToken();
         console.log("Generated auth token:", token ? "Token received" : "No token generated");
         
-        // Add the token as a query parameter
+        // Add the token, userId, and username as query parameters
         const separator = link.includes('?') ? '&' : '?';
-        const authLink = `${link}${separator}authToken=${token}&userId=${userId}`;
+        const authLink = `${link}${separator}authToken=${token}&userId=${userId}${username ? `&username=${encodeURIComponent(username)}` : ''}`;
         console.log("Opening authenticated game URL:", authLink);
         
         // Open the game in a new window

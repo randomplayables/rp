@@ -16,6 +16,7 @@ datasource db {
 model Profile {
   id String @id @default(uuid())
   userId String @unique
+  username String @unique  // Added username field with unique constraint
   email String
   subscriptionActive Boolean @default(false)
   subscriptionTier String?

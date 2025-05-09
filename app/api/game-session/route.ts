@@ -4,6 +4,7 @@ import GameSessionModel from "@/models/GameSession";
 import { currentUser } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from "uuid";
 import { allowedOrigins } from "../../../lib/corsConfig";
+import { prisma } from "@/lib/prisma";
 
 // Define dynamicCorsHeaders function to set origin based on request
 function getDynamicCorsHeaders(request: NextRequest) {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       body = {};
     }
     
-    const { gameId, passedUserId } = body;
+    const { gameId, passedUserId, passedUsername } = body;
     
     if (!gameId) {
       return NextResponse.json({ error: "Missing gameId." }, { 
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
     
     console.log("Auth Header:", authHeader ? "Present" : "Not present");
     console.log("Passed User ID:", passedUserId || "Not provided");
+    console.log("Passed Username:", passedUsername || "Not provided");
     
     // Authentication methods (in order of priority):
     // 1. Try to get the user from Clerk's currentUser()
@@ -72,11 +74,33 @@ export async function POST(request: NextRequest) {
     // First try: Get current user directly from Clerk
     let clerkUser = await currentUser();
     let userId = clerkUser?.id;
+    let username = clerkUser?.username || null;
     let authSource = "clerk_session";
     
     // Second try: Use passedUserId from request body
     if (!userId && passedUserId) {
       userId = passedUserId;
+      
+      // If passedUsername is provided, use it
+      if (passedUsername) {
+        username = passedUsername;
+      }
+      // Otherwise try to fetch username from Prisma
+      else if (passedUserId) {
+        try {
+          const profile = await prisma.profile.findUnique({
+            where: { userId: passedUserId },
+            select: { username: true }
+          });
+          
+          if (profile?.username) {
+            username = profile.username;
+          }
+        } catch (err) {
+          console.error("Error fetching username from Prisma:", err);
+        }
+      }
+      
       authSource = "passed_user_id";
     }
     
@@ -84,6 +108,7 @@ export async function POST(request: NextRequest) {
     
     console.log("User authentication result:", {
       userId,
+      username,
       isGuest, 
       authSource: userId ? authSource : "none - using guest"
     });
@@ -98,6 +123,7 @@ export async function POST(request: NextRequest) {
     // Create a new game session
     const gameSession = await GameSessionModel.create({
       userId,
+      username,
       gameId,
       sessionId,
       ipAddress,
@@ -108,6 +134,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       sessionId,
       userId,
+      username,
       isGuest,
       gameId,
       authSource: userId ? authSource : undefined
@@ -123,7 +150,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Update the GET endpoint with dynamic CORS headers too
+// Update the GET endpoint with username too
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -148,6 +175,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json({
       userId: session.userId,
+      username: session.username,
       isGuest: session.isGuest,
       gameId: session.gameId,
       sessionId: session.sessionId

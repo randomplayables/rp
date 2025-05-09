@@ -4,6 +4,7 @@ interface IGameData extends Document {
   sessionId: string;
   gameId: string;
   userId: string | null;
+  username: string | null; // Add username field
   timestamp: Date;
   roundNumber: number;
   roundData: any; // Store any JSON data
@@ -14,6 +15,7 @@ const GameDataSchema = new mongoose.Schema({
   sessionId: { type: String, required: true },
   gameId: { type: String, required: true },
   userId: { type: String, default: null },
+  username: { type: String, default: null }, // Add username field
   timestamp: { type: Date, default: Date.now },
   roundNumber: Number,
   roundData: mongoose.Schema.Types.Mixed, // Allows for flexible JSON storage
@@ -23,6 +25,7 @@ const GameDataSchema = new mongoose.Schema({
 // Add indices for faster lookups
 GameDataSchema.index({ sessionId: 1 });
 GameDataSchema.index({ gameId: 1, userId: 1 });
+GameDataSchema.index({ username: 1 }); // Add username index
 
 // Explicitly set the collection name to avoid pluralization issues
 const GameDataModel: Model<IGameData> =
