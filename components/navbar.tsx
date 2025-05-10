@@ -26,6 +26,17 @@ export default function NavBar() {
                     className="text-gray-700 hover:text-emerald-500 transition-colors">
                     Mealplan
                 </Link> */}
+                 <Link 
+                    href = "/"
+                    className="text-gray-700 hover:text-emerald-500 transition-colors"
+                    >
+                        Home
+                </Link>
+                <Link 
+                href='/datalab'
+                className="text-gray-700 hover:text-emerald-500 transition-colors">
+                DataLab
+                </Link>
                 {user?.imageUrl ? (
                     <Link href = "/profile">
                         {" "}
@@ -58,13 +69,6 @@ export default function NavBar() {
                     >
                         Subscribe
                 </Link> */}
-                // Update components/navbar.tsx to include the DataLab link
-                // In the SignedIn section, add:
-                <Link 
-                href='/datalab'
-                className="text-gray-700 hover:text-emerald-500 transition-colors">
-                Data Lab
-                </Link>
                 <Link
                     href = "/sign-up"
                     className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 transition"
