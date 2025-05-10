@@ -4,7 +4,7 @@ import { useUser } from "@clerk/nextjs"
 import toast, { Toaster } from "react-hot-toast"
 import Image from "next/image"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { availablePlans } from "@/lib/plans"
+// import { availablePlans } from "@/lib/plans"
 import { useState } from "react"
 import { useRouter } from "next/navigation";
 
@@ -36,61 +36,61 @@ export default function Profile() {
     const queryClient = useQueryClient()
     const router = useRouter()
 
-    const {data: subscription, isLoading, isError, error, refetch } = useQuery({
-        queryKey: ["subscription"],
-        queryFn: fetchSubscriptionStatus,
-        enabled: isLoaded && isSignedIn,
-        staleTime: 5 * 60 * 1000,
-    })
+    // const {data: subscription, isLoading, isError, error, refetch } = useQuery({
+    //     queryKey: ["subscription"],
+    //     queryFn: fetchSubscriptionStatus,
+    //     enabled: isLoaded && isSignedIn,
+    //     staleTime: 5 * 60 * 1000,
+    // })
 
-    const {
-        data: updatedPlan,
-        mutate: updatePlanMutation,
-        isPending: isUpdatePlanPending,
-    } = useMutation({
-        mutationFn: updatePlan,
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: ["subscription"]})
-            toast.success("Subscription plan updated successfully!")
-            refetch()
-        },
-        onError: () => {
-            toast.error("Error updating plan.")
-        }
-    })
+    // const {
+    //     data: updatedPlan,
+    //     mutate: updatePlanMutation,
+    //     isPending: isUpdatePlanPending,
+    // } = useMutation({
+    //     mutationFn: updatePlan,
+    //     onSuccess: () => {
+    //         queryClient.invalidateQueries({queryKey: ["subscription"]})
+    //         toast.success("Subscription plan updated successfully!")
+    //         refetch()
+    //     },
+    //     onError: () => {
+    //         toast.error("Error updating plan.")
+    //     }
+    // })
 
-    const {
-        data: canceledPlan,
-        mutate: unsubscribeMutation,
-        isPending: isUnsubscribePending,
-    } = useMutation({
-        mutationFn: unsubscribe,
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: ["subscription"]})
-            router.push("/subscribe")
-        },
-        onError: () => {
-            toast.error("Error unsubscribing.")
-        }
-    })
+    // const {
+    //     data: canceledPlan,
+    //     mutate: unsubscribeMutation,
+    //     isPending: isUnsubscribePending,
+    // } = useMutation({
+    //     mutationFn: unsubscribe,
+    //     onSuccess: () => {
+    //         queryClient.invalidateQueries({queryKey: ["subscription"]})
+    //         router.push("/subscribe")
+    //     },
+    //     onError: () => {
+    //         toast.error("Error unsubscribing.")
+    //     }
+    // })
 
-    const currentPlan = availablePlans.find(
-        (plan) => plan.interval === subscription?.subscription?.subscriptionTier
-    )
+    // const currentPlan = availablePlans.find(
+    //     (plan) => plan.interval === subscription?.subscription?.subscriptionTier
+    // )
 
-    function handleUpdatePlan() {
-        if (selectedPlan) {
-            updatePlanMutation(selectedPlan)
-        }
+    // function handleUpdatePlan() {
+    //     if (selectedPlan) {
+    //         updatePlanMutation(selectedPlan)
+    //     }
 
-        setSelectedPlan("")
-    }
+    //     setSelectedPlan("")
+    // }
 
-    function handleUnsubscribe() {
-        if (confirm("Are you sure you want to unsubscribe? You will lose access to premium features.")) {
-            unsubscribeMutation()
-        }
-    }
+    // function handleUnsubscribe() {
+    //     if (confirm("Are you sure you want to unsubscribe? You will lose access to premium features.")) {
+    //         unsubscribeMutation()
+    //     }
+    // }
 
     if (!isLoaded){
         return (
@@ -128,6 +128,8 @@ export default function Profile() {
                         <p className="mb-1 text-lg">@{user.username || "No username set"}</p>
                         <p className="mb-4"> {user.primaryEmailAddress?.emailAddress}</p>
                     </div>
+                    {/* 
+                    
                     <div  className="w-full md:w-2/3 p-6 bg-gray-50">
                         <h2  className="text-2xl font-bold mb-6 text-emerald-700"> Subscription Details </h2>
                         {isLoading ? 
@@ -148,8 +150,12 @@ export default function Profile() {
                                             <p><strong> Status: </strong> ACTIVE</p>
                                         </>
                                     </div>
-                                ) : (<p className="text-red-500">Current Plan not Found.</p>)}
+                                ) : (<p className="text-red-500">Current Plan not Found.</p>)} 
+                                 */}
+
                                 {/* Change Subscription Plan */}
+                    {/* 
+                    
                     <div  className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
                         <h3  className="text-xl font-semibold mb-2 text-emerald-600"> Change Subscription Plan</h3>
                         {currentPlan && (
@@ -182,8 +188,11 @@ export default function Profile() {
                         </>
                         )}
                     </div>
+
+                    */}
+
                     {/* Unsubscribe */}
-                    <div  className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
+                    {/* <div  className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
                         <h3  className="text-xl font-semibold mb-2 text-emerald-600"> Unsubscribe</h3>
                         <button
                             onClick={handleUnsubscribe}
@@ -200,7 +209,7 @@ export default function Profile() {
                         ) : (
                             <p> You are not subscribed to any plan.</p>
                         )}
-                    </div>
+                    </div>  */}
                 </div>
             </div>
         </div>
