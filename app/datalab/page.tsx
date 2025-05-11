@@ -1,4 +1,3 @@
-// app/datalab/page.tsx
 "use client"
 
 import { Spinner } from "@/components/spinner";
@@ -33,6 +32,7 @@ export default function DataLabPage() {
   const [inputMessage, setInputMessage] = useState("");
   const [currentCode, setCurrentCode] = useState<string>("");
   const [showCode, setShowCode] = useState(false);
+  const [visualizationError, setVisualizationError] = useState<string | null>(null);
   const plotRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -53,6 +53,7 @@ export default function DataLabPage() {
     },
     onError: (error: Error) => {
       console.error("Error:", error);
+      setVisualizationError("Failed to generate visualization. Please try again.");
     }
   });
   
@@ -67,8 +68,9 @@ export default function DataLabPage() {
   const renderD3Plot = (code: string) => {
     if (!plotRef.current) return;
     
-    // Clear previous plot
+    // Clear previous plot and error
     d3.select(plotRef.current).selectAll("*").remove();
+    setVisualizationError(null);
     
     try {
       // Create a function from the code and execute it
@@ -76,6 +78,15 @@ export default function DataLabPage() {
       plotFunction(d3, plotRef.current);
     } catch (error) {
       console.error("Error rendering D3 plot:", error);
+      setVisualizationError(`Error rendering visualization: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Display error in the plot container
+      d3.select(plotRef.current)
+        .append("div")
+        .style("color", "red")
+        .style("padding", "20px")
+        .style("text-align", "center")
+        .text(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
   
@@ -93,6 +104,14 @@ export default function DataLabPage() {
     mutate(inputMessage);
     setInputMessage("");
   };
+  
+  // Add some suggested prompts for better UX
+  const suggestedPrompts = [
+    "Show me a bar chart of game sessions by date",
+    "Create a pie chart of games played",
+    "Plot average scores across different games",
+    "Show me a line chart of user activity over time"
+  ];
   
   const downloadTranscript = () => {
     const transcript = messages.map(msg => 
@@ -140,6 +159,18 @@ export default function DataLabPage() {
               <div className="text-gray-500 text-center mt-8">
                 <p>Start by asking me to visualize your data!</p>
                 <p className="text-sm mt-2">Example: "Show me a bar chart of game sessions by date"</p>
+                <div className="mt-4">
+                  <p className="text-xs font-semibold mb-2">Try these:</p>
+                  {suggestedPrompts.map((prompt, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setInputMessage(prompt)}
+                      className="block w-full text-left text-xs bg-white p-2 mb-1 rounded border hover:bg-gray-100"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((msg, idx) => (
@@ -223,6 +254,13 @@ export default function DataLabPage() {
               <p className="text-gray-500">Your visualization will appear here</p>
             )}
           </div>
+          
+          {/* Error display */}
+          {visualizationError && (
+            <div className="mb-4 p-4 bg-red-100 border border-red-300 rounded-lg text-red-700">
+              {visualizationError}
+            </div>
+          )}
           
           {/* Code Display */}
           {showCode && currentCode && (

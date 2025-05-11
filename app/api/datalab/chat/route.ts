@@ -1,4 +1,3 @@
-// app/api/datalab/chat/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { connectToDatabase } from "@/lib/mongodb";
@@ -68,6 +67,21 @@ async function fetchRelevantData(query: string, userId: string | null) {
     ]);
   }
   
+  // Add more specific data fetching for time-based analysis
+  if (query.toLowerCase().includes('time') || query.toLowerCase().includes('date') || query.toLowerCase().includes('day')) {
+    dataContext.sessionsByDate = await GameSessionModel.aggregate([
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$startTime" } },
+          count: { $sum: 1 },
+          uniquePlayers: { $addToSet: "$userId" }
+        }
+      },
+      { $sort: { "_id": -1 } },
+      { $limit: 30 }
+    ]);
+  }
+  
   return dataContext;
 }
 
@@ -86,6 +100,8 @@ export async function POST(request: NextRequest) {
     You are an AI assistant specialized in creating D3.js visualizations for a citizen science gaming platform.
     You have access to data from MongoDB (game sessions, game data) and PostgreSQL (user profiles).
     
+    IMPORTANT: The data is already provided to you. DO NOT generate code that fetches data using d3.json() or any other external data fetching. All data must be embedded directly in the code.
+    
     Available data context:
     ${JSON.stringify(dataContext, null, 2)}
     
@@ -93,17 +109,29 @@ export async function POST(request: NextRequest) {
     1. Generate pure D3.js code that can be executed in a browser
     2. The code should expect 'd3' and 'container' as parameters
     3. Use the container parameter as the target element for the visualization
-    4. Include proper scales, axes, and labels
-    5. Use responsive design principles
-    6. Apply a consistent color scheme (prefer emerald colors to match the theme)
-    7. The code should be self-contained and not rely on external data files
+    4. EMBED ALL DATA DIRECTLY IN THE CODE - DO NOT FETCH FROM EXTERNAL SOURCES
+    5. Data should be defined as variables at the beginning of the code
+    6. Include proper scales, axes, and labels
+    7. Use responsive design principles
+    8. Apply emerald colors (#10B981, #059669, #047857) to match the theme
+    9. Handle edge cases like empty data gracefully
     
-    Format your response as follows:
-    - First, provide a brief explanation of what you're creating
-    - Then, provide the D3.js code
-    
-    Example code structure:
+    Example of how to structure your code:
     \`\`\`javascript
+    // Data is embedded directly in the code
+    const data = ${JSON.stringify(dataContext.recentSessions || [], null, 2)};
+    
+    // Check if we have data
+    if (!data || data.length === 0) {
+      d3.select(container)
+        .append("div")
+        .style("text-align", "center")
+        .style("padding", "20px")
+        .style("color", "#666")
+        .text("No data available for visualization");
+      return;
+    }
+    
     // Set dimensions
     const margin = {top: 20, right: 20, bottom: 40, left: 40};
     const width = 600 - margin.left - margin.right;
@@ -117,10 +145,16 @@ export async function POST(request: NextRequest) {
       .append("g")
       .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
     
-    // Your visualization code here...
+    // Your visualization code here using the data variable...
     \`\`\`
     
-    Only return the executable JavaScript code, without markdown code blocks.
+    When a user asks for a plot or visualization:
+    1. Analyze what data is relevant from the provided context
+    2. Extract and transform the data as needed
+    3. Create an appropriate visualization
+    4. Always embed the data directly in the code
+    
+    Return only executable JavaScript code without markdown code blocks.
     `;
     
     const messages = [
@@ -153,6 +187,10 @@ export async function POST(request: NextRequest) {
       if (parts.length > 1) {
         message_text = parts[0];
         code = parts.slice(1).join('\n\n');
+      } else {
+        // If we can't find a clear separation, assume it's all code
+        code = aiResponse;
+        message_text = "";
       }
     }
     
