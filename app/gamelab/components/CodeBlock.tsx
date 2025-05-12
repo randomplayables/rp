@@ -14,6 +14,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   useEffect(() => {
     // In a real implementation, you might want to use a syntax highlighting library
     // like Prism.js or highlight.js here
+    console.log(`Code block updated: ${code.length} characters, language: ${language}`);
   }, [code, language]);
 
   // Function to copy code to clipboard

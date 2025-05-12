@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Spinner } from '@/components/spinner';
 
 interface GameSandboxProps {
@@ -93,7 +93,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   };
   
   // Save game data (can be triggered by the game or UI buttons)
-  const saveGameData = async (roundData: any) => {
+  const saveGameData = useCallback(async (roundData: any) => {
     if (!activeSandboxGame || !gameSessionId) {
       setError('No active game session');
       return;
@@ -124,20 +124,26 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
       console.error('Save game data error:', err);
       setError(`Save error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
-  };
+  }, [activeSandboxGame, gameSessionId]);
   
   // Handle messages from the iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'GAMELAB_DATA') {
+      if (!event.data) return;
+      
+      if (event.data.type === 'GAMELAB_DATA') {
         console.log('Received data from game:', event.data.payload);
         saveGameData(event.data.payload);
+      }
+      else if (event.data.type === 'GAMELAB_ERROR') {
+        console.error('Received error from game:', event.data.payload);
+        setError(`Game error: ${event.data.payload.message}\nLine: ${event.data.payload.lineno}\nColumn: ${event.data.payload.colno}`);
       }
     };
     
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [activeSandboxGame, gameSessionId]);
+  }, [activeSandboxGame, gameSessionId, saveGameData]);
   
   // Reset the sandbox
   const resetSandbox = async () => {
@@ -159,11 +165,20 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   const createGameHTML = (gameCode: string, lang: string) => {
     let processedCode = gameCode;
     
+    // Add logging to help diagnose issues
+    console.log("Creating game HTML with code length:", gameCode.length);
+    console.log("Language:", lang);
+    
     // Add session ID to the code for API calls
-    processedCode = processedCode.replace(
-      'const API_BASE_URL',
-      `const GAMELAB_SESSION_ID = "${gameSessionId}";\nconst API_BASE_URL`
-    );
+    if (processedCode.includes('const API_BASE_URL')) {
+      processedCode = processedCode.replace(
+        'const API_BASE_URL',
+        `const GAMELAB_SESSION_ID = "${gameSessionId}";\nconst API_BASE_URL`
+      );
+    } else {
+      // Add the session ID somewhere safe if the replacement point wasn't found
+      processedCode = `const GAMELAB_SESSION_ID = "${gameSessionId}";\n${processedCode}`;
+    }
     
     // Add communication code to relay data back to parent
     const communicationCode = `
@@ -174,10 +189,38 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
           payload: data
         }, '*');
       };
+      
+      // Add error handling
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.error('GameLab error:', message, error);
+        window.parent.postMessage({
+          type: 'GAMELAB_ERROR',
+          payload: { message, source, lineno, colno, stack: error?.stack }
+        }, '*');
+        return true; // Prevent default error handling
+      };
     `;
     
-    // Different templates based on language
-    if (lang === 'jsx' || lang === 'tsx' || lang === 'react') {
+    // Handle different code types automatically
+    if (processedCode.includes('<!DOCTYPE html>') || processedCode.includes('<html')) {
+      // This is a complete HTML document, inject our communication code
+      const headMatch = processedCode.match(/<head>([\s\S]*?)<\/head>/i);
+      if (headMatch) {
+        // Insert communication script in the head
+        processedCode = processedCode.replace(
+          /<head>([\s\S]*?)<\/head>/i,
+          `<head>$1<script>${communicationCode}</script></head>`
+        );
+      } else {
+        // If no head tag, insert one with our script
+        processedCode = processedCode.replace(
+          /<html[^>]*>/i,
+          `$&<head><script>${communicationCode}</script></head>`
+        );
+      }
+      
+      return processedCode;
+    } else if (lang === 'jsx' || lang === 'tsx' || lang === 'react') {
       return `
 <!DOCTYPE html>
 <html>
@@ -188,27 +231,56 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>${communicationCode}</script>
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
     #game-container { width: 100%; height: 100%; }
+    #error-display { 
+      position: absolute; 
+      bottom: 0; 
+      left: 0; 
+      right: 0; 
+      background: rgba(255,0,0,0.8); 
+      color: white; 
+      padding: 10px; 
+      font-family: monospace; 
+      white-space: pre-wrap; 
+      max-height: 200px; 
+      overflow: auto; 
+      display: none; 
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
+  <div id="game-container"></div>
+  <div id="error-display"></div>
   <script type="text/babel">
-    ${communicationCode}
-    ${processedCode}
+    // Error handling for React
+    window.addEventListener('error', (event) => {
+      const errorDisplay = document.getElementById('error-display');
+      errorDisplay.style.display = 'block';
+      errorDisplay.innerText = event.message + '\\n' + (event.error?.stack || '');
+    });
     
-    // Add auto-mounting code if not present
-    if (typeof App !== 'undefined') {
-      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    try {
+      ${processedCode}
+      
+      // Add auto-mounting code if not present
+      if (typeof App !== 'undefined') {
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+      }
+    } catch (err) {
+      console.error('Error executing React code:', err);
+      document.getElementById('error-display').style.display = 'block';
+      document.getElementById('error-display').innerText = err.message + '\\n' + err.stack;
     }
   </script>
 </body>
 </html>
       `;
-    } else {
-      // Default HTML/JS template
+    } else if (lang === 'html') {
+      // If it's already HTML but not a complete document, wrap it
       return `
 <!DOCTYPE html>
 <html>
@@ -216,16 +288,87 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GameLab Sandbox</title>
+  <script>${communicationCode}</script>
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
     #game-container { width: 100%; height: 100%; }
+    #error-display { 
+      position: absolute; 
+      bottom: 0; 
+      left: 0; 
+      right: 0; 
+      background: rgba(255,0,0,0.8); 
+      color: white; 
+      padding: 10px; 
+      font-family: monospace; 
+      white-space: pre-wrap; 
+      max-height: 200px; 
+      overflow: auto; 
+      display: none; 
+    }
+  </style>
+</head>
+<body>
+  ${processedCode}
+  <div id="error-display"></div>
+  <script>
+    // Error handling
+    window.addEventListener('error', (event) => {
+      const errorDisplay = document.getElementById('error-display');
+      errorDisplay.style.display = 'block';
+      errorDisplay.innerText = event.message + '\\n' + (event.error?.stack || '');
+    });
+  </script>
+</body>
+</html>
+      `;
+    } else {
+      // Default JavaScript template
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GameLab Sandbox</title>
+  <script>${communicationCode}</script>
+  <style>
+    body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
+    #game-container { width: 100%; height: 100%; }
+    #error-display { 
+      position: absolute; 
+      bottom: 0; 
+      left: 0; 
+      right: 0; 
+      background: rgba(255,0,0,0.8); 
+      color: white; 
+      padding: 10px; 
+      font-family: monospace; 
+      white-space: pre-wrap; 
+      max-height: 200px; 
+      overflow: auto; 
+      display: none; 
+    }
   </style>
 </head>
 <body>
   <div id="game-container"></div>
+  <div id="error-display"></div>
   <script>
-    ${communicationCode}
-    ${processedCode}
+    // Error handling
+    window.addEventListener('error', (event) => {
+      const errorDisplay = document.getElementById('error-display');
+      errorDisplay.style.display = 'block';
+      errorDisplay.innerText = event.message + '\\n' + (event.error?.stack || '');
+    });
+    
+    try {
+      ${processedCode}
+    } catch (err) {
+      console.error('Error executing JavaScript code:', err);
+      document.getElementById('error-display').style.display = 'block';
+      document.getElementById('error-display').innerText = err.message + '\\n' + err.stack;
+    }
   </script>
 </body>
 </html>

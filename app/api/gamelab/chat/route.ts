@@ -186,24 +186,58 @@ export async function POST(request: NextRequest) {
     let code = "";
     let language = "javascript";
     let message_text = aiResponse;
+
+    // Enhanced regex that handles multiple code blocks but WITHOUT named capturing groups
+    const codeBlockRegex = /```([a-zA-Z0-9+#]+)?\n([\s\S]*?)```/g;
+    const codeBlocks: Array<[string, string, string]> = [];
     
-    // Try to extract code between backticks with language
-    const codeMatch = aiResponse.match(/```([a-zA-Z0-9+#]+)?\n([\s\S]*?)```/);
-    if (codeMatch) {
-      if (codeMatch[1]) {
-        language = codeMatch[1].toLowerCase();
+    // Extract all code blocks
+    let match;
+    while ((match = codeBlockRegex.exec(aiResponse)) !== null) {
+      // match[1] = language, match[2] = code
+      codeBlocks.push([match[0], match[1] || '', match[2]]);
+    }
+
+    if (codeBlocks.length > 0) {
+      // Get the most substantial code block (usually the last or longest one)
+      const mainCodeBlock = codeBlocks.reduce((longest, current) => {
+        return current[2].length > longest[2].length ? current : longest;
+      }, codeBlocks[0]);
+      
+      if (mainCodeBlock[1]) {
+        language = mainCodeBlock[1].toLowerCase();
       }
-      code = codeMatch[2].trim();
-      // Remove the code block from the message text
-      message_text = aiResponse.replace(/```[a-zA-Z0-9+#]*\n[\s\S]*?```/, "").trim();
+      
+      code = mainCodeBlock[2].trim();
+      
+      // Generate a clean message text by removing all code blocks
+      message_text = aiResponse.replace(/```[a-zA-Z0-9+#]*\n[\s\S]*?```/g, "").trim();
+      
+      // Extract HTML boilerplate if present within the code
+      if (code.includes("<!DOCTYPE html>") || code.includes("<html")) {
+        const htmlMatch = code.match(/<html[\s\S]*?<\/html>/);
+        if (htmlMatch) {
+          code = htmlMatch[0];
+        }
+      }
     } else {
-      // If no markdown code block, try to identify code blocks by indentation or other patterns
+      // If no markdown code block, attempt alternative extraction methods
       const parts = aiResponse.split('\n\n');
       if (parts.length > 1) {
         message_text = parts[0];
         code = parts.slice(1).join('\n\n');
       }
+      
+      // Check if this is actually HTML code
+      if (code.includes("<script") || code.includes("<html")) {
+        language = "html";
+      } else if (code.includes("function") || code.includes("const ") || code.includes("let ")) {
+        language = "javascript";
+      }
     }
+
+    console.log("Extracted code length:", code.length);
+    console.log("Extracted language:", language);
     
     return NextResponse.json({
       message: message_text,

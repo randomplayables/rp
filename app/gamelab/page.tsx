@@ -160,12 +160,53 @@ export default function GameLabPage() {
   const downloadCode = () => {
     if (!currentCode) return;
     
-    const extension = currentLanguage === "javascript" ? "js" : 
-                      currentLanguage === "typescript" ? "ts" :
-                      currentLanguage === "jsx" ? "jsx" :
-                      currentLanguage === "tsx" ? "tsx" : "txt";
+    // Determine appropriate extension based on language and code content
+    let extension = "txt";
+    let fileContent = currentCode;
     
-    const blob = new Blob([currentCode], { type: 'text/plain' });
+    if (currentLanguage === "javascript" || currentLanguage === "js") {
+      extension = "js";
+    } else if (currentLanguage === "typescript" || currentLanguage === "ts") {
+      extension = "ts";
+    } else if (currentLanguage === "jsx") {
+      extension = "jsx";
+    } else if (currentLanguage === "tsx") {
+      extension = "tsx";
+    } else if (currentLanguage === "html" || currentCode.includes("<!DOCTYPE html>") || currentCode.includes("<html")) {
+      extension = "html";
+    }
+    
+    // If it looks like we have multiple files described in the chat, bundle them properly
+    const fileMatches = currentCode.match(/```\w+\s+\/\/\s+([a-zA-Z0-9_.-]+)\s+([\s\S]*?)```/g);
+    if (fileMatches && fileMatches.length > 1) {
+      // Create a zip file with all the files
+      // For simplicity, we'll just create a text file with clear file separators
+      fileContent = "/* GAMELAB MULTI-FILE EXPORT */\n\n" + currentCode;
+      extension = "txt";
+    }
+    
+    // For HTML, check if we need to include separate JS and CSS files
+    if (extension === "html") {
+      // Extract CSS
+      const cssMatch = currentCode.match(/<style>([\s\S]*?)<\/style>/);
+      const cssContent = cssMatch ? cssMatch[1].trim() : "";
+      
+      // Extract JavaScript
+      const jsMatch = currentCode.match(/<script>([\s\S]*?)<\/script>/);
+      const jsContent = jsMatch ? jsMatch[1].trim() : "";
+      
+      // If we have substantial CSS or JS, offer them as separate files
+      if (cssContent.length > 100 || jsContent.length > 100) {
+        // Create a zip-like text bundle for clarity
+        fileContent = "/* GAMELAB HTML PROJECT */\n\n" +
+          "/* index.html */\n" + currentCode + "\n\n" +
+          (cssContent ? "/* styles.css */\n" + cssContent + "\n\n" : "") +
+          (jsContent ? "/* game.js */\n" + jsContent : "");
+        extension = "txt";
+      }
+    }
+    
+    const blob = new Blob([fileContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -174,6 +215,8 @@ export default function GameLabPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    
+    console.log(`Downloaded code as ${extension} file, length: ${fileContent.length}`);
   };
   
   const downloadTranscript = () => {
