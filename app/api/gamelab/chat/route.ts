@@ -75,14 +75,6 @@ function getTemplateStructure() {
         }
       ]
     },
-    react: {
-      files: [
-        {
-          name: "App.jsx",
-          content: "import { useState, useEffect } from 'react';\nimport './App.css';\n\nfunction App() {\n  const [gameState, setGameState] = useState({\n    // Initialize your game state here\n  });\n\n  useEffect(() => {\n    // Game initialization code\n    \n    // Optional cleanup\n    return () => {\n      // Cleanup code\n    };\n  }, []);\n\n  // Game logic functions\n  \n  return (\n    <div className=\"game-container\">\n      {/* Game UI components */}\n    </div>\n  );\n}\n\nexport default App;"
-        }
-      ]
-    },
     mongodb: {
       gameStructure: {
         id: "unique-game-id",
@@ -130,18 +122,164 @@ export async function POST(request: NextRequest) {
     // Get template structures
     const templateStructure = getTemplateStructure();
     
+    // HTML Example as a separate string to avoid template string issues
+    const htmlExample = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Number Guessing Game</title>
+  <style>
+    body, html { 
+      margin: 0; 
+      padding: 0; 
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f0f0f0;
+    }
+    #game-container {
+      width: 80%;
+      max-width: 600px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+    input {
+      padding: 8px;
+      font-size: 16px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-right: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <h1>Number Guessing Game</h1>
+    <p id="message">I'm thinking of a number between 1 and 100. Can you guess it?</p>
+    <div>
+      <input type="number" id="guess-input" min="1" max="100">
+      <button id="submit-btn">Submit</button>
+    </div>
+    <p id="attempts">Attempts: 0</p>
+  </div>
+  
+  <script>
+    // Game initialization code
+    const messageElement = document.getElementById('message');
+    const guessInput = document.getElementById('guess-input');
+    const submitButton = document.getElementById('submit-btn');
+    const attemptsElement = document.getElementById('attempts');
+    
+    // Game state
+    let gameState = {
+      secretNumber: Math.floor(Math.random() * 100) + 1,
+      attempts: 0,
+      gameOver: false
+    };
+    
+    // Event listeners
+    submitButton.addEventListener('click', makeGuess);
+    
+    function makeGuess() {
+      if (gameState.gameOver) return;
+      
+      const guess = parseInt(guessInput.value);
+      
+      if (isNaN(guess) || guess < 1 || guess > 100) {
+        messageElement.textContent = "Please enter a valid number between 1 and 100";
+        return;
+      }
+      
+      gameState.attempts++;
+      attemptsElement.textContent = \`Attempts: \${gameState.attempts}\`;
+      
+      if (guess === gameState.secretNumber) {
+        messageElement.textContent = \`Congratulations! You guessed the number \${gameState.secretNumber} in \${gameState.attempts} attempts!\`;
+        messageElement.style.color = "green";
+        gameState.gameOver = true;
+        
+        // Create play again button
+        const playAgainBtn = document.createElement('button');
+        playAgainBtn.textContent = "Play Again";
+        playAgainBtn.addEventListener('click', resetGame);
+        document.getElementById('game-container').appendChild(playAgainBtn);
+      } else if (guess < gameState.secretNumber) {
+        messageElement.textContent = "Too low! Try a higher number.";
+      } else {
+        messageElement.textContent = "Too high! Try a lower number.";
+      }
+      
+      guessInput.value = "";
+      guessInput.focus();
+    }
+    
+    function resetGame() {
+      gameState.secretNumber = Math.floor(Math.random() * 100) + 1;
+      gameState.attempts = 0;
+      gameState.gameOver = false;
+      
+      messageElement.textContent = "I'm thinking of a new number between 1 and 100. Can you guess it?";
+      messageElement.style.color = "black";
+      attemptsElement.textContent = "Attempts: 0";
+      
+      // Remove play again button
+      const playAgainBtn = document.querySelector('#game-container button:last-child');
+      if (playAgainBtn && playAgainBtn.textContent === "Play Again") {
+        playAgainBtn.remove();
+      }
+    }
+  </script>
+</body>
+</html>`;
+    
     const systemPrompt = `
     You are an AI game development assistant for RandomPlayables, a platform for mathematical citizen science games.
     
     Your goal is to help users create games that can be deployed on the RandomPlayables platform. You have access to 
     existing game examples and the platform's database structure to guide your recommendations.
     
+    IMPORTANT REQUIREMENTS FOR ALL GAMES YOU CREATE:
+    
+    1. Every game MUST be delivered as a COMPLETE single HTML file with:
+       - Proper DOCTYPE and HTML structure
+       - CSS in a <style> tag in the head
+       - JavaScript in a <script> tag before the body closing tag
+       - A <div id="game-container"></div> element that the JavaScript code interacts with
+    
+    2. Interactive elements MUST use standard DOM event listeners, for example:
+       document.getElementById('button-id').addEventListener('click', handleClick);
+    
+    3. All JavaScript code must reference elements by ID or create elements dynamically.
+    
+    4. The game should work entirely in a sandbox environment without external dependencies.
+    
+    Here's an example of a properly structured game:
+    
+    \`\`\`html
+${htmlExample}
+    \`\`\`
+    
     When designing games:
     1. Focus on games that explore mathematical concepts, probability, or scientific reasoning
     2. Keep the code simple and maintainable
-    3. Follow the structure of existing RandomPlayables games
-    4. Generate complete, runnable code that would work on the platform
-    5. Provide clear documentation and comments
+    3. Generate complete, self-contained HTML files as shown in the example
+    4. Provide clear documentation and comments
     
     Available game examples:
     ${JSON.stringify(gameCodeExamples, null, 2)}
@@ -159,12 +297,8 @@ export async function POST(request: NextRequest) {
     When responding:
     1. First understand the user's game idea and ask clarifying questions if needed
     2. Suggest a clear game structure and mechanics
-    3. Provide well-structured, well-commented code for the game
+    3. Provide a COMPLETE self-contained HTML file with embedded CSS and JavaScript
     4. Explain how the game would integrate with the RandomPlayables platform
-    5. Include platform-specific considerations like database integration
-    
-    Always return your code responses in a format that can be easily copied and used by the user. When generating code,
-    include proper language identifier (e.g., javascript, typescript, jsx, tsx, html, css) in your response.
     `;
     
     const messages = [
@@ -184,10 +318,10 @@ export async function POST(request: NextRequest) {
     
     // Extract code from the response
     let code = "";
-    let language = "javascript";
+    let language = "html"; // Default to HTML since we're focusing on complete HTML files
     let message_text = aiResponse;
 
-    // Enhanced regex that handles multiple code blocks but WITHOUT named capturing groups
+    // Enhanced regex that handles code blocks
     const codeBlockRegex = /```([a-zA-Z0-9+#]+)?\n([\s\S]*?)```/g;
     const codeBlocks: Array<[string, string, string]> = [];
     
@@ -222,17 +356,29 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // If no markdown code block, attempt alternative extraction methods
-      const parts = aiResponse.split('\n\n');
-      if (parts.length > 1) {
-        message_text = parts[0];
-        code = parts.slice(1).join('\n\n');
-      }
-      
-      // Check if this is actually HTML code
-      if (code.includes("<script") || code.includes("<html")) {
+      const htmlMatch = aiResponse.match(/<html[\s\S]*?<\/html>/);
+      if (htmlMatch) {
+        code = htmlMatch[0];
+        message_text = aiResponse.replace(htmlMatch[0], "").trim();
         language = "html";
-      } else if (code.includes("function") || code.includes("const ") || code.includes("let ")) {
-        language = "javascript";
+      } else {
+        // Last resort: try to find script tags
+        const scriptMatch = aiResponse.match(/<script[\s\S]*?<\/script>/);
+        if (scriptMatch) {
+          // Wrap in minimal HTML
+          code = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Game</title>
+</head>
+<body>
+  <div id="game-container"></div>
+  ${scriptMatch[0]}
+</body>
+</html>`;
+          message_text = aiResponse.replace(scriptMatch[0], "").trim();
+          language = "html";
+        }
       }
     }
 

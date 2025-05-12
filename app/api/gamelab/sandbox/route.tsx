@@ -136,27 +136,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, gameData: newGameData });
       }
       
-      case "get_games": {
-        // Retrieve test games for this user
-        const games = await models.Game.find({
-          createdBy: userId,
-          isTestGame: true
-        }).sort({ createdAt: -1 });
-        
-        return NextResponse.json({ success: true, games });
-      }
-      
-      case "get_game_data": {
-        // Retrieve test game data
-        const gameData = await models.GameData.find({
-          gameId: data.gameId,
-          sessionId: data.sessionId,
-          isTestData: true
-        }).sort({ timestamp: 1 });
-        
-        return NextResponse.json({ success: true, gameData });
-      }
-      
       default:
         return NextResponse.json(
           { error: "Invalid action" },
@@ -186,41 +165,28 @@ export async function GET(request: NextRequest) {
     // Connect to sandbox and get models
     const models = await getSandboxModels();
     
-    switch (action) {
-      case "get_games": {
-        // Retrieve test games for this user
-        const games = await models.Game.find({
-          createdBy: userId,
-          isTestGame: true
-        }).sort({ createdAt: -1 });
-        
-        return NextResponse.json({ success: true, games });
-      }
-      
-      case "get_game_data": {
-        if (!gameId || !sessionId) {
-          return NextResponse.json(
-            { error: "Missing gameId or sessionId" },
-            { status: 400 }
-          );
-        }
-        
-        // Retrieve test game data
-        const gameData = await models.GameData.find({
-          gameId,
-          sessionId,
-          isTestData: true
-        }).sort({ timestamp: 1 });
-        
-        return NextResponse.json({ success: true, gameData });
-      }
-      
-      default:
+    if (action === "get_game_data") {
+      if (!gameId || !sessionId) {
         return NextResponse.json(
-          { error: "Invalid action" },
+          { error: "Missing gameId or sessionId" },
           { status: 400 }
         );
+      }
+      
+      // Retrieve test game data
+      const gameData = await models.GameData.find({
+        gameId,
+        sessionId,
+        isTestData: true
+      }).sort({ timestamp: 1 });
+      
+      return NextResponse.json({ success: true, gameData });
     }
+    
+    return NextResponse.json(
+      { error: "Invalid action" },
+      { status: 400 }
+    );
   } catch (error: any) {
     console.error("Error in sandbox API:", error);
     return NextResponse.json(

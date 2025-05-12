@@ -19,14 +19,6 @@ interface GameLabResponse {
   error?: string;
 }
 
-interface SavedGameProject {
-  id: string;
-  name: string;
-  code: string;
-  language: string;
-  timestamp: Date;
-}
-
 async function sendChatMessage(message: string, chatHistory: ChatMessage[]) {
   const response = await fetch("/api/gamelab/chat", {
     method: "POST",
@@ -37,11 +29,6 @@ async function sendChatMessage(message: string, chatHistory: ChatMessage[]) {
   return response.json();
 }
 
-async function fetchSandboxGames() {
-  const response = await fetch("/api/gamelab/sandbox?action=get_games");
-  return response.json();
-}
-
 export default function GameLabPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -49,35 +36,8 @@ export default function GameLabPage() {
   const [currentLanguage, setCurrentLanguage] = useState<string>("javascript");
   const [currentTab, setCurrentTab] = useState<'code' | 'sandbox'>('code');
   const [codeError, setCodeError] = useState<string | null>(null);
-  const [savedProjects, setSavedProjects] = useState<SavedGameProject[]>([]);
-  const [savedProjectName, setSavedProjectName] = useState<string>("");
-  const [projectNameError, setProjectNameError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch saved games from the sandbox
-  const { data: savedGamesData, isLoading: isSavedGamesLoading } = useQuery({
-    queryKey: ['sandboxGames'],
-    queryFn: fetchSandboxGames,
-    enabled: true // Always fetch saved games
-  });
-  
-  // Update savedProjects state when data is fetched
-  useEffect(() => {
-    if (savedGamesData?.success && savedGamesData.games) {
-      // Transform the data into our SavedGameProject format
-      const transformedGames = savedGamesData.games.map((game: any) => ({
-        id: game.id,
-        name: game.name,
-        // Since the API doesn't store code directly, we'll use placeholders
-        code: game.code || "// Code not available in API response",
-        language: game.language || "javascript",
-        timestamp: new Date(game.createdAt)
-      }));
-      
-      setSavedProjects(transformedGames);
-    }
-  }, [savedGamesData]);
-  
   const { mutate, isPending } = useMutation({
     mutationFn: (message: string) => sendChatMessage(message, messages),
     onSuccess: (data: GameLabResponse) => {
@@ -235,61 +195,12 @@ export default function GameLabPage() {
     URL.revokeObjectURL(url);
   };
   
-  const saveProject = async () => {
-    if (!currentCode) {
-      setProjectNameError("No code to save");
-      return;
-    }
-    
-    if (!savedProjectName.trim()) {
-      setProjectNameError("Please enter a project name");
-      return;
-    }
-    
-    // Reset any previous errors
-    setProjectNameError(null);
-    
-    try {
-      // Create a new game entry in the sandbox
-      const response = await fetch('/api/gamelab/sandbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create_game',
-          data: {
-            name: savedProjectName,
-            description: 'Created in GameLab',
-            code: currentCode,
-            language: currentLanguage,
-            link: '/gamelab/sandbox' // Placeholder link
-          }
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Add the saved project to our local state
-        const newProject: SavedGameProject = {
-          id: data.game.id,
-          name: savedProjectName,
-          code: currentCode,
-          language: currentLanguage,
-          timestamp: new Date()
-        };
-        
-        setSavedProjects(prev => [newProject, ...prev]);
-        setSavedProjectName(""); // Reset input
-        
-        // Refetch the saved games to ensure we have the latest data
-        // This would be triggered by the queryClient.invalidateQueries call
-        // if we were using React Query properly for this
-      } else {
-        setProjectNameError("Failed to save project");
-      }
-    } catch (error) {
-      console.error("Error saving project:", error);
-      setProjectNameError("Error saving project");
+  const clearChat = () => {
+    if (window.confirm("Are you sure you want to clear the chat? This will delete all messages and code.")) {
+      setMessages([]);
+      setCurrentCode("");
+      setCurrentLanguage("javascript");
+      setCodeError(null);
     }
   };
   
@@ -375,6 +286,12 @@ export default function GameLabPage() {
             <h2 className="text-2xl font-bold text-emerald-700">Game Lab</h2>
             <div className="space-x-2">
               <button
+                onClick={clearChat}
+                className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                Clear Chat
+              </button>
+              <button
                 onClick={downloadTranscript}
                 className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600"
               >
@@ -425,29 +342,6 @@ export default function GameLabPage() {
           <div className="mb-6 rounded-lg min-h-[400px] flex flex-col">
             {currentTab === 'code' ? (
               <>
-                {/* Save Project Form */}
-                <div className="mb-4 flex space-x-2">
-                  <input
-                    type="text"
-                    value={savedProjectName}
-                    onChange={(e) => setSavedProjectName(e.target.value)}
-                    placeholder="Enter project name to save"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <button
-                    onClick={saveProject}
-                    disabled={!currentCode || !savedProjectName.trim()}
-                    className="px-3 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    Save Project
-                  </button>
-                </div>
-                {projectNameError && (
-                  <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
-                    {projectNameError}
-                  </div>
-                )}
-                
                 {/* Code Display */}
                 {currentCode ? (
                   <CodeBlock code={currentCode} language={currentLanguage} />
@@ -473,61 +367,6 @@ export default function GameLabPage() {
             </div>
           )}
           
-          {/* Saved Projects Section */}
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-2">Your Saved Games</h3>
-            {isSavedGamesLoading ? (
-              <div className="flex items-center">
-                <Spinner />
-                <span className="ml-2">Loading saved games...</span>
-              </div>
-            ) : savedProjects.length > 0 ? (
-              <div className="bg-gray-50 rounded-lg p-4 max-h-[200px] overflow-y-auto">
-                <ul className="space-y-2">
-                  {savedProjects.map((project) => (
-                    <li 
-                      key={project.id} 
-                      className="flex justify-between items-center p-2 bg-white rounded border border-gray-200 hover:bg-gray-50"
-                    >
-                      <div>
-                        <p className="font-semibold">{project.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {project.timestamp.toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="space-x-2">
-                        <button 
-                          className="px-2 py-1 text-xs bg-emerald-500 text-white rounded"
-                          onClick={() => {
-                            // Load this project's code
-                            setCurrentCode(project.code);
-                            setCurrentLanguage(project.language);
-                            setCurrentTab('code');
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          className="px-2 py-1 text-xs bg-blue-500 text-white rounded"
-                          onClick={() => {
-                            // Load and test this project
-                            setCurrentCode(project.code);
-                            setCurrentLanguage(project.language);
-                            setCurrentTab('sandbox');
-                          }}
-                        >
-                          Test
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-gray-500">No saved games yet. Create and save a game to see it here!</p>
-            )}
-          </div>
-          
           {/* Instructions */}
           <div className="mt-6 bg-gray-50 p-4 rounded-lg">
             <h3 className="font-bold text-emerald-700 mb-2">How to use GameLab</h3>
@@ -535,7 +374,6 @@ export default function GameLabPage() {
               <li>Describe the game you want to create in detail</li>
               <li>The AI will help design the game structure and code</li>
               <li>Switch to Game Preview to test your game</li>
-              <li>Save your project to continue working on it later</li>
               <li>Download the code when you're ready to deploy</li>
             </ol>
           </div>

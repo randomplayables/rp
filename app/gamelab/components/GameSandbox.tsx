@@ -6,7 +6,6 @@ import { Spinner } from '@/components/spinner';
 interface GameSandboxProps {
   code: string;
   language: string;
-  onSaveGame?: (gameData: any) => void;
 }
 
 const GameSandbox = ({ code, language }: GameSandboxProps) => {
@@ -163,22 +162,12 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   
   // Create HTML template for the game
   const createGameHTML = (gameCode: string, lang: string) => {
-    let processedCode = gameCode;
-    
     // Add logging to help diagnose issues
     console.log("Creating game HTML with code length:", gameCode.length);
     console.log("Language:", lang);
     
-    // Add session ID to the code for API calls
-    if (processedCode.includes('const API_BASE_URL')) {
-      processedCode = processedCode.replace(
-        'const API_BASE_URL',
-        `const GAMELAB_SESSION_ID = "${gameSessionId}";\nconst API_BASE_URL`
-      );
-    } else {
-      // Add the session ID somewhere safe if the replacement point wasn't found
-      processedCode = `const GAMELAB_SESSION_ID = "${gameSessionId}";\n${processedCode}`;
-    }
+    // Prepare the session ID for communication
+    const sessionIdScript = `const GAMELAB_SESSION_ID = "${gameSessionId || 'pending'}";`;
     
     // Add communication code to relay data back to parent
     const communicationCode = `
@@ -201,26 +190,29 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
       };
     `;
     
-    // Handle different code types automatically
-    if (processedCode.includes('<!DOCTYPE html>') || processedCode.includes('<html')) {
+    // Check if code contains HTML structure
+    const containsHTML = gameCode.includes('<!DOCTYPE html>') || 
+                          gameCode.includes('<html') || 
+                          gameCode.includes('<body>');
+    
+    if (containsHTML) {
       // This is a complete HTML document, inject our communication code
-      const headMatch = processedCode.match(/<head>([\s\S]*?)<\/head>/i);
+      const headMatch = gameCode.match(/<head>([\s\S]*?)<\/head>/i);
       if (headMatch) {
         // Insert communication script in the head
-        processedCode = processedCode.replace(
+        return gameCode.replace(
           /<head>([\s\S]*?)<\/head>/i,
-          `<head>$1<script>${communicationCode}</script></head>`
+          `<head>$1<script>${sessionIdScript}${communicationCode}</script></head>`
         );
       } else {
         // If no head tag, insert one with our script
-        processedCode = processedCode.replace(
+        return gameCode.replace(
           /<html[^>]*>/i,
-          `$&<head><script>${communicationCode}</script></head>`
+          `$&<head><script>${sessionIdScript}${communicationCode}</script></head>`
         );
       }
-      
-      return processedCode;
     } else if (lang === 'jsx' || lang === 'tsx' || lang === 'react') {
+      // React-specific template
       return `
 <!DOCTYPE html>
 <html>
@@ -231,7 +223,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script>${communicationCode}</script>
+  <script>${sessionIdScript}${communicationCode}</script>
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
     #game-container { width: 100%; height: 100%; }
@@ -264,7 +256,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
     });
     
     try {
-      ${processedCode}
+      ${gameCode}
       
       // Add auto-mounting code if not present
       if (typeof App !== 'undefined') {
@@ -280,7 +272,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
 </html>
       `;
     } else if (lang === 'html') {
-      // If it's already HTML but not a complete document, wrap it
+      // If it's HTML but not a complete document, wrap it
       return `
 <!DOCTYPE html>
 <html>
@@ -288,7 +280,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GameLab Sandbox</title>
-  <script>${communicationCode}</script>
+  <script>${sessionIdScript}${communicationCode}</script>
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
     #game-container { width: 100%; height: 100%; }
@@ -309,7 +301,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   </style>
 </head>
 <body>
-  ${processedCode}
+  ${gameCode}
   <div id="error-display"></div>
   <script>
     // Error handling
@@ -323,7 +315,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
 </html>
       `;
     } else {
-      // Default JavaScript template
+      // Default JavaScript template with a proper wrapper
       return `
 <!DOCTYPE html>
 <html>
@@ -331,7 +323,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GameLab Sandbox</title>
-  <script>${communicationCode}</script>
+  <script>${sessionIdScript}${communicationCode}</script>
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
     #game-container { width: 100%; height: 100%; }
@@ -363,7 +355,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
     });
     
     try {
-      ${processedCode}
+      ${gameCode}
     } catch (err) {
       console.error('Error executing JavaScript code:', err);
       document.getElementById('error-display').style.display = 'block';
@@ -411,7 +403,12 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
               srcDoc={gamePreview}
               title="Game Preview"
               className="w-full flex-grow border-none"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
+              onLoad={() => {
+                console.log("Game iframe loaded");
+                // Clear any previous error displays
+                setError(null);
+              }}
             />
           )}
           
