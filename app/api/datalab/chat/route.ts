@@ -6,6 +6,8 @@ import GameDataModel from "@/models/GameData";
 import GameModel from "@/models/Game";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
+import SurveyModel from "@/models/Survey";
+import SurveyResponseModel from "@/models/SurveyResponse";
 
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
@@ -81,6 +83,40 @@ async function fetchRelevantData(query: string, userId: string | null) {
       { $limit: 30 }
     ]);
   }
+
+    // Add survey data when relevant
+    if (query.toLowerCase().includes('survey') || query.toLowerCase().includes('collect')) {
+      // Get surveys created by this user
+      if (userId) {
+        dataContext.userSurveys = await SurveyModel.find({ userId }).limit(50).lean();
+      }
+      
+      // Get survey responses
+      const surveyIds = dataContext.userSurveys?.map((s: any) => s._id) || [];
+      if (surveyIds.length > 0) {
+        dataContext.surveyResponses = await SurveyResponseModel.find({
+          surveyId: { $in: surveyIds }
+        }).limit(200).lean();
+        
+        // Add aggregated survey stats
+        dataContext.surveyStats = await SurveyResponseModel.aggregate([
+          {
+            $match: { surveyId: { $in: surveyIds } }
+          },
+          {
+            $group: {
+              _id: "$surveyId",
+              responseCount: { $sum: 1 },
+              averageCompletionTime: {
+                $avg: { 
+                  $subtract: ["$metadata.endTime", "$metadata.startTime"] 
+                }
+              }
+            }
+          }
+        ]);
+      }
+    }
   
   return dataContext;
 }

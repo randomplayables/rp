@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       body = {};
     }
     
-    const { gameId, passedUserId, passedUsername } = body;
+    const { gameId, passedUserId, passedUsername, surveyMode, surveyQuestionId } = body;
     
     if (!gameId) {
       return NextResponse.json({ error: "Missing gameId." }, { 
@@ -128,7 +128,9 @@ export async function POST(request: NextRequest) {
       sessionId,
       ipAddress,
       userAgent,
-      isGuest
+      isGuest,
+      surveyMode: surveyMode || false,
+      surveyQuestionId
     });
     
     return NextResponse.json({ 
@@ -137,6 +139,8 @@ export async function POST(request: NextRequest) {
       username,
       isGuest,
       gameId,
+      surveyMode,
+      surveyQuestionId,
       authSource: userId ? authSource : undefined
     }, {
       headers: getDynamicCorsHeaders(request)

@@ -37,6 +37,11 @@ export default function NavBar() {
                     className="text-gray-700 hover:text-emerald-500 transition-colors">
                     GameLab
                 </Link>
+                <Link 
+                    href='/collect'
+                    className="text-gray-700 hover:text-emerald-500 transition-colors">
+                    Collect
+                </Link>
                 {user?.imageUrl ? (
                     <Link href = "/profile">
                         {" "}
