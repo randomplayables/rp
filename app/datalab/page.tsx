@@ -4,6 +4,7 @@ import { Spinner } from "@/components/spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import * as d3 from 'd3';
+import SaveVisualizationButton from './components/SaveVisualizationButton';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -230,6 +231,15 @@ export default function DataLabPage() {
               >
                 {showCode ? 'Hide Code' : 'Show Code'}
               </button>
+
+                  {/* Add the save button */}
+                  {currentCode && (
+                    <SaveVisualizationButton 
+                      code={currentCode} 
+                      // Optionally capture a preview image
+                      // previewImage={capturePreviewImage()}
+                    />
+                  )}
               <button
                 onClick={downloadTranscript}
                 className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600"

@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import { CodeBlock } from './components/CodeBlock';
 import GameSandbox from "./components/GameSandbox";
+import SaveSketchButton from './components/SaveSketchButton';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -291,6 +292,13 @@ export default function GameLabPage() {
               >
                 Clear Chat
               </button>
+              {/* Add the save button */}
+              {currentCode && (
+                <SaveSketchButton 
+                  code={currentCode} 
+                  language={currentLanguage} 
+                />
+              )}
               <button
                 onClick={downloadTranscript}
                 className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600"

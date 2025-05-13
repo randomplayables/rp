@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef, useCallback } from "react";
 import SurveyPreview from "./components/SurveyPreview";
 import QuestionEditor from "./components/QuestionEditor";
+import SaveInstrumentButton from './components/SaveInstrumentButton';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
