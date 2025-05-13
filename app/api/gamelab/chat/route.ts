@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
+import { fetchRepoContent, extractRepoInfo } from "@/lib/githubApi";
 
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
@@ -19,39 +20,110 @@ async function fetchGameCode(query: string) {
         { name: { $regex: query, $options: 'i' } },
         { description: { $regex: query, $options: 'i' } }
       ]
-    }).limit(5).lean();
+    }).limit(3).lean(); // Limit to fewer games to avoid excessive API calls
+    
+    console.log("🔍 GameLab: Found matching games in database:", 
+      games.map(g => g.name).join(", ") || "None");
     
     const gameCodeContext: Record<string, any> = {};
     
-    // For each game, try to extract GitHub repo info
+    // For each game, try to extract GitHub repo info and fetch code
     for (const game of games) {
       if (game.irlInstructions && game.irlInstructions.length > 0) {
+        console.log(`🔍 GameLab: Checking irlInstructions for ${game.name}:`, 
+          game.irlInstructions.map((i: any) => i.url).join(", "));
+        
         for (const instruction of game.irlInstructions) {
           if (instruction.url && instruction.url.includes('github.com')) {
-            // Extract GitHub repo URL
-            const urlParts = instruction.url.split('/');
-            const repoIndex = urlParts.indexOf('github.com');
+            console.log(`🔍 GameLab: Found GitHub URL for ${game.name}:`, instruction.url);
             
-            if (repoIndex !== -1 && urlParts.length >= repoIndex + 3) {
-              const repoOwner = urlParts[repoIndex + 1];
-              const repoName = urlParts[repoIndex + 2];
-              const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+            // Extract GitHub repo URL
+            const { owner, repo } = extractRepoInfo(instruction.url);
+            
+            console.log(`🔍 GameLab: Extracted repo info: owner=${owner}, repo=${repo}`);
+            
+            if (owner && repo) {
+              const repoUrl = `https://github.com/${owner}/${repo}`;
+              
+              console.log(`🔍 GameLab: Attempting to fetch content from ${repoUrl}`);
+              
+              // Fetch important files from the repository
+              let packageJson = null;
+              let componentExamples: Array<{name: string; path: string; content: string}> = [];
+              
+              try {
+                // Get package.json for dependencies and project info
+                const packageJsonResult = await fetchRepoContent(owner, repo, 'package.json');
+                console.log(`🔍 GameLab: package.json fetch result type:`, typeof packageJsonResult);
+                
+                if (typeof packageJsonResult === 'string') {
+                  try {
+                    packageJson = JSON.parse(packageJsonResult);
+                    console.log(`🔍 GameLab: Successfully parsed package.json`);
+                  } catch (err) {
+                    packageJson = packageJsonResult;
+                    console.log(`🔍 GameLab: Could not parse package.json, using as string`);
+                  }
+                }
+                
+                // Get component examples (limit to a few key ones)
+                console.log(`🔍 GameLab: Fetching components from src/components`);
+                const srcComponents = await fetchRepoContent(owner, repo, 'src/components');
+                if (srcComponents && Array.isArray(srcComponents)) {
+                  // Take just a few example components
+                  componentExamples = srcComponents.slice(0, 3);
+                  console.log(`🔍 GameLab: Found ${srcComponents.length} components, using first 3`);
+                } else {
+                  console.log(`🔍 GameLab: No components found or not an array:`, srcComponents ? typeof srcComponents : "null");
+                }
+                
+                // Add API service examples if they exist
+                console.log(`🔍 GameLab: Fetching services from src/services`);
+                const apiServices = await fetchRepoContent(owner, repo, 'src/services');
+                if (apiServices && Array.isArray(apiServices)) {
+                  componentExamples.push(...apiServices.slice(0, 2));
+                  console.log(`🔍 GameLab: Found ${apiServices.length} services, using first 2`);
+                } else {
+                  console.log(`🔍 GameLab: No services found or not an array`);
+                }
+
+                // Add type definitions if they exist
+                console.log(`🔍 GameLab: Fetching types from src/types`);
+                const typeDefs = await fetchRepoContent(owner, repo, 'src/types');
+                if (typeDefs && Array.isArray(typeDefs)) {
+                  componentExamples.push(...typeDefs.slice(0, 2));
+                  console.log(`🔍 GameLab: Found ${typeDefs.length} type definitions, using first 2`);
+                } else {
+                  console.log(`🔍 GameLab: No type definitions found or not an array`);
+                }
+                
+                console.log(`🔍 GameLab: Total code examples collected: ${componentExamples.length}`);
+              } catch (error) {
+                console.error(`🔍 GameLab: Error fetching code examples for ${owner}/${repo}:`, error);
+              }
               
               gameCodeContext[game.name] = {
                 id: game.id,
                 name: game.name,
                 repoUrl,
-                instructionUrl: instruction.url
+                instructionUrl: instruction.url,
+                // Include the fetched code examples
+                packageJson,
+                componentExamples,
               };
+              
+              console.log(`🔍 GameLab: Successfully added ${game.name} to context with ${componentExamples.length} code examples`);
             }
           }
         }
+      } else {
+        console.log(`🔍 GameLab: No irlInstructions found for ${game.name}`);
       }
     }
     
     return gameCodeContext;
   } catch (error) {
-    console.error("Error fetching game code:", error);
+    console.error("🔍 GameLab: Error fetching game code:", error);
     return {};
   }
 }
@@ -116,8 +188,21 @@ export async function POST(request: NextRequest) {
   try {
     const { message, chatHistory } = await request.json();
     
+    console.log("🔍 GameLab: Processing chat request with query:", message);
+    
     // Fetch relevant game code examples based on the query
     const gameCodeExamples = await fetchGameCode(message);
+    
+    console.log("🔍 GameLab: GitHub code examples found:", 
+      Object.keys(gameCodeExamples).length ? 
+      Object.keys(gameCodeExamples).join(", ") : 
+      "None");
+    
+    // If you find any, add more detail
+    if (Object.keys(gameCodeExamples).length > 0) {
+      console.log("🔍 GameLab: First example contains components:", 
+        gameCodeExamples[Object.keys(gameCodeExamples)[0]]?.componentExamples?.length || 0);
+    }
     
     // Get template structures
     const templateStructure = getTemplateStructure();
@@ -252,7 +337,7 @@ export async function POST(request: NextRequest) {
     You are an AI game development assistant for RandomPlayables, a platform for mathematical citizen science games.
     
     Your goal is to help users create games that can be deployed on the RandomPlayables platform. You have access to 
-    existing game examples and the platform's database structure to guide your recommendations.
+    existing game examples and their codebases to guide your recommendations.
     
     IMPORTANT REQUIREMENTS FOR ALL GAMES YOU CREATE:
     
@@ -269,20 +354,25 @@ export async function POST(request: NextRequest) {
     
     4. The game should work entirely in a sandbox environment without external dependencies.
     
-    Here's an example of a properly structured game:
+    REAL CODE EXAMPLES FROM EXISTING GAMES:
+    ${JSON.stringify(gameCodeExamples, null, 2)}
+    
+    When designing games based on existing code examples:
+    1. Follow similar patterns for game structure and organization
+    2. Use the same approach for connecting to the RandomPlayables platform APIs
+    3. Implement similar data structures for game state and scoring
+    4. Import any necessary type definitions
+    
+    When handling platform integration:
+    1. Every game should connect to the RandomPlayables platform using the provided API service patterns
+    2. Use sessionId to track game sessions
+    3. Send game data to the platform for scoring and analysis
+    
+    Example of a complete game:
     
     \`\`\`html
 ${htmlExample}
     \`\`\`
-    
-    When designing games:
-    1. Focus on games that explore mathematical concepts, probability, or scientific reasoning
-    2. Keep the code simple and maintainable
-    3. Generate complete, self-contained HTML files as shown in the example
-    4. Provide clear documentation and comments
-    
-    Available game examples:
-    ${JSON.stringify(gameCodeExamples, null, 2)}
     
     Template structures for new games:
     ${JSON.stringify(templateStructure, null, 2)}
@@ -301,6 +391,9 @@ ${htmlExample}
     4. Explain how the game would integrate with the RandomPlayables platform
     `;
     
+    console.log("🔍 GameLab: Sending prompt to AI with code examples:", 
+      Object.keys(gameCodeExamples).length > 0 ? "Yes" : "No");
+    
     const messages = [
       { role: "system", content: systemPrompt },
       ...chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })),
@@ -315,6 +408,7 @@ ${htmlExample}
     });
     
     const aiResponse = response.choices[0].message.content!;
+    console.log("🔍 GameLab: Received AI response of length:", aiResponse.length);
     
     // Extract code from the response
     let code = "";
@@ -343,6 +437,7 @@ ${htmlExample}
       }
       
       code = mainCodeBlock[2].trim();
+      console.log("🔍 GameLab: Extracted code block of length:", code.length, "language:", language);
       
       // Generate a clean message text by removing all code blocks
       message_text = aiResponse.replace(/```[a-zA-Z0-9+#]*\n[\s\S]*?```/g, "").trim();
@@ -352,6 +447,7 @@ ${htmlExample}
         const htmlMatch = code.match(/<html[\s\S]*?<\/html>/);
         if (htmlMatch) {
           code = htmlMatch[0];
+          console.log("🔍 GameLab: Found complete HTML in code block, length:", code.length);
         }
       }
     } else {
@@ -361,6 +457,7 @@ ${htmlExample}
         code = htmlMatch[0];
         message_text = aiResponse.replace(htmlMatch[0], "").trim();
         language = "html";
+        console.log("🔍 GameLab: Extracted HTML directly from response, length:", code.length);
       } else {
         // Last resort: try to find script tags
         const scriptMatch = aiResponse.match(/<script[\s\S]*?<\/script>/);
@@ -378,12 +475,12 @@ ${htmlExample}
 </html>`;
           message_text = aiResponse.replace(scriptMatch[0], "").trim();
           language = "html";
+          console.log("🔍 GameLab: Found script tag and wrapped in HTML, length:", code.length);
+        } else {
+          console.log("🔍 GameLab: No code blocks or HTML found in response");
         }
       }
     }
-
-    console.log("Extracted code length:", code.length);
-    console.log("Extracted language:", language);
     
     return NextResponse.json({
       message: message_text,
