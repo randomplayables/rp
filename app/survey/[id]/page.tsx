@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { Spinner } from '@/components/spinner';
 import { useMutation } from '@tanstack/react-query';
 
@@ -20,7 +21,11 @@ interface Survey {
   questions: SurveyQuestion[];
 }
 
-export default function SurveyResponsePage({ params }: { params: { id: string } }) {
+export default function SurveyResponsePage() {
+  // Use the useParams hook instead of direct parameter access
+  const params = useParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +38,7 @@ export default function SurveyResponsePage({ params }: { params: { id: string } 
   useEffect(() => {
     async function fetchSurvey() {
       try {
-        const response = await fetch(`/api/collect/survey/${params.id}`);
+        const response = await fetch(`/api/collect/survey/${id}`);
         if (!response.ok) {
           throw new Error('Survey not found');
         }
@@ -63,8 +68,8 @@ export default function SurveyResponsePage({ params }: { params: { id: string } 
       }
     }
     
-    fetchSurvey();
-  }, [params.id]);
+    if (id) fetchSurvey();
+  }, [id]);
   
   // Handle game completion
   const handleGameComplete = (questionId: string, gameSessionId: string, gameData: any) => {

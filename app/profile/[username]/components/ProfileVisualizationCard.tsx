@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Spinner } from '@/components/spinner';
 import * as d3 from 'd3';
 
@@ -23,6 +23,8 @@ export default function ProfileVisualizationCard({ visualization, isOwner, onDel
   const [isRendering, setIsRendering] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -50,32 +52,55 @@ export default function ProfileVisualizationCard({ visualization, isOwner, onDel
     }
   };
   
-  const renderVisualization = () => {
-    setIsRendering(true);
-    setIsPreviewMode(true);
-    
-    setTimeout(() => {
+  // Use useEffect to run d3 visualization after the component mounts
+  useEffect(() => {
+    if (isPreviewMode && containerRef.current && !isRendering) {
       try {
-        const container = document.getElementById(`viz-container-${visualization._id}`);
-        if (container) {
-          container.innerHTML = ''; // Clear previous content
-          
+        console.log('Running d3 visualization on container element');
+        const container = containerRef.current;
+        container.innerHTML = ''; // Clear previous content
+        
+        // Make sure d3 is available
+        if (typeof d3 === 'undefined') {
+          setRenderError('Error: D3 library is not available');
+          console.error('D3 is not defined');
+          return;
+        }
+        
+        try {
           // Create a function from the code and execute it
           const vizFunction = new Function('d3', 'container', visualization.code);
           vizFunction(d3, container);
+        } catch (execError) {
+          const errorMsg = `Error executing visualization code: ${execError instanceof Error ? execError.message : 'Unknown error'}`;
+          console.error(errorMsg, execError);
+          container.innerHTML = `<div class="text-red-500 p-4">${errorMsg}</div>`;
+          setRenderError(errorMsg);
         }
       } catch (error) {
-        console.error('Error rendering visualization:', error);
-        
-        // Display error in the container
-        const container = document.getElementById(`viz-container-${visualization._id}`);
-        if (container) {
-          container.innerHTML = `<div class="text-red-500 p-4">Error rendering visualization: ${error instanceof Error ? error.message : 'Unknown error'}</div>`;
-        }
-      } finally {
-        setIsRendering(false);
+        const errorMsg = `Error in visualization rendering process: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(errorMsg, error);
+        setRenderError(errorMsg);
       }
-    }, 100);
+    }
+  }, [isPreviewMode, isRendering, visualization.code]);
+  
+  const togglePreview = () => {
+    if (!isPreviewMode) {
+      // Show preview
+      setIsRendering(true);
+      setIsPreviewMode(true);
+      
+      // When we turn on preview mode, the useEffect will handle rendering
+      // Wait a short time to show the loading spinner
+      setTimeout(() => {
+        setIsRendering(false);
+      }, 300);
+    } else {
+      // Hide preview
+      setIsPreviewMode(false);
+      setRenderError(null);
+    }
   };
   
   return (
@@ -89,10 +114,20 @@ export default function ProfileVisualizationCard({ visualization, isOwner, onDel
               <span className="ml-2">Rendering...</span>
             </div>
           ) : (
-            <div 
-              id={`viz-container-${visualization._id}`} 
-              className="w-full h-full flex items-center justify-center"
-            />
+            <>
+              {/* Container for visualization - uses ref instead of id */}
+              <div 
+                ref={containerRef}
+                className="w-full h-full flex items-center justify-center"
+              />
+              
+              {/* Error display */}
+              {renderError && (
+                <div className="text-red-500 p-4 text-center">
+                  {renderError}
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (
@@ -126,7 +161,7 @@ export default function ProfileVisualizationCard({ visualization, isOwner, onDel
           
           <div className="flex space-x-2">
             <button
-              onClick={isPreviewMode ? () => setIsPreviewMode(false) : renderVisualization}
+              onClick={togglePreview}
               className="text-emerald-600 hover:text-emerald-700"
             >
               {isPreviewMode ? 'Hide Preview' : 'Preview'}

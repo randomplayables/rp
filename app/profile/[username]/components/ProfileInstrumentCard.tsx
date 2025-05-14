@@ -49,13 +49,48 @@ export default function ProfileInstrumentCard({ instrument, isOwner, onDelete }:
   };
   
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(instrument.shareableLink)
-      .then(() => {
+    // Check if clipboard API is available
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(instrument.shareableLink)
+        .then(() => {
+          alert('Shareable link copied to clipboard!');
+        })
+        .catch(err => {
+          console.error('Could not copy link', err);
+          fallbackCopyTextToClipboard(instrument.shareableLink);
+        });
+    } else {
+      // Use fallback method if Clipboard API is not available
+      fallbackCopyTextToClipboard(instrument.shareableLink);
+    }
+  };
+
+  // Add this fallback function with proper type annotation
+  const fallbackCopyTextToClipboard = (text: string) => {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    
+    // Make the textarea out of viewport
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
         alert('Shareable link copied to clipboard!');
-      })
-      .catch(err => {
-        console.error('Could not copy link', err);
-      });
+      } else {
+        alert('Unable to copy link to clipboard.');
+      }
+    } catch (err) {
+      console.error('Fallback: Unable to copy', err);
+      alert('Unable to copy link to clipboard. Please copy it manually: ' + text);
+    }
+    
+    document.body.removeChild(textArea);
   };
   
   return (
