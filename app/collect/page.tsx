@@ -63,10 +63,12 @@ export default function CollectPage() {
     title: string;
     description: string;
     questions: SurveyQuestion[];
+    savedId?: string;
   }>({
     title: "",
     description: "",
-    questions: []
+    questions: [],
+    savedId: undefined
   });
   const [showPreview, setShowPreview] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -102,10 +104,16 @@ export default function CollectPage() {
       if (data.success) {
         const assistantMessage: ChatMessage = {
           role: 'assistant',
-          content: `✅ Survey created successfully!\n\nShare this link with participants: ${data.survey.shareableLink}`,
+          content: `✅ Survey created successfully!\n\nShare this link with participants: ${data.survey.shareableLink}\n\nClick "Save to Profile" to add this survey to your instruments collection.`,
           timestamp: new Date()
         };
         setMessages(prev => [...prev, assistantMessage]);
+        
+        // Store the surveyId for the SaveInstrumentButton
+        setSurveyData(prev => ({
+          ...prev,
+          savedId: data.survey.id
+        }));
       }
     }
   });
@@ -279,6 +287,7 @@ export default function CollectPage() {
               >
                 Save & Share Survey
               </button>
+              {surveyData.savedId && <SaveInstrumentButton surveyId={surveyData.savedId} />}
             </div>
           </div>
           
