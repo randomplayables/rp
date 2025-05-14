@@ -127,6 +127,15 @@ export default function Profile() {
                         <h1  className="text-2xl font-bold mb-2"> {user.firstName} {user.lastName} </h1>
                         <p className="mb-1 text-lg">@{user.username || "No username set"}</p>
                         <p className="mb-4"> {user.primaryEmailAddress?.emailAddress}</p>
+                        {/* ADD THIS LINK TO PUBLIC PROFILE */}
+                        {user.username && (
+                            <a 
+                                href={`/profile/${user.username}`}
+                                className="px-4 py-2 bg-white text-emerald-600 rounded-md font-medium hover:bg-gray-100 transition"
+                            >
+                                View Public Profile
+                            </a>
+                        )}
                     </div>
                     {/* 
                     

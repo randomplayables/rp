@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       
       const visualization = await UserVisualizationModel.create({
         userId: clerkUser.id,
-        username: clerkUser.username || 'unknown',
+        username: clerkUser.username,
         title,
         description,
         code,

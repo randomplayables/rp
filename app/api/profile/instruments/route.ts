@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     // Create user instrument entry
     const instrument = await UserInstrumentModel.create({
       userId: clerkUser.id,
-      username: clerkUser.username || 'unknown',
+      username: clerkUser.username,
       title: survey.title,
       description: survey.description,
       surveyId,

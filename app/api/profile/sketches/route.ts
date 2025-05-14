@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     
     const sketch = await UserSketchModel.create({
       userId: clerkUser.id,
-      username: clerkUser.username || 'unknown',
+      username: clerkUser.username,
       title,
       description,
       code,
