@@ -10,6 +10,8 @@ const GameSchema = new mongoose.Schema({
   year: Number,
   link: String,
   irlInstructions: [IRLInstructionSchema],
+  codeUrl: String,  // New field for GitHub code repository
+  authorUsername: String,  // New field for author's username
 });
 
 // Notice the generics here: IGame & Document
