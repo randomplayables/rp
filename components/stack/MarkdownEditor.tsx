@@ -1,4 +1,3 @@
-// components/stack/MarkdownEditor.tsx
 'use client';
 
 import { useState } from 'react';
@@ -65,10 +64,11 @@ const MarkdownEditor = ({
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    code({ node, inline, className, children, ...props }) {
+                    code(props: any) {
+                      const { node, inline, className, children, ...rest } = props;
                       const match = /language-(\w+)/.exec(className || '');
                       if (inline) {
-                        return <code className={className} {...props}>{children}</code>;
+                        return <code className={className} {...rest}>{children}</code>;
                       }
                       return match ? (
                         <CodeBlock
@@ -76,7 +76,7 @@ const MarkdownEditor = ({
                           language={match[1]}
                         />
                       ) : (
-                        <code className={className} {...props}>{children}</code>
+                        <code className={className} {...rest}>{children}</code>
                       );
                     }
                   }}
