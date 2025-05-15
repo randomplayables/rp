@@ -28,6 +28,11 @@ export default function NavBar() {
                         Home
                 </Link>
                 <Link 
+                    href='/stack'
+                    className="text-gray-700 hover:text-emerald-500 transition-colors">
+                    Stack
+                </Link>
+                <Link 
                     href='/datalab'
                     className="text-gray-700 hover:text-emerald-500 transition-colors">
                     DataLab
