@@ -39,15 +39,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
     
-    // Get code from GitHub
+    // Check if game has a codeUrl
+    if (!game.codeUrl) {
+      return NextResponse.json({ 
+        error: "Game doesn't have a GitHub repository URL",
+        game: {
+          id: game.id,
+          name: game.name
+        }
+      }, { status: 404 });
+    }
+    
+    // Get code from GitHub using only the codeUrl
     const gameCode = await getGameCode(game);
     
     if (!gameCode) {
       return NextResponse.json({ 
-        error: "No GitHub repository found for this game",
+        error: "Failed to extract repository information from codeUrl",
         game: {
           id: game.id,
-          name: game.name
+          name: game.name,
+          codeUrl: game.codeUrl
         }
       }, { status: 404 });
     }

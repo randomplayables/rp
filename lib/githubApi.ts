@@ -253,52 +253,54 @@ interface GameCodeResult {
 
 // Main function to get game code from a game
 export async function getGameCode(game: any): Promise<GameCodeResult | null> {
-  if (!game?.irlInstructions || !Array.isArray(game.irlInstructions)) {
+  // Check if codeUrl exists
+  if (!game?.codeUrl || !game.codeUrl.includes('github.com')) {
+    console.log(`No GitHub URL found in codeUrl for game ${game?.name || 'unknown'}`);
     return null;
   }
   
-  for (const instruction of game.irlInstructions) {
-    if (instruction.url && instruction.url.includes('github.com')) {
-      const { owner, repo } = extractRepoInfo(instruction.url);
-      
-      if (owner && repo) {
-        // Get repository structure
-        const structure = await getRepoStructure(owner, repo);
-        
-        // Fetch specific important files
-        const packageJson = await fetchRepoContent(owner, repo, 'package.json');
-        
-        // Get some component examples
-        const componentsResult = await fetchRepoContent(owner, repo, 'src/components');
-        const components = Array.isArray(componentsResult) ? componentsResult : [];
-        
-        // Get services for API integration
-        const servicesResult = await fetchRepoContent(owner, repo, 'src/services');
-        const services = Array.isArray(servicesResult) ? servicesResult : [];
-        
-        // Get type definitions
-        const typesResult = await fetchRepoContent(owner, repo, 'src/types');
-        const types = Array.isArray(typesResult) ? typesResult : [];
-        
-        return {
-          game: {
-            id: game.id,
-            name: game.name,
-          },
-          repo: {
-            owner,
-            name: repo,
-            url: `https://github.com/${owner}/${repo}`
-          },
-          structure,
-          packageJson,
-          components,
-          services,
-          types
-        };
-      }
-    }
+  // Extract repo info from codeUrl
+  const { owner, repo } = extractRepoInfo(game.codeUrl);
+  
+  if (!owner || !repo) {
+    console.log(`Failed to extract owner/repo from codeUrl: ${game.codeUrl}`);
+    return null;
   }
   
-  return null;
+  console.log(`Getting code for ${owner}/${repo} from game ${game.name}`);
+  
+  // Get repository structure
+  const structure = await getRepoStructure(owner, repo);
+  
+  // Fetch specific important files
+  const packageJson = await fetchRepoContent(owner, repo, 'package.json');
+  
+  // Get component examples
+  const componentsResult = await fetchRepoContent(owner, repo, 'src/components');
+  const components = Array.isArray(componentsResult) ? componentsResult : [];
+  
+  // Get services for API integration
+  const servicesResult = await fetchRepoContent(owner, repo, 'src/services');
+  const services = Array.isArray(servicesResult) ? servicesResult : [];
+  
+  // Get type definitions
+  const typesResult = await fetchRepoContent(owner, repo, 'src/types');
+  const types = Array.isArray(typesResult) ? typesResult : [];
+  
+  return {
+    game: {
+      id: game.id,
+      name: game.name,
+    },
+    repo: {
+      owner,
+      name: repo,
+      url: `https://github.com/${owner}/${repo}`
+    },
+    structure,
+    packageJson,
+    components,
+    services,
+    types
+  };
 }

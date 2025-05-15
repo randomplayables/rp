@@ -20,104 +20,98 @@ async function fetchGameCode(query: string) {
         { name: { $regex: query, $options: 'i' } },
         { description: { $regex: query, $options: 'i' } }
       ]
-    }).limit(3).lean(); // Limit to fewer games to avoid excessive API calls
+    }).limit(3).lean();
     
     console.log("🔍 GameLab: Found matching games in database:", 
       games.map(g => g.name).join(", ") || "None");
     
     const gameCodeContext: Record<string, any> = {};
     
-    // For each game, try to extract GitHub repo info and fetch code
+    // For each game, extract GitHub repo info and fetch code
     for (const game of games) {
-      if (game.irlInstructions && game.irlInstructions.length > 0) {
-        console.log(`🔍 GameLab: Checking irlInstructions for ${game.name}:`, 
-          game.irlInstructions.map((i: any) => i.url).join(", "));
+      // Check for codeUrl
+      if (game.codeUrl && game.codeUrl.includes('github.com')) {
+        console.log(`🔍 GameLab: Found GitHub URL for ${game.name}:`, game.codeUrl);
         
-        for (const instruction of game.irlInstructions) {
-          if (instruction.url && instruction.url.includes('github.com')) {
-            console.log(`🔍 GameLab: Found GitHub URL for ${game.name}:`, instruction.url);
+        // Extract GitHub repo URL
+        const { owner, repo } = extractRepoInfo(game.codeUrl);
+        
+        console.log(`🔍 GameLab: Extracted repo info: owner=${owner}, repo=${repo}`);
+        
+        if (owner && repo) {
+          const repoUrl = `https://github.com/${owner}/${repo}`;
+          
+          console.log(`🔍 GameLab: Attempting to fetch content from ${repoUrl}`);
+          
+          // Fetch important files from the repository
+          let packageJson = null;
+          let componentExamples: Array<{name: string; path: string; content: string}> = [];
+          
+          try {
+            // Get package.json for dependencies and project info
+            const packageJsonResult = await fetchRepoContent(owner, repo, 'package.json');
+            console.log(`🔍 GameLab: package.json fetch result type:`, typeof packageJsonResult);
             
-            // Extract GitHub repo URL
-            const { owner, repo } = extractRepoInfo(instruction.url);
-            
-            console.log(`🔍 GameLab: Extracted repo info: owner=${owner}, repo=${repo}`);
-            
-            if (owner && repo) {
-              const repoUrl = `https://github.com/${owner}/${repo}`;
-              
-              console.log(`🔍 GameLab: Attempting to fetch content from ${repoUrl}`);
-              
-              // Fetch important files from the repository
-              let packageJson = null;
-              let componentExamples: Array<{name: string; path: string; content: string}> = [];
-              
+            if (typeof packageJsonResult === 'string') {
               try {
-                // Get package.json for dependencies and project info
-                const packageJsonResult = await fetchRepoContent(owner, repo, 'package.json');
-                console.log(`🔍 GameLab: package.json fetch result type:`, typeof packageJsonResult);
-                
-                if (typeof packageJsonResult === 'string') {
-                  try {
-                    packageJson = JSON.parse(packageJsonResult);
-                    console.log(`🔍 GameLab: Successfully parsed package.json`);
-                  } catch (err) {
-                    packageJson = packageJsonResult;
-                    console.log(`🔍 GameLab: Could not parse package.json, using as string`);
-                  }
-                }
-                
-                // Get component examples (limit to a few key ones)
-                console.log(`🔍 GameLab: Fetching components from src/components`);
-                const srcComponents = await fetchRepoContent(owner, repo, 'src/components');
-                if (srcComponents && Array.isArray(srcComponents)) {
-                  // Take just a few example components
-                  componentExamples = srcComponents.slice(0, 3);
-                  console.log(`🔍 GameLab: Found ${srcComponents.length} components, using first 3`);
-                } else {
-                  console.log(`🔍 GameLab: No components found or not an array:`, srcComponents ? typeof srcComponents : "null");
-                }
-                
-                // Add API service examples if they exist
-                console.log(`🔍 GameLab: Fetching services from src/services`);
-                const apiServices = await fetchRepoContent(owner, repo, 'src/services');
-                if (apiServices && Array.isArray(apiServices)) {
-                  componentExamples.push(...apiServices.slice(0, 2));
-                  console.log(`🔍 GameLab: Found ${apiServices.length} services, using first 2`);
-                } else {
-                  console.log(`🔍 GameLab: No services found or not an array`);
-                }
-
-                // Add type definitions if they exist
-                console.log(`🔍 GameLab: Fetching types from src/types`);
-                const typeDefs = await fetchRepoContent(owner, repo, 'src/types');
-                if (typeDefs && Array.isArray(typeDefs)) {
-                  componentExamples.push(...typeDefs.slice(0, 2));
-                  console.log(`🔍 GameLab: Found ${typeDefs.length} type definitions, using first 2`);
-                } else {
-                  console.log(`🔍 GameLab: No type definitions found or not an array`);
-                }
-                
-                console.log(`🔍 GameLab: Total code examples collected: ${componentExamples.length}`);
-              } catch (error) {
-                console.error(`🔍 GameLab: Error fetching code examples for ${owner}/${repo}:`, error);
+                packageJson = JSON.parse(packageJsonResult);
+                console.log(`🔍 GameLab: Successfully parsed package.json`);
+              } catch (err) {
+                packageJson = packageJsonResult;
+                console.log(`🔍 GameLab: Could not parse package.json, using as string`);
               }
-              
-              gameCodeContext[game.name] = {
-                id: game.id,
-                name: game.name,
-                repoUrl,
-                instructionUrl: instruction.url,
-                // Include the fetched code examples
-                packageJson,
-                componentExamples,
-              };
-              
-              console.log(`🔍 GameLab: Successfully added ${game.name} to context with ${componentExamples.length} code examples`);
             }
+            
+            // Get component examples (limit to a few key ones)
+            console.log(`🔍 GameLab: Fetching components from src/components`);
+            const srcComponents = await fetchRepoContent(owner, repo, 'src/components');
+            if (srcComponents && Array.isArray(srcComponents)) {
+              // Take just a few example components
+              componentExamples = srcComponents.slice(0, 3);
+              console.log(`🔍 GameLab: Found ${srcComponents.length} components, using first 3`);
+            } else {
+              console.log(`🔍 GameLab: No components found or not an array:`, srcComponents ? typeof srcComponents : "null");
+            }
+            
+            // Add API service examples if they exist
+            console.log(`🔍 GameLab: Fetching services from src/services`);
+            const apiServices = await fetchRepoContent(owner, repo, 'src/services');
+            if (apiServices && Array.isArray(apiServices)) {
+              componentExamples.push(...apiServices.slice(0, 2));
+              console.log(`🔍 GameLab: Found ${apiServices.length} services, using first 2`);
+            } else {
+              console.log(`🔍 GameLab: No services found or not an array`);
+            }
+
+            // Add type definitions if they exist
+            console.log(`🔍 GameLab: Fetching types from src/types`);
+            const typeDefs = await fetchRepoContent(owner, repo, 'src/types');
+            if (typeDefs && Array.isArray(typeDefs)) {
+              componentExamples.push(...typeDefs.slice(0, 2));
+              console.log(`🔍 GameLab: Found ${typeDefs.length} type definitions, using first 2`);
+            } else {
+              console.log(`🔍 GameLab: No type definitions found or not an array`);
+            }
+            
+            console.log(`🔍 GameLab: Total code examples collected: ${componentExamples.length}`);
+          } catch (error) {
+            console.error(`🔍 GameLab: Error fetching code examples for ${owner}/${repo}:`, error);
           }
+          
+          gameCodeContext[game.name] = {
+            id: game.id,
+            name: game.name,
+            repoUrl,
+            codeUrl: game.codeUrl,
+            // Include the fetched code examples
+            packageJson,
+            componentExamples,
+          };
+          
+          console.log(`🔍 GameLab: Successfully added ${game.name} to context with ${componentExamples.length} code examples`);
         }
       } else {
-        console.log(`🔍 GameLab: No irlInstructions found for ${game.name}`);
+        console.log(`🔍 GameLab: No codeUrl found for ${game.name}`);
       }
     }
     
