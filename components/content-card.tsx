@@ -91,7 +91,7 @@ const ContentCard = ({ id, image, name, year, link, irlInstructions, codeUrl, au
   };
 
   return (
-    <div className="content-card relative border rounded-lg shadow hover:shadow-lg" style={{ overflow: "visible" }}>
+      <div className="content-card relative border rounded-lg shadow hover:shadow-lg overflow-hidden">
       {/* The entire card is now clickable to open the game with auth */}
       <div 
         className="cursor-pointer" 

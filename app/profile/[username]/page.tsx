@@ -7,6 +7,7 @@ import { Spinner } from '@/components/spinner';
 import ProfileVisualizationCard from './components/ProfileVisualizationCard';
 import ProfileSketchCard from './components/ProfileSketchCard';
 import ProfileInstrumentCard from './components/ProfileInstrumentCard';
+import ContentCard from '@/components/content-card';
 
 // Types
 interface ProfileData {
@@ -45,6 +46,18 @@ interface Instrument {
   createdAt: string;
 }
 
+// Add Game type
+interface Game {
+  id: number;
+  image: string;
+  name: string;
+  year: number;
+  link: string;
+  irlInstructions?: { title: string; url: string }[];
+  codeUrl?: string;
+  authorUsername?: string;
+}
+
 export default function UserProfilePage() {
   const { username } = useParams();
   const { user: currentUser, isLoaded: isUserLoaded } = useUser();
@@ -53,8 +66,9 @@ export default function UserProfilePage() {
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
   const [sketches, setSketches] = useState<Sketch[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [games, setGames] = useState<Game[]>([]); // Add games state
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'visualizations' | 'sketches' | 'instruments'>('visualizations');
+  const [activeTab, setActiveTab] = useState<'visualizations' | 'sketches' | 'instruments' | 'games'>('visualizations');
   
   // Check if this is the current user's profile
   const isOwnProfile = isUserLoaded && currentUser?.username === username;
@@ -82,7 +96,7 @@ export default function UserProfilePage() {
     }
   }, [username, isOwnProfile, currentUser, isUserLoaded]);
   
-  // Fetch user content (visualizations, sketches, instruments)
+  // Fetch user content (visualizations, sketches, instruments, games)
   useEffect(() => {
     async function fetchUserContent() {
       if (!profileData) return;
@@ -104,6 +118,11 @@ export default function UserProfilePage() {
         const instRes = await fetch(`/api/profile/instruments?userId=${profileData.userId}`);
         const instData = await instRes.json();
         setInstruments(instData.instruments || []);
+        
+        // Fetch games created by this author
+        const gamesRes = await fetch(`/api/games?authorUsername=${profileData.username}`);
+        const gamesData = await gamesRes.json();
+        setGames(gamesData || []);
       } catch (error) {
         console.error('Error fetching user content:', error);
       } finally {
@@ -155,6 +174,17 @@ export default function UserProfilePage() {
       <div className="mb-6">
         <div className="border-b border-gray-200">
           <nav className="flex -mb-px">
+            {/* Add Games tab */}
+            <button
+              className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
+                activeTab === 'games' 
+                  ? 'border-emerald-500 text-emerald-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+              onClick={() => setActiveTab('games')}
+            >
+              Games
+            </button>
             <button
               className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
                 activeTab === 'visualizations' 
@@ -165,7 +195,6 @@ export default function UserProfilePage() {
             >
               Visualizations
             </button>
-            
             <button
               className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
                 activeTab === 'sketches' 
@@ -176,7 +205,6 @@ export default function UserProfilePage() {
             >
               Sketches
             </button>
-            
             <button
               className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
                 activeTab === 'instruments' 
@@ -199,6 +227,28 @@ export default function UserProfilePage() {
         </div>
       ) : (
         <>
+          {/* Games - New section */}
+          {activeTab === 'games' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Games</h2>
+              {games.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">
+                  {isOwnProfile 
+                    ? "You haven't published any games yet." 
+                    : `${profileData.username} hasn't published any games yet.`}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {games.map((game) => (
+                    <ContentCard 
+                      key={game.id} 
+                      {...game}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {/* Visualizations */}
           {activeTab === 'visualizations' && (
             <div>
@@ -227,8 +277,7 @@ export default function UserProfilePage() {
                 </div>
               )}
             </div>
-          )}
-          
+          )}    
           {/* Sketches */}
           {activeTab === 'sketches' && (
             <div>
@@ -257,7 +306,6 @@ export default function UserProfilePage() {
               )}
             </div>
           )}
-          
           {/* Instruments */}
           {activeTab === 'instruments' && (
             <div>
