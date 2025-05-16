@@ -7,7 +7,9 @@ import { Spinner } from '@/components/spinner';
 import ProfileVisualizationCard from './components/ProfileVisualizationCard';
 import ProfileSketchCard from './components/ProfileSketchCard';
 import ProfileInstrumentCard from './components/ProfileInstrumentCard';
+import ProfileStackCard from './components/ProfileStackCard';
 import ContentCard from '@/components/content-card';
+import Link from 'next/link';
 
 // Types
 interface ProfileData {
@@ -67,8 +69,11 @@ export default function UserProfilePage() {
   const [sketches, setSketches] = useState<Sketch[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [games, setGames] = useState<Game[]>([]); // Add games state
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [answers, setAnswers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'visualizations' | 'sketches' | 'instruments' | 'games'>('visualizations');
+  const [stackLoading, setStackLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'visualizations' | 'sketches' | 'instruments' | 'games' | 'stack'>('visualizations');
   
   // Check if this is the current user's profile
   const isOwnProfile = isUserLoaded && currentUser?.username === username;
@@ -134,6 +139,33 @@ export default function UserProfilePage() {
       fetchUserContent();
     }
   }, [profileData]);
+  
+  // Fetch Stack data when that tab is selected
+  useEffect(() => {
+    if (activeTab === 'stack' && profileData) {
+      fetchStackData(profileData.userId);
+    }
+  }, [activeTab, profileData]);
+  
+  // Function to fetch Stack data
+  const fetchStackData = async (userId: string) => {
+    setStackLoading(true);
+    try {
+      // Fetch user's questions
+      const questionsRes = await fetch(`/api/stack/questions?userId=${userId}`);
+      const questionsData = await questionsRes.json();
+      setQuestions(questionsData.questions || []);
+      
+      // Fetch user's answers
+      const answersRes = await fetch(`/api/stack/answers?userId=${userId}`);
+      const answersData = await answersRes.json();
+      setAnswers(answersData.answers || []);
+    } catch (error) {
+      console.error('Error fetching stack data:', error);
+    } finally {
+      setStackLoading(false);
+    }
+  };
   
   if (!isUserLoaded || !profileData) {
     return (
@@ -214,6 +246,16 @@ export default function UserProfilePage() {
               onClick={() => setActiveTab('instruments')}
             >
               Instruments
+            </button>
+            <button
+              className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
+                activeTab === 'stack' 
+                  ? 'border-emerald-500 text-emerald-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+              onClick={() => setActiveTab('stack')}
+            >
+              Stacks
             </button>
           </nav>
         </div>
@@ -331,6 +373,74 @@ export default function UserProfilePage() {
                     />
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+          {/* Stack Section */}
+          {activeTab === 'stack' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Stack Activity</h2>
+              {stackLoading ? (
+                <div className="flex justify-center py-12">
+                  <Spinner />
+                  <span className="ml-2">Loading stack activity...</span>
+                </div>
+              ) : (
+                <>
+                  {questions.length === 0 && answers.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">
+                      {isOwnProfile 
+                        ? "You haven't asked any questions or posted any answers yet." 
+                        : `${profileData.username} hasn't asked any questions or posted any answers yet.`}
+                    </p>
+                  ) : (
+                    <div className="space-y-6">
+                      {questions.length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-medium mb-3">Questions</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {questions.slice(0, 4).map((question) => (
+                              <ProfileStackCard 
+                                key={question._id} 
+                                item={question} 
+                                type="question" 
+                              />
+                            ))}
+                          </div>
+                          {questions.length > 4 && (
+                            <div className="mt-2 text-right">
+                              <Link href={`/stack?userId=${profileData.userId}`} className="text-emerald-600 hover:underline">
+                                View all {questions.length} questions
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {answers.length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-medium mb-3">Answers</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {answers.slice(0, 4).map((answer) => (
+                              <ProfileStackCard 
+                                key={answer._id} 
+                                item={answer} 
+                                type="answer" 
+                              />
+                            ))}
+                          </div>
+                          {answers.length > 4 && (
+                            <div className="mt-2 text-right">
+                              <Link href={`/stack?userId=${profileData.userId}`} className="text-emerald-600 hover:underline">
+                                View all {answers.length} answers
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

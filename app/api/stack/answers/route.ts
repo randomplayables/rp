@@ -43,3 +43,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to create answer" }, { status: 500 });
   }
 }
+
+// GET - Fetch answers (with user filtering)
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const skip = (page - 1) * limit;
+    
+    await connectToDatabase();
+    
+    // Build query
+    const query: any = {};
+    if (userId) query.userId = userId;
+    
+    // Execute query with pagination
+    const answers = await AnswerModel.find(query)
+      .sort({ createdAt: -1 }) // Newest first
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    // Get total count for pagination
+    const total = await AnswerModel.countDocuments(query);
+    
+    return NextResponse.json({ 
+      answers, 
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: "Failed to fetch answers" }, { status: 500 });
+  }
+}

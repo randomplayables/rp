@@ -3,12 +3,12 @@ import { connectToDatabase } from "@/lib/mongodb";
 import QuestionModel from "@/models/Question";
 import { currentUser } from "@clerk/nextjs/server";
 
-// GET - Fetch questions (with filtering and pagination)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const tag = searchParams.get("tag");
     const search = searchParams.get("search");
+    const userId = searchParams.get("userId");  // Add this line
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const query: any = {};
     if (tag) query.tags = tag;
     if (search) query.title = { $regex: search, $options: 'i' };
+    if (userId) query.userId = userId;  // Add this line
     
     // Execute query with pagination
     const questions = await QuestionModel.find(query)
