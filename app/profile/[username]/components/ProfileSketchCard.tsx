@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from 'react';
-import { Spinner } from '@/components/spinner';
 
 interface Sketch {
   _id: string;
@@ -20,7 +19,7 @@ interface Props {
 }
 
 export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) {
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
   const formatDate = (dateString: string) => {
@@ -78,36 +77,37 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
 </html>
     `;
   };
+
+  // Function to open the preview in a new tab
+  const openInNewTab = () => {
+    const gameHTML = createGameHTML(sketch.code, sketch.language);
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.open();
+      newWindow.document.write(gameHTML);
+      newWindow.document.title = sketch.title;
+      newWindow.document.close();
+    }
+  };
   
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      {/* Preview area */}
-      {isPreviewMode ? (
-        <div className="h-60 overflow-hidden">
-          <iframe
-            srcDoc={createGameHTML(sketch.code, sketch.language)}
-            title="Game Preview"
-            className="w-full h-full border-none"
-            sandbox="allow-scripts"
+      {/* Preview image area */}
+      <div className="h-60 bg-gray-100 flex items-center justify-center">
+        {sketch.previewImage ? (
+          <img 
+            src={sketch.previewImage} 
+            alt={sketch.title}
+            className="w-full h-full object-cover"
           />
-        </div>
-      ) : (
-        <div className="h-60 bg-gray-100 flex items-center justify-center">
-          {sketch.previewImage ? (
-            <img 
-              src={sketch.previewImage} 
-              alt={sketch.title}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="text-gray-400">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-              </svg>
-            </div>
-          )}
-        </div>
-      )}
+        ) : (
+          <div className="text-gray-400">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+            </svg>
+          </div>
+        )}
+      </div>
       
       {/* Content */}
       <div className="p-4">
@@ -122,10 +122,10 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
           
           <div className="flex space-x-2">
             <button
-              onClick={() => setIsPreviewMode(!isPreviewMode)}
+              onClick={() => setIsFullscreenMode(true)}
               className="text-emerald-600 hover:text-emerald-700"
             >
-              {isPreviewMode ? 'Hide Preview' : 'Preview'}
+              Preview
             </button>
             
             {isOwner && (
@@ -140,6 +140,47 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
           </div>
         </div>
       </div>
+
+      {/* Fullscreen Modal */}
+      {isFullscreenMode && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-11/12 h-5/6 max-w-6xl flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-xl font-bold">{sketch.title}</h3>
+              <button 
+                onClick={() => setIsFullscreenMode(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                srcDoc={createGameHTML(sketch.code, sketch.language)}
+                title="Game Preview"
+                className="w-full h-full border-none"
+                sandbox="allow-scripts"
+              />
+            </div>
+            <div className="p-4 border-t flex justify-end space-x-4">
+              <button 
+                onClick={openInNewTab}
+                className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600"
+              >
+                Open in New Tab
+              </button>
+              <button 
+                onClick={() => setIsFullscreenMode(false)}
+                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
