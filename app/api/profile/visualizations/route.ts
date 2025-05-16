@@ -46,25 +46,30 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
+    const username = searchParams.get("username");
     
     await connectToDatabase();
     
-    // If userId is provided, fetch that user's visualizations
-    // Otherwise, fetch the current user's visualizations
-    let targetUserId = userId;
+    // Build the query filter
+    const filter: any = {};
     
-    if (!targetUserId) {
+    if (userId) {
+      // Looking at own content - show everything
+      filter.userId = userId;
+    } else if (username) {
+      // Looking at someone else's content - only show public items
+      filter.username = username;
+      filter.isPublic = true;
+    } else {
+      // No filter provided - default to current user's content
       const clerkUser = await currentUser();
       if (!clerkUser) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      targetUserId = clerkUser.id;
+      filter.userId = clerkUser.id;
     }
     
-    const visualizations = await UserVisualizationModel.find({ 
-      userId: targetUserId,
-      ...(userId ? { isPublic: true } : {}) // Only show public items for other users
-    }).sort({ createdAt: -1 });
+    const visualizations = await UserVisualizationModel.find(filter).sort({ createdAt: -1 });
     
     return NextResponse.json({ visualizations });
   } catch (error: any) {

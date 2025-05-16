@@ -44,11 +44,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - Fetch answers (with user filtering)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
+    const username = searchParams.get("username");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
@@ -57,7 +57,13 @@ export async function GET(request: NextRequest) {
     
     // Build query
     const query: any = {};
-    if (userId) query.userId = userId;
+    
+    // Add user filter
+    if (userId) {
+      query.userId = userId;
+    } else if (username) {
+      query.username = username;
+    }
     
     // Execute query with pagination
     const answers = await AnswerModel.find(query)

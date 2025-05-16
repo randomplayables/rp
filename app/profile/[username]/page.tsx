@@ -109,24 +109,35 @@ export default function UserProfilePage() {
       setLoading(true);
       
       try {
-        // Fetch visualizations
-        const visRes = await fetch(`/api/profile/visualizations?userId=${profileData.userId}`);
-        const visData = await visRes.json();
+        // If it's your own profile, filter by userId; otherwise by username
+        const paramKey = isOwnProfile ? 'userId' : 'username';
+        const paramValue = isOwnProfile ? profileData.userId : profileData.username;
+        
+        // Build the API URLs
+        const visUrl = `/api/profile/visualizations?${paramKey}=${paramValue}`;
+        const sketchUrl = `/api/profile/sketches?${paramKey}=${paramValue}`;
+        const instUrl = `/api/profile/instruments?${paramKey}=${paramValue}`;
+        
+        // Fetch all content in parallel
+        const [visRes, sketchRes, instRes, gamesRes] = await Promise.all([
+          fetch(visUrl),
+          fetch(sketchUrl),
+          fetch(instUrl),
+          // Games already uses authorUsername
+          fetch(`/api/games?authorUsername=${profileData.username}`)
+        ]);
+        
+        // Parse responses in parallel
+        const [visData, sketchData, instData, gamesData] = await Promise.all([
+          visRes.json(),
+          sketchRes.json(),
+          instRes.json(),
+          gamesRes.json()
+        ]);
+        
         setVisualizations(visData.visualizations || []);
-        
-        // Fetch sketches
-        const sketchRes = await fetch(`/api/profile/sketches?userId=${profileData.userId}`);
-        const sketchData = await sketchRes.json();
         setSketches(sketchData.sketches || []);
-        
-        // Fetch instruments
-        const instRes = await fetch(`/api/profile/instruments?userId=${profileData.userId}`);
-        const instData = await instRes.json();
         setInstruments(instData.instruments || []);
-        
-        // Fetch games created by this author
-        const gamesRes = await fetch(`/api/games?authorUsername=${profileData.username}`);
-        const gamesData = await gamesRes.json();
         setGames(gamesData || []);
       } catch (error) {
         console.error('Error fetching user content:', error);
@@ -138,7 +149,7 @@ export default function UserProfilePage() {
     if (profileData) {
       fetchUserContent();
     }
-  }, [profileData]);
+  }, [profileData, isOwnProfile]);
   
   // Fetch Stack data when that tab is selected
   useEffect(() => {
@@ -146,18 +157,22 @@ export default function UserProfilePage() {
       fetchStackData(profileData.userId);
     }
   }, [activeTab, profileData]);
-  
+
   // Function to fetch Stack data
   const fetchStackData = async (userId: string) => {
     setStackLoading(true);
     try {
+      // Use the same approach as other content types
+      const paramKey = isOwnProfile ? 'userId' : 'username';
+      const paramValue = isOwnProfile ? userId : profileData?.username;
+
       // Fetch user's questions
-      const questionsRes = await fetch(`/api/stack/questions?userId=${userId}`);
+      const questionsRes = await fetch(`/api/stack/questions?${paramKey}=${paramValue}`);
       const questionsData = await questionsRes.json();
       setQuestions(questionsData.questions || []);
       
       // Fetch user's answers
-      const answersRes = await fetch(`/api/stack/answers?userId=${userId}`);
+      const answersRes = await fetch(`/api/stack/answers?${paramKey}=${paramValue}`);
       const answersData = await answersRes.json();
       setAnswers(answersData.answers || []);
     } catch (error) {

@@ -52,23 +52,30 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
+    const username = searchParams.get("username");
     
     await connectToDatabase();
     
-    let targetUserId = userId;
+    // Build the query filter
+    const filter: any = {};
     
-    if (!targetUserId) {
+    if (userId) {
+      // Looking at own content - show everything
+      filter.userId = userId;
+    } else if (username) {
+      // Looking at someone else's content - only show public items
+      filter.username = username;
+      filter.isPublic = true;
+    } else {
+      // No filter provided - default to current user's content
       const clerkUser = await currentUser();
       if (!clerkUser) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      targetUserId = clerkUser.id;
+      filter.userId = clerkUser.id;
     }
     
-    const instruments = await UserInstrumentModel.find({ 
-      userId: targetUserId,
-      ...(userId ? { isPublic: true } : {})
-    }).sort({ createdAt: -1 });
+    const instruments = await UserInstrumentModel.find(filter).sort({ createdAt: -1 });
     
     return NextResponse.json({ instruments });
   } catch (error: any) {
