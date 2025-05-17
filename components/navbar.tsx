@@ -22,12 +22,6 @@ export default function NavBar() {
             {" "}
             <SignedIn>
                 <Link 
-                    href = "/"
-                    className="text-gray-700 hover:text-emerald-500 transition-colors"
-                    >
-                        Home
-                </Link>
-                <Link 
                     href='/stack'
                     className="text-gray-700 hover:text-emerald-500 transition-colors">
                     Stack
