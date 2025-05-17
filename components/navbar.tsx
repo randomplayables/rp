@@ -21,6 +21,11 @@ export default function NavBar() {
         <div className="space-x-6 flex items-center">
             {" "}
             <SignedIn>
+            <Link 
+                    href='/rp'
+                    className="text-gray-700 hover:text-emerald-500 transition-colors">
+                    RP
+                </Link>
                 <Link 
                     href='/stack'
                     className="text-gray-700 hover:text-emerald-500 transition-colors">
