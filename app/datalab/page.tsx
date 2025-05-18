@@ -18,11 +18,15 @@ interface DataLabResponse {
   error?: string;
 }
 
-async function sendChatMessage(message: string, chatHistory: ChatMessage[]) {
+async function sendChatMessage(message: string, chatHistory: ChatMessage[], customSystemPrompt: string | null) {
   const response = await fetch("/api/datalab/chat", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ message, chatHistory })
+    body: JSON.stringify({ 
+      message, 
+      chatHistory,
+      systemPrompt: customSystemPrompt // Add system prompt to request
+    })
   });
   
   return response.json();
@@ -37,8 +41,24 @@ export default function DataLabPage() {
   const plotRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
+  // New state variables for system prompt
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  const [initialSystemPrompt, setInitialSystemPrompt] = useState<string | null>(null);
+  
+  // Fetch the default system prompt when component loads
+  useEffect(() => {
+    fetch("/api/datalab/system-prompt")
+      .then(res => res.json())
+      .then(data => {
+        setSystemPrompt(data.systemPrompt);
+        setInitialSystemPrompt(data.systemPrompt);
+      })
+      .catch(err => console.error("Error fetching system prompt:", err));
+  }, []);
+  
   const { mutate, isPending } = useMutation({
-    mutationFn: (message: string) => sendChatMessage(message, messages),
+    mutationFn: (message: string) => sendChatMessage(message, messages, systemPrompt),
     onSuccess: (data: DataLabResponse) => {
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -198,7 +218,7 @@ export default function DataLabPage() {
             <div ref={messagesEndRef} />
           </div>
           
-          {/* Input Form */}
+          {/* Input Form with System Prompt Toggle */}
           <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
             <div className="flex space-x-2">
               <input
@@ -217,6 +237,36 @@ export default function DataLabPage() {
                 Send
               </button>
             </div>
+            
+            {/* System Prompt Editor */}
+            <div className="mt-2">
+              <button
+                onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                className="text-xs text-gray-500 hover:text-emerald-600"
+              >
+                {showSystemPrompt ? "Hide System Prompt" : "Show System Prompt"}
+              </button>
+              
+              {showSystemPrompt && systemPrompt !== null && (
+                <div className="mt-2">
+                  <textarea
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="System prompt is loading..."
+                  />
+                  <div className="flex justify-end mt-1 space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setSystemPrompt(initialSystemPrompt)}
+                      className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                    >
+                      Reset to Default
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </form>
         </div>
         
@@ -232,14 +282,14 @@ export default function DataLabPage() {
                 {showCode ? 'Hide Code' : 'Show Code'}
               </button>
 
-                  {/* Add the save button */}
-                  {currentCode && (
-                    <SaveVisualizationButton 
-                      code={currentCode} 
-                      // Optionally capture a preview image
-                      // previewImage={capturePreviewImage()}
-                    />
-                  )}
+              {/* Add the save button */}
+              {currentCode && (
+                <SaveVisualizationButton 
+                  code={currentCode} 
+                  // Optionally capture a preview image
+                  // previewImage={capturePreviewImage()}
+                />
+              )}
               <button
                 onClick={downloadTranscript}
                 className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600"

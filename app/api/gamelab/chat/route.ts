@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
 import { fetchRepoContent, extractRepoInfo } from "@/lib/githubApi";
 import CodeBaseModel from "@/models/CodeBase";
+import { currentUser } from "@clerk/nextjs/server";
 
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
@@ -250,34 +251,8 @@ function getTemplateStructure() {
   };
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { message, chatHistory } = await request.json();
-    
-    console.log("🔍 GameLab: Processing chat request with query:", message);
-    
-    // Fetch relevant game code examples based on the query
-    const gameCodeExamples = await fetchGameCode(message);
-    
-    console.log("🔍 GameLab: Found code examples in database:", 
-      Object.keys(gameCodeExamples).length > 0 ? 
-      Object.keys(gameCodeExamples).join(", ") : 
-      "None");
-    
-    // If you find any, add more detail
-    if (Object.keys(gameCodeExamples).length > 0) {
-      console.log("🔍 GameLab: First example contains components:", 
-        gameCodeExamples[Object.keys(gameCodeExamples)[0]]?.componentExamples?.length || 0);
-    }
-    
-    // Get template structures
-    const templateStructure = getTemplateStructure();
-    
-    console.log("🔍 GameLab: Sending prompt to AI with code examples:", 
-      Object.keys(gameCodeExamples).length > 0 ? "Yes" : "No");
-    
-    // HTML Example as a separate string to avoid template string issues
-    const htmlExample = `<!DOCTYPE html>
+// HTML Example as a separate string to avoid template string issues
+const htmlExample = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -401,8 +376,36 @@ export async function POST(request: NextRequest) {
   </script>
 </body>
 </html>`;
+
+export async function POST(request: NextRequest) {
+  try {
+    // Get user message, chat history, and optional custom system prompt
+    const { message, chatHistory, systemPrompt: customSystemPrompt } = await request.json();
     
-    const systemPrompt = `
+    console.log("🔍 GameLab: Processing chat request with query:", message);
+    
+    // Fetch relevant game code examples based on the query
+    const gameCodeExamples = await fetchGameCode(message);
+    
+    console.log("🔍 GameLab: Found code examples in database:", 
+      Object.keys(gameCodeExamples).length > 0 ? 
+      Object.keys(gameCodeExamples).join(", ") : 
+      "None");
+    
+    // If you find any, add more detail
+    if (Object.keys(gameCodeExamples).length > 0) {
+      console.log("🔍 GameLab: First example contains components:", 
+        gameCodeExamples[Object.keys(gameCodeExamples)[0]]?.componentExamples?.length || 0);
+    }
+    
+    // Get template structures
+    const templateStructure = getTemplateStructure();
+    
+    console.log("🔍 GameLab: Sending prompt to AI with code examples:", 
+      Object.keys(gameCodeExamples).length > 0 ? "Yes" : "No");
+    
+    // Use the custom system prompt if provided, otherwise use the default
+    const systemPrompt = customSystemPrompt || `
     You are an AI game development assistant for RandomPlayables, a platform for mathematical citizen science games.
     
     Your goal is to help users create games that can be deployed on the RandomPlayables platform. You have access to 
