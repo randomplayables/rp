@@ -280,24 +280,31 @@ export default function GameLabPage() {
           </div>
           
           {/* Input Form with System Prompt Toggle */}
-          <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Describe your game idea..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                disabled={isPending}
-              />
-              <button
-                type="submit"
-                disabled={isPending}
-                className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
-              >
-                Send
-              </button>
-            </div>
+            <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
+              <div className="flex flex-col space-y-2">
+                <textarea
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!isPending && inputMessage.trim()) handleSubmit(e);
+                    }
+                  }}
+                  placeholder="Describe your game idea..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
+                  disabled={isPending}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isPending}
+                    className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
             
             {/* System Prompt Editor */}
             <div className="mt-2">
