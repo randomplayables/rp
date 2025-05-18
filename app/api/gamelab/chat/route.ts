@@ -14,23 +14,37 @@ const openAI = new OpenAI({
 async function fetchGameCode(query: string) {
   try {
     await connectToDatabase();
+    console.log("Using cached MongoDB connection");
     
-    // Find games that might match the query
-    const games = await GameModel.find({
-      $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } }
-      ]
-    }).limit(3).lean();
+    // First get all games to check if any are mentioned in the query
+    const allGames = await GameModel.find({}).lean();
+    console.log(`Found ${allGames.length} games in the database`);
+    
+    let selectedGames = [];
+    
+    // Check if the query mentions any specific games
+    const mentionedGames = allGames.filter(game => 
+      query.toLowerCase().includes(game.name?.toLowerCase())
+    );
+    
+    if (mentionedGames.length > 0) {
+      // If specific games are mentioned, use those
+      selectedGames = mentionedGames;
+      console.log(`Query mentions specific games: ${mentionedGames.map(g => g.name).join(', ')}`);
+    } else {
+      // Otherwise, use a few games to provide context (limit to 3 for performance)
+      selectedGames = allGames.slice(0, 3);
+      console.log(`No specific games mentioned, using ${selectedGames.length} games for context`);
+    }
     
     console.log("🔍 GameLab: Found matching games in database:", 
-      games.map(g => g.name).join(", ") || "None");
+      selectedGames.map(g => g.name).join(", ") || "None");
     
     const gameCodeContext: Record<string, any> = {};
     
-    // For each game, fetch code from MongoDB
-    for (const game of games) {
-      console.log(`🔍 GameLab: Looking for codebase for ${game.name}`);
+    // For each game, fetch code from MongoDB CodeBase collection
+    for (const game of selectedGames) {
+      console.log(`🔍 GameLab: Looking for codebase for ${game.name} (ID: ${game.id})`);
       
       // Find codebase in MongoDB
       const codebase = await CodeBaseModel.findOne({ gameId: game.id }).lean();
@@ -76,22 +90,108 @@ async function fetchGameCode(query: string) {
 
 // Helper functions to parse codebase content
 function parseRepomixXml(xmlContent: string) {
-  // Parse XML content to extract code components
-  // Implement parsing logic here
-  
-  return {
+  // Add explicit type annotations to fix the TypeScript errors
+  const result: {
+    packageJson: any | null;
+    components: Array<{ name: string; content: string }>;
+    services: Array<{ name: string; content: string }>;
+    types: Array<{ name: string; content: string }>;
+  } = {
     packageJson: null,
     components: [],
     services: [],
     types: []
   };
+  
+  try {
+    // Look for package.json content
+    const packageJsonMatch = xmlContent.match(/<file path="package\.json">([\s\S]*?)<\/file>/);
+    if (packageJsonMatch && packageJsonMatch[1]) {
+      try {
+        result.packageJson = JSON.parse(packageJsonMatch[1]);
+      } catch (e) {
+        console.log("Could not parse package.json");
+      }
+    }
+    
+    // Extract components
+    const fileMatches = xmlContent.match(/<file path="([^"]+)">([\s\S]*?)<\/file>/g) || [];
+    
+    for (const fileMatch of fileMatches) {
+      const pathMatch = fileMatch.match(/<file path="([^"]+)">/);
+      if (pathMatch) {
+        const path = pathMatch[1];
+        const content = fileMatch.replace(/<file path="[^"]+">/g, '').replace('</file>', '');
+        
+        // Determine file type based on path
+        if (path.includes('/components/') || path.endsWith('.jsx') || path.endsWith('.tsx')) {
+          result.components.push({
+            name: path,
+            content: content
+          });
+        } else if (path.includes('/services/') || path.includes('/api/')) {
+          result.services.push({
+            name: path,
+            content: content
+          });
+        } else if (path.includes('/types/') || path.includes('.d.ts')) {
+          result.types.push({
+            name: path,
+            content: content
+          });
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error("Error parsing Repomix XML:", error);
+  }
+  
+  return result;
 }
 
 function extractComponentsFromCode(codeContent: string) {
-  // Implement logic to extract components from raw code
-  // This could use regex or more sophisticated parsing
+  // A simple implementation to extract components from raw code
+  // This can be customized based on your codebase structure
+  const components = [];
   
-  return [];
+  // Split the code into potential components by looking for component patterns
+  const componentMatches = codeContent.match(/(?:class|function|const)\s+(\w+)(?:\s+extends\s+React\.Component|\s+=\s+\(\)|Component)/g) || [];
+  
+  // For each potential component, get the surrounding code
+  for (const match of componentMatches) {
+    const componentName = match.split(/\s+/)[1]; // Extract component name
+    
+    // Find the start of the component
+    const startIndex = codeContent.indexOf(match);
+    if (startIndex === -1) continue;
+    
+    // Try to find the end (this is a simplistic approach - could be improved)
+    let braceCount = 0;
+    let endIndex = startIndex;
+    
+    // Simple brace matching to find component boundaries
+    for (let i = startIndex; i < codeContent.length; i++) {
+      if (codeContent[i] === '{') braceCount++;
+      if (codeContent[i] === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          endIndex = i + 1;
+          break;
+        }
+      }
+    }
+    
+    // Extract the component code
+    const componentCode = codeContent.substring(startIndex, endIndex);
+    
+    components.push({
+      name: componentName,
+      content: componentCode
+    });
+  }
+  
+  return components;
 }
 
 // Helper function to get a sample template structure
@@ -159,8 +259,8 @@ export async function POST(request: NextRequest) {
     // Fetch relevant game code examples based on the query
     const gameCodeExamples = await fetchGameCode(message);
     
-    console.log("🔍 GameLab: GitHub code examples found:", 
-      Object.keys(gameCodeExamples).length ? 
+    console.log("🔍 GameLab: Found code examples in database:", 
+      Object.keys(gameCodeExamples).length > 0 ? 
       Object.keys(gameCodeExamples).join(", ") : 
       "None");
     
@@ -172,6 +272,9 @@ export async function POST(request: NextRequest) {
     
     // Get template structures
     const templateStructure = getTemplateStructure();
+    
+    console.log("🔍 GameLab: Sending prompt to AI with code examples:", 
+      Object.keys(gameCodeExamples).length > 0 ? "Yes" : "No");
     
     // HTML Example as a separate string to avoid template string issues
     const htmlExample = `<!DOCTYPE html>
