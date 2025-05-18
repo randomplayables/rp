@@ -10,7 +10,7 @@ const openAI = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, chatHistory } = await request.json();
+    const { message, chatHistory, systemPrompt: customSystemPrompt } = await request.json();
     
     // Fetch available games to offer as options
     await connectToDatabase();
@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
       id: 1, name: 1, description: 1, _id: 0
     }).limit(10).lean();
     
-    const systemPrompt = `
+    // Use the custom system prompt if provided, otherwise use the default
+    const systemPrompt = customSystemPrompt || `
     You are an AI assistant specialized in creating custom surveys for the RandomPlayables platform.
     You help users design effective surveys, questionnaires, and data collection tools that can
     optionally incorporate interactive games.
