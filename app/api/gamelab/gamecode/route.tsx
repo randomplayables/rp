@@ -1,7 +1,8 @@
+// app/api/gamelab/gamecode/route.tsx
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
-import { checkRateLimit, getGameCode } from "@/lib/githubApi";
+import CodeBaseModel from "@/models/CodeBase";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,17 +11,6 @@ export async function GET(request: NextRequest) {
     const gameName = searchParams.get("name");
     
     await connectToDatabase();
-    
-    // Check the remaining GitHub API rate limit
-    const rateLimit = await checkRateLimit();
-    
-    if (rateLimit && rateLimit.remaining < 10) {
-      return NextResponse.json({
-        error: "GitHub API rate limit nearly exhausted",
-        rateLimit,
-        cachedOnly: true
-      }, { status: 429 });
-    }
     
     // Find the game by ID or name
     let game;
@@ -39,10 +29,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
     
-    // Check if game has a codeUrl
-    if (!game.codeUrl) {
+    // Find codebase for this game
+    const codebase = await CodeBaseModel.findOne({ gameId: game.id }).lean();
+    
+    if (!codebase) {
       return NextResponse.json({ 
-        error: "Game doesn't have a GitHub repository URL",
+        error: "No codebase found for this game",
         game: {
           id: game.id,
           name: game.name
@@ -50,21 +42,26 @@ export async function GET(request: NextRequest) {
       }, { status: 404 });
     }
     
-    // Get code from GitHub using only the codeUrl
-    const gameCode = await getGameCode(game);
-    
-    if (!gameCode) {
-      return NextResponse.json({ 
-        error: "Failed to extract repository information from codeUrl",
+    // Parse the codebase based on contentType
+    let parsedCodebase;
+    if (codebase.contentType === "repomix-xml") {
+      parsedCodebase = parseRepomixXml(codebase.codeContent, game.name);
+    } else {
+      // Simple format with direct code content
+      parsedCodebase = {
         game: {
           id: game.id,
           name: game.name,
-          codeUrl: game.codeUrl
-        }
-      }, { status: 404 });
+        },
+        fullCode: codebase.codeContent,
+        // Parse into components, services, types as needed
+        components: extractComponents(codebase.codeContent),
+        services: extractServices(codebase.codeContent),
+        types: extractTypes(codebase.codeContent)
+      };
     }
     
-    return NextResponse.json({ gameCode });
+    return NextResponse.json({ gameCode: parsedCodebase });
   } catch (error: any) {
     console.error("Error fetching game code:", error);
     return NextResponse.json({ 
@@ -72,4 +69,37 @@ export async function GET(request: NextRequest) {
       details: error.message 
     }, { status: 500 });
   }
+}
+
+// Helper function to parse Repomix XML format
+function parseRepomixXml(xmlContent: string, gameName: string) {
+  // Implement XML parsing here
+  // Extract code components from the XML structure
+  
+  // For demonstration, returning a simplified structure
+  return {
+    game: {
+      name: gameName
+    },
+    components: [], // Extract component files
+    services: [],   // Extract service files
+    types: []       // Extract type definitions
+  };
+}
+
+// Helper functions to extract code sections
+function extractComponents(codeContent: string) {
+  // Parse the code content to extract components
+  // You can use regex or more sophisticated parsing
+  return [];
+}
+
+function extractServices(codeContent: string) {
+  // Parse the code content to extract services
+  return [];
+}
+
+function extractTypes(codeContent: string) {
+  // Parse the code content to extract type definitions
+  return [];
 }

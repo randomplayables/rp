@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
 import { fetchRepoContent, extractRepoInfo } from "@/lib/githubApi";
+import CodeBaseModel from "@/models/CodeBase";
 
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
@@ -27,91 +28,42 @@ async function fetchGameCode(query: string) {
     
     const gameCodeContext: Record<string, any> = {};
     
-    // For each game, extract GitHub repo info and fetch code
+    // For each game, fetch code from MongoDB
     for (const game of games) {
-      // Check for codeUrl
-      if (game.codeUrl && game.codeUrl.includes('github.com')) {
-        console.log(`🔍 GameLab: Found GitHub URL for ${game.name}:`, game.codeUrl);
+      console.log(`🔍 GameLab: Looking for codebase for ${game.name}`);
+      
+      // Find codebase in MongoDB
+      const codebase = await CodeBaseModel.findOne({ gameId: game.id }).lean();
+      
+      if (codebase) {
+        console.log(`🔍 GameLab: Found codebase for ${game.name}`);
         
-        // Extract GitHub repo URL
-        const { owner, repo } = extractRepoInfo(game.codeUrl);
-        
-        console.log(`🔍 GameLab: Extracted repo info: owner=${owner}, repo=${repo}`);
-        
-        if (owner && repo) {
-          const repoUrl = `https://github.com/${owner}/${repo}`;
-          
-          console.log(`🔍 GameLab: Attempting to fetch content from ${repoUrl}`);
-          
-          // Fetch important files from the repository
-          let packageJson = null;
-          let componentExamples: Array<{name: string; path: string; content: string}> = [];
-          
-          try {
-            // Get package.json for dependencies and project info
-            const packageJsonResult = await fetchRepoContent(owner, repo, 'package.json');
-            console.log(`🔍 GameLab: package.json fetch result type:`, typeof packageJsonResult);
-            
-            if (typeof packageJsonResult === 'string') {
-              try {
-                packageJson = JSON.parse(packageJsonResult);
-                console.log(`🔍 GameLab: Successfully parsed package.json`);
-              } catch (err) {
-                packageJson = packageJsonResult;
-                console.log(`🔍 GameLab: Could not parse package.json, using as string`);
-              }
-            }
-            
-            // Get component examples (limit to a few key ones)
-            console.log(`🔍 GameLab: Fetching components from src/components`);
-            const srcComponents = await fetchRepoContent(owner, repo, 'src/components');
-            if (srcComponents && Array.isArray(srcComponents)) {
-              // Take just a few example components
-              componentExamples = srcComponents.slice(0, 3);
-              console.log(`🔍 GameLab: Found ${srcComponents.length} components, using first 3`);
-            } else {
-              console.log(`🔍 GameLab: No components found or not an array:`, srcComponents ? typeof srcComponents : "null");
-            }
-            
-            // Add API service examples if they exist
-            console.log(`🔍 GameLab: Fetching services from src/services`);
-            const apiServices = await fetchRepoContent(owner, repo, 'src/services');
-            if (apiServices && Array.isArray(apiServices)) {
-              componentExamples.push(...apiServices.slice(0, 2));
-              console.log(`🔍 GameLab: Found ${apiServices.length} services, using first 2`);
-            } else {
-              console.log(`🔍 GameLab: No services found or not an array`);
-            }
-
-            // Add type definitions if they exist
-            console.log(`🔍 GameLab: Fetching types from src/types`);
-            const typeDefs = await fetchRepoContent(owner, repo, 'src/types');
-            if (typeDefs && Array.isArray(typeDefs)) {
-              componentExamples.push(...typeDefs.slice(0, 2));
-              console.log(`🔍 GameLab: Found ${typeDefs.length} type definitions, using first 2`);
-            } else {
-              console.log(`🔍 GameLab: No type definitions found or not an array`);
-            }
-            
-            console.log(`🔍 GameLab: Total code examples collected: ${componentExamples.length}`);
-          } catch (error) {
-            console.error(`🔍 GameLab: Error fetching code examples for ${owner}/${repo}:`, error);
-          }
+        // Process based on content type
+        if (codebase.contentType === "repomix-xml") {
+          // Parse XML to extract components
+          const parsedCode = parseRepomixXml(codebase.codeContent);
           
           gameCodeContext[game.name] = {
             id: game.id,
             name: game.name,
-            repoUrl,
-            codeUrl: game.codeUrl,
-            // Include the fetched code examples
-            packageJson,
-            componentExamples,
+            // Include parsed code examples
+            packageJson: parsedCode.packageJson,
+            componentExamples: parsedCode.components,
           };
+        } else {
+          // Simple extraction for raw code
+          const components = extractComponentsFromCode(codebase.codeContent);
           
-          console.log(`🔍 GameLab: Successfully added ${game.name} to context with ${componentExamples.length} code examples`);
+          gameCodeContext[game.name] = {
+            id: game.id,
+            name: game.name,
+            componentExamples: components,
+          };
         }
+        
+        console.log(`🔍 GameLab: Successfully added ${game.name} to context`);
       } else {
-        console.log(`🔍 GameLab: No codeUrl found for ${game.name}`);
+        console.log(`🔍 GameLab: No codebase found for ${game.name}`);
       }
     }
     
@@ -120,6 +72,26 @@ async function fetchGameCode(query: string) {
     console.error("🔍 GameLab: Error fetching game code:", error);
     return {};
   }
+}
+
+// Helper functions to parse codebase content
+function parseRepomixXml(xmlContent: string) {
+  // Parse XML content to extract code components
+  // Implement parsing logic here
+  
+  return {
+    packageJson: null,
+    components: [],
+    services: [],
+    types: []
+  };
+}
+
+function extractComponentsFromCode(codeContent: string) {
+  // Implement logic to extract components from raw code
+  // This could use regex or more sophisticated parsing
+  
+  return [];
 }
 
 // Helper function to get a sample template structure
