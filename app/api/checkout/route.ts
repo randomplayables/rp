@@ -3,20 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 
 export async function POST(request: NextRequest) {
-
     try {
         const {planType, userId, email} = await request.json()
 
         if (!planType || !userId || !email) {
             return NextResponse.json(
                 {
-                    error: "Plan type, user id, and email are requried"
+                    error: "Plan type, user id, and email are required"
                 },
                 { status: 400}
             )
         }
 
-        const allowedPlanTypes = ["week", "month", "year"]
+        // Update to use new plan types
+        const allowedPlanTypes = ["premium", "premium_plus"]
 
         if (!allowedPlanTypes.includes(planType)){
             return NextResponse.json(
@@ -57,6 +57,4 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         return NextResponse.json({error: "Internal Server Error."}, {status: 500})
     }
-
-
 }
