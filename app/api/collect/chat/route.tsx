@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
+import { currentUser } from "@clerk/nextjs/server";
+import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection";
 
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
@@ -10,7 +12,22 @@ const openAI = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
+    const clerkUser = await currentUser();
+    if (!clerkUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { message, chatHistory, systemPrompt: customSystemPrompt } = await request.json();
+    
+    // Check subscription and get appropriate model
+    const { model, canUseApi, remainingRequests } = await getModelForUser(clerkUser.id);
+    
+    if (!canUseApi) {
+      return NextResponse.json({ 
+        error: "Monthly API request limit reached. Please upgrade your plan for more requests.", 
+        limitReached: true 
+      }, { status: 403 });
+    }
     
     // Fetch available games to offer as options
     await connectToDatabase();
@@ -50,14 +67,18 @@ export async function POST(request: NextRequest) {
     ];
     
     const response = await openAI.chat.completions.create({
-      model: "meta-llama/llama-3.2-3b-instruct:free",
+      model: model,
       messages: messages as any,
       temperature: 0.7,
       max_tokens: 2000,
     });
     
+    // Increment API usage counter
+    await incrementApiUsage(clerkUser.id);
+    
     return NextResponse.json({
-      message: response.choices[0].message.content
+      message: response.choices[0].message.content,
+      remainingRequests
     });
   } catch (error: any) {
     console.error("Error in Collect chat:", error);

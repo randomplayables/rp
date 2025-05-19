@@ -12,48 +12,38 @@ export interface Plan {
 
 export const availablePlans: Plan[] = [
     {
-        name: "Weekly Plan",
-        amount: 9.99,
+        name: "Premium",
+        amount: 20.00,
         currency: "USD",
-        interval: "week",
-        description: "Great if you want to try the service before committing longer.",
+        interval: "month",
+        description: "Access to stronger AI models with standard monthly usage limits.",
         features: [
-            "Unlimited AI meal plans",
-            "AI Nutrition Insights",
+            "Access to advanced AI models",
+            "500 monthly AI requests",
+            "Full access to all platform tools",
             "Cancel Anytime"
         ]
     },
     {
-        name: "Monthly Plan",
-        amount: 39.99,
+        name: "Premium+",
+        amount: 40.00,
         currency: "USD",
         interval: "month",
         isPopular: true,
-        description: "Perfect for ongoing, month-to-month meal planning and features.",
+        description: "Access to stronger AI models with premium monthly usage limits.",
         features: [
-            "Unlimited AI meal plans",
-            "Priority AI support",
+            "Access to advanced AI models",
+            "1,500 monthly AI requests",
+            "Full access to all platform tools",
+            "Priority support",
             "Cancel Anytime"
         ]
-    },
-    {
-        name: "Yearly Plan",
-        amount: 299.99,
-        currency: "USD",
-        interval: "year",
-        description: "Best value for those committed to improving their diet long-term.",
-        features: [
-            "Unlimited AL meal plans",
-            "All premium features",
-            "Cancel Anytime"
-        ]
-    },
+    }
 ]
 
 const priceIDMap: Record<string, string> = {
-    week: process.env.STRIPE_PRICE_WEEKLY!,
-    month: process.env.STRIPE_PRICE_MONTHLY!,
-    year: process.env.STRIPE_PRICE_YEARLY!
+    premium: process.env.STRIPE_PRICE_PREMIUM!,
+    premium_plus: process.env.STRIPE_PRICE_PREMIUM_PLUS!
 }
 
-export const getPriceIDFromType = (planType: string) => priceIDMap[planType]
+export const getPriceIDFromType = (planType: string) => priceIDMap[planType];

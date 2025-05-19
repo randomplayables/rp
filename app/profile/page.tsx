@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 // import { availablePlans } from "@/lib/plans"
 import { useState } from "react"
 import { useRouter } from "next/navigation";
+import UsageDisplay from './UsageDisplay';
 
 async function fetchSubscriptionStatus() {
     const response = await fetch("/api/profile/subscription-status")
@@ -219,6 +220,7 @@ export default function Profile() {
                             <p> You are not subscribed to any plan.</p>
                         )}
                     </div>  */}
+                    <UsageDisplay />
                 </div>
             </div>
         </div>

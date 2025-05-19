@@ -49,36 +49,53 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({})
 }
 
-async function handleCheckoutSessionCompleted(
-    session: Stripe.Checkout.Session
-) {
-    const userId = session.metadata?.clerkUserId
-
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+    const userId = session.metadata?.clerkUserId;
+  
     if (!userId) {
-        console.log("No user id")
-        return
+      console.log("No user id");
+      return;
     }
-
-    const subscriptionId = session.subscription as string
-
-    if (!userId) {
-        console.log("No sub id")
-        return
+  
+    const subscriptionId = session.subscription as string;
+    const planType = session.metadata?.planType; // "premium" or "premium_plus"
+  
+    if (!subscriptionId) {
+      console.log("No subscription id");
+      return;
     }
-
+  
     try {
-        await prisma.profile.update({
-            where: { userId },
-            data: {
-                stripeSubscriptionId: subscriptionId,
-                subscriptionActive: true,
-                subscriptionTier: session.metadata?.planType || null
-            }
-        })
-    } catch(error: any) {
-        console.log(error.message)
+      // Update profile with subscription info
+      await prisma.profile.update({
+        where: { userId },
+        data: {
+          stripeSubscriptionId: subscriptionId,
+          subscriptionActive: true,
+          subscriptionTier: planType || null
+        }
+      });
+  
+      // Create or update API usage limits
+      const monthlyLimit = planType === "premium_plus" ? 1500 : 500;
+      
+      await prisma.apiUsage.upsert({
+        where: { userId },
+        update: {
+          monthlyLimit,
+          lastResetDate: new Date()
+        },
+        create: {
+          userId,
+          usageCount: 0,
+          monthlyLimit,
+          lastResetDate: new Date()
+        }
+      });
+    } catch (error: any) {
+      console.log(error.message);
     }
-}
+  }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     const subId = invoice.subscription as string

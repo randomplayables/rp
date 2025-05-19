@@ -137,7 +137,7 @@ export default function Subscribe() {
                                 ))}
                             </ul>
                         </div>
-                        <button
+                        {/* <button
                             className={`${
                                 plan.interval === "month"
                                 ? "bg-emerald-500 text-white  hover:bg-emerald-600 "
@@ -148,7 +148,18 @@ export default function Subscribe() {
                             disabled={isPending}
                             > 
                             {isPending ? "Please wait..." : `Subscribe ${plan.name}`}
-                          </button>
+                          </button> */}
+                        <button
+                            className={`${
+                                plan.interval === "month"
+                                ? "bg-emerald-500 text-white  hover:bg-emerald-600 "
+                                : "bg-emerald-100 text-emerald-700  hover:bg-emerald-200 "
+                            }  mt-8 block w-full py-3 px-6 border border-transparent rounded-md text-center font-medium disabled:bg-gray-400 disabled:cursor-not-allowed`}
+                            onClick={() => handleSubscribe("premium")}
+                            disabled={isPending}
+                            >
+                            {isPending ? "Please wait..." : `Subscribe ${plan.name}`}
+                        </button>
                     </div>
                 ))}
             </div>
