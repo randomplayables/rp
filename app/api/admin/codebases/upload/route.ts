@@ -1,9 +1,9 @@
-// app/api/admin/codebases/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { currentUser } from "@clerk/nextjs/server";
 import GameModel from "@/models/Game";
 import CodeBaseModel from "@/models/CodeBase";
+import { isAdmin } from "@/lib/auth"; // Import our new function
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +13,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    // In a real app, check for admin role
+    // Check if user is admin
+    if (!isAdmin(clerkUser.id, clerkUser.username)) {
+      return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
+    }
     
     const formData = await request.formData();
     const gameId = formData.get("gameId") as string;

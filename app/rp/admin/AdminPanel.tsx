@@ -1,9 +1,9 @@
-// app/rp/admin/AdminPanel.tsx
 "use client"
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import PayoutExecutor from './PayoutExecutor';
+import { isAdmin } from '@/lib/auth';
 
 interface Config {
   totalPool: number;
@@ -35,6 +35,7 @@ interface Stats {
 }
 
 export default function AdminPanel() {
+
   const { isLoaded, isSignedIn, user } = useUser();
   const [config, setConfig] = useState<Config | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -42,8 +43,9 @@ export default function AdminPanel() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'execute' | 'settings'>('dashboard');
   
-  // This would be replaced with an actual admin check
-  const isAdmin = isSignedIn;
+  // Replace this line with proper admin check
+  const isAuthorized = isAdmin(user?.id, user?.username);
+  
   
   // Fetch stats data
   useEffect(() => {
@@ -98,7 +100,7 @@ export default function AdminPanel() {
     return <div>Loading authentication...</div>;
   }
   
-  if (isLoaded && !isAdmin) {
+  if (isLoaded && !isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="bg-red-50 text-red-700 p-6 rounded-lg max-w-md">
@@ -108,7 +110,7 @@ export default function AdminPanel() {
       </div>
     );
   }
-  
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">

@@ -1,8 +1,8 @@
-// app/api/rp/execute/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { executePayout } from "@/lib/payablesEngine";
 import { currentUser } from "@clerk/nextjs/server";
+import { isAdmin } from "@/lib/auth";
 
 /**
  * POST endpoint to execute a real payout
@@ -16,13 +16,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    // TODO: Check for admin role - this is simplified for the example
-    // In a real application, you'd check if the user has admin permissions
-    const isAdmin = true; // Replace with actual admin check
-    
-    if (!isAdmin) {
+    // Check if user is admin
+    if (!isAdmin(clerkUser.id, clerkUser.username)) {
       return NextResponse.json({ 
-        error: "Insufficient permissions. Only admins can execute payouts." 
+        error: "Forbidden: Admin access required" 
       }, { status: 403 });
     }
     
