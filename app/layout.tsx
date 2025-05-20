@@ -4,6 +4,7 @@ import "./globals.css";
 import NavBar from "../components/navbar";
 import { ClerkProvider } from "@clerk/nextjs";
 import ReactQueryClientProvider from "@/components/react-query-client-provider";
+import CreateProfileClient from '@/components/CreateProfileClient';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
           >
           <ReactQueryClientProvider>
           <NavBar />
+          <CreateProfileClient />
           <div className="max-w-7xl mx-auto pt-16 p-4 min-h-screen">
             {children}
           </div>
