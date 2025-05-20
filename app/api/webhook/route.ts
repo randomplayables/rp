@@ -2,9 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
+import { PrismaClient } from '@prisma/client';
+
+// Create a test function to verify connection
+async function testPrismaConnection() {
+  const testPrisma = new PrismaClient();
+  try {
+    const result = await testPrisma.$queryRaw`SELECT 1 as test`;
+    console.log("Database connection successful:", result);
+    await testPrisma.$disconnect();
+    return true;
+  } catch (error) {
+    console.error("Database connection failed:", error);
+    await testPrisma.$disconnect();
+    return false;
+  }
+}
+
 
 export async function POST(request: NextRequest) {
+    console.log("Webhook received at:", new Date().toISOString());
+    const dbConnected = await testPrismaConnection();
+    console.log("Database connection test result:", dbConnected);
+
     const body = await request.text()
+    
+    console.log("Webhook body:", body.substring(0, 100) + "..."); // Log start of body
     const signature = request.headers.get("stripe-signature")
 
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -51,31 +74,52 @@ export async function POST(request: NextRequest) {
 
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
     const userId = session.metadata?.clerkUserId;
-  
+    
     if (!userId) {
-      console.log("No user id");
+      console.error("No user id in session metadata");
       return;
     }
-  
+    
     const subscriptionId = session.subscription as string;
     const planType = session.metadata?.planType; // "premium" or "premium_plus"
-  
+    
     if (!subscriptionId) {
-      console.log("No subscription id");
+      console.error("No subscription id in session");
       return;
     }
-  
+    
     try {
-      // Update profile with subscription info
-      await prisma.profile.update({
-        where: { userId },
-        data: {
-          stripeSubscriptionId: subscriptionId,
-          subscriptionActive: true,
-          subscriptionTier: planType || null
-        }
+      // First check if profile exists
+      const existingProfile = await prisma.profile.findUnique({
+        where: { userId }
       });
-  
+      
+      if (!existingProfile) {
+        console.error(`Profile for user ${userId} not found, creating one`);
+        // Create profile if it doesn't exist
+        await prisma.profile.create({
+          data: {
+            userId,
+            username: "user_" + userId.substring(0, 8), // Generate temporary username
+            email: session.customer_details?.email || "unknown@example.com",
+            subscriptionTier: planType || null,
+            stripeSubscriptionId: subscriptionId,
+            subscriptionActive: true,
+          }
+        });
+      } else {
+        // Update existing profile
+        console.log(`Updating subscription for user ${userId}`);
+        await prisma.profile.update({
+          where: { userId },
+          data: {
+            stripeSubscriptionId: subscriptionId,
+            subscriptionActive: true,
+            subscriptionTier: planType || null
+          }
+        });
+      }
+    
       // Create or update API usage limits
       const monthlyLimit = planType === "premium_plus" ? 1500 : 500;
       
@@ -92,8 +136,12 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
           lastResetDate: new Date()
         }
       });
+      
+      console.log(`Successfully updated subscription for user ${userId} - Plan: ${planType}, SubscriptionID: ${subscriptionId}`);
     } catch (error: any) {
-      console.log(error.message);
+      console.error(`Error updating subscription: ${error.message}`);
+      console.error(error.stack);
+      throw error; // Re-throw to make the webhook fail
     }
   }
 
