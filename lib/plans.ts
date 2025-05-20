@@ -1,17 +1,18 @@
 
-
 export interface Plan {
+    planType: "premium" | "premium_plus";
     name: string;
     amount: number;
     currency: string;
-    interval: string;
-    isPopular?: boolean;
+    interval: string;   // e.g. "month"
     description: string;
+    isPopular?: boolean;
     features: string[]
-}
+  }
 
 export const availablePlans: Plan[] = [
     {
+        planType: "premium",
         name: "Premium",
         amount: 20.00,
         currency: "USD",
@@ -25,6 +26,7 @@ export const availablePlans: Plan[] = [
         ]
     },
     {
+        planType: "premium_plus",
         name: "Premium+",
         amount: 40.00,
         currency: "USD",

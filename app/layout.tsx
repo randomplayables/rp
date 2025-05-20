@@ -27,21 +27,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-        <html lang="en">
-          <body
-          // className="bg-gray-50 text-gray-900"
-          className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 text-gray-900`}
-          >
+    <html lang="en">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 text-gray-900`}>
+        <ClerkProvider>
           <ReactQueryClientProvider>
-          <NavBar />
-          <CreateProfileClient />
-          <div className="max-w-7xl mx-auto pt-16 p-4 min-h-screen">
-            {children}
-          </div>
+            <NavBar />
+            <CreateProfileClient />
+            <div className="max-w-7xl mx-auto pt-16 p-4 min-h-screen">
+              {children}
+            </div>
           </ReactQueryClientProvider>
-          </body>
-        </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

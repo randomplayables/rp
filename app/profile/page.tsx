@@ -77,8 +77,8 @@ export default function Profile() {
     })
 
     const currentPlan = availablePlans.find(
-        (plan) => plan.interval === subscription?.subscription?.subscriptionTier
-    )
+        plan => plan.planType === subscription?.subscription?.subscriptionTier
+      )
 
     function handleUpdatePlan() {
         if (selectedPlan) {
@@ -112,115 +112,141 @@ export default function Profile() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-emerald-100 p-4">
-            <Toaster position="top-center" />
-            <div className="w-full max-w-5xl bg-white shadow-lg rounded-lg overflow-hidden">
-                <div className="flex flex-col md:flex-row">
-                    <div className="w-full md:w-1/3 p-6 bg-emerald-500 text-white flex flex-col items-center">
-                        {user.imageUrl && (
-                            <Image
-                                src={user.imageUrl}
-                                alt="User Avatar"
-                                width={100}
-                                height={100}
-                                className="rounded-full mb-4"
-                            />
-                        )}
-                        <h1 className="text-2xl font-bold mb-2"> {user.firstName} {user.lastName} </h1>
-                        <p className="mb-1 text-lg">@{user.username || "No username set"}</p>
-                        <p className="mb-4"> {user.primaryEmailAddress?.emailAddress}</p>
-                        {user.username && (
-                            <a 
-                                href={`/profile/${user.username}`}
-                                className="px-4 py-2 bg-white text-emerald-600 rounded-md font-medium hover:bg-gray-100 transition"
-                            >
-                                View Public Profile
-                            </a>
-                        )}
+          <Toaster position="top-center" />
+      
+          <div className="w-full max-w-5xl bg-white shadow-lg rounded-lg overflow-hidden">
+            <div className="flex flex-col md:flex-row">
+      
+              {/* ─── Left: User Info ─────────────────────────────────────────────── */}
+              <div className="w-full md:w-1/3 p-6 bg-emerald-500 text-white flex flex-col items-center">
+                {user.imageUrl && (
+                  <Image
+                    src={user.imageUrl}
+                    alt="User Avatar"
+                    width={100}
+                    height={100}
+                    className="rounded-full mb-4"
+                  />
+                )}
+                <h1 className="text-2xl font-bold mb-2">
+                  {user.firstName} {user.lastName}
+                </h1>
+                <p className="mb-1 text-lg">
+                  @{user.username || "No username set"}
+                </p>
+                <p className="mb-4">
+                  {user.primaryEmailAddress?.emailAddress}
+                </p>
+                {user.username && (
+                  <a
+                    href={`/profile/${user.username}`}
+                    className="px-4 py-2 bg-white text-emerald-600 rounded-md font-medium hover:bg-gray-100 transition"
+                  >
+                    View Public Profile
+                  </a>
+                )}
+              </div>
+      
+              {/* ─── Right: Subscription Details ───────────────────────────────── */}
+              <div className="w-full md:w-2/3 p-6 bg-gray-50">
+                <h2 className="text-2xl font-bold mb-6 text-emerald-700">
+                  Subscription Details
+                </h2>
+      
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <Spinner /><span className="ml-2">Loading subscription details…</span>
+                  </div>
+                ) : isError ? (
+                  <p className="text-red-500">{(error as Error).message}</p>
+                ) : subscription ? (
+      
+                  <div className="space-y-4">
+      
+                    {/* ─ Current Plan ───────────────────────────────────── */}
+                    <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
+                      <h3 className="text-xl font-semibold mb-2 text-emerald-600">
+                        Current Plan
+                      </h3>
+                      {currentPlan ? (
+                        <>
+                          <p><strong>Plan:</strong> {currentPlan.name}</p>
+                          <p><strong>Amount:</strong> ${currentPlan.amount}/{currentPlan.interval}</p>
+                          <p><strong>Status:</strong> ACTIVE</p>
+                        </>
+                      ) : (
+                        <p className="text-red-500">Current Plan not found.</p>
+                      )}
                     </div>
-                    
-                    <div className="w-full md:w-2/3 p-6 bg-gray-50">
-                        <h2 className="text-2xl font-bold mb-6 text-emerald-700"> Subscription Details </h2>
-                        {isLoading ? 
-                        (
-                            <div className="flex items-center">
-                                <Spinner /><span className="ml-2"> Loading subscription details...</span>
-                            </div>
-                        ) : isError ? (
-                            <p className="text-red-500">{error?.message}</p>
-                        ) : subscription ? (
-                            <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
-                                <h3 className="text-xl font-semibold mb-2 text-emerald-600"> Current Plan</h3>
-                                {currentPlan ? (
-                                    <div>
-                                        <>
-                                            <p><strong> Plan: </strong>{currentPlan.name}</p>
-                                            <p><strong> Amount: </strong>${currentPlan.amount}{currentPlan.currency}</p>
-                                            <p><strong> Status: </strong> ACTIVE</p>
-                                        </>
-                                    </div>
-                                ) : (<p className="text-red-500">Current Plan not Found.</p>)} 
-                                
-                                {/* Change Subscription Plan */}
-                                <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200 mt-4">
-                                    <h3 className="text-xl font-semibold mb-2 text-emerald-600"> Change Subscription Plan</h3>
-                                    {currentPlan && (
-                                    <>
-                                    <select
-                                        defaultValue={currentPlan?.interval}
-                                        disabled={isUpdatePlanPending}
-                                        className="w-full px-3 py-2 border border-emerald-300 rounded-md text-black focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                                        onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-                                            setSelectedPlan(event.target.value)
-                                        }
-                                    >
-                                        <option value="" disabled>
-                                            Select a New Plan
-                                        </option>
-
-                                        {availablePlans.map((plan, key) => (
-                                            <option key={key} value={plan.interval === "month" ? "premium" : "premium_plus"}>
-                                                {plan.name} - ${plan.amount} / month
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <button
-                                        className="mt-3 p-2 bg-emerald-500 rounded-lg text-white"
-                                        onClick={handleUpdatePlan}
-                                    > Save Change </button>
-                                    {isUpdatePlanPending && (
-                                        <div className="flex items-center mt-2">
-                                            <Spinner /><span className="ml-2"> Updating Plan...</span>
-                                        </div>
-                                    )}
-                                    </>
-                                    )}
-                                </div>
-
-                                {/* Unsubscribe */}
-                                <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200 mt-4">
-                                    <h3 className="text-xl font-semibold mb-2 text-emerald-600"> Unsubscribe</h3>
-                                    <button
-                                        onClick={handleUnsubscribe}
-                                        disabled={isUnsubscribePending}
-                                        className={`w-full bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 transition-colors ${
-                                            isUnsubscribePending ? "opacity-50 cursor-not-allowed" : ""
-                                          }`}
-                                    >
-                                        {isUnsubscribePending ? "Unsubscribing..." : "Unsubscribe"}
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <p> You are not subscribed to any plan.</p>
-                        )}
-                        
-                        {/* Usage display */}
-                        <div className="mt-6">
-                            <UsageDisplay />
-                        </div>
+      
+                    {/* ─ Change Plan ───────────────────────────────────── */}
+                    <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
+                      <h3 className="text-xl font-semibold mb-2 text-emerald-600">
+                        Change Subscription Plan
+                      </h3>
+                      {currentPlan && (
+                        <>
+                          <select
+                            id="plan-select"
+                            value={selectedPlan}
+                            disabled={isUpdatePlanPending}
+                            className="w-full px-3 py-2 border border-emerald-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            onChange={e => setSelectedPlan(e.target.value)}
+                          >
+                            <option value="" disabled>
+                              Select a New Plan
+                            </option>
+                            {availablePlans.map(plan => (
+                              <option key={plan.planType} value={plan.planType}>
+                                {plan.name} — ${plan.amount}/{plan.interval}
+                              </option>
+                            ))}
+                          </select>
+      
+                          <button
+                            className="mt-3 w-full bg-emerald-500 text-white py-2 rounded-lg disabled:opacity-50"
+                            onClick={handleUpdatePlan}
+                            disabled={
+                              isUpdatePlanPending ||
+                              !selectedPlan ||
+                              selectedPlan === subscription.subscription.subscriptionTier
+                            }
+                          >
+                            {isUpdatePlanPending ? "Updating…" : "Save Change"}
+                          </button>
+                        </>
+                      )}
                     </div>
-                </div>
+      
+                    {/* ─ Unsubscribe ───────────────────────────────────── */}
+                    <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
+                      <h3 className="text-xl font-semibold mb-2 text-emerald-600">
+                        Unsubscribe
+                      </h3>
+                      <button
+                        onClick={handleUnsubscribe}
+                        disabled={isUnsubscribePending}
+                        className={`w-full py-2 px-4 rounded-md text-white ${
+                          isUnsubscribePending ? "bg-red-300 cursor-not-allowed" : "bg-red-500 hover:bg-red-600"
+                        }`}
+                      >
+                        {isUnsubscribePending ? "Unsubscribing…" : "Unsubscribe"}
+                      </button>
+                    </div>
+      
+                    {/* ─ Usage ──────────────────────────────────────────── */}
+                    <div className="mt-6">
+                      <UsageDisplay />
+                    </div>
+                  </div>
+      
+                ) : (
+                  <p>You are not subscribed to any plan.</p>
+                )}
+              </div>
             </div>
+          </div>
         </div>
-    )
+      )
+      
 }
