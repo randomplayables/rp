@@ -2,32 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
-import { PrismaClient } from '@prisma/client';
-
-// Create a test function to verify connection
-async function testPrismaConnection() {
-  const testPrisma = new PrismaClient();
-  try {
-    const result = await testPrisma.$queryRaw`SELECT 1 as test`;
-    console.log("Database connection successful:", result);
-    await testPrisma.$disconnect();
-    return true;
-  } catch (error) {
-    console.error("Database connection failed:", error);
-    await testPrisma.$disconnect();
-    return false;
-  }
-}
-
 
 export async function POST(request: NextRequest) {
-    console.log("Webhook received at:", new Date().toISOString());
-    const dbConnected = await testPrismaConnection();
-    console.log("Database connection test result:", dbConnected);
 
     const body = await request.text()
-    
-    console.log("Webhook body:", body.substring(0, 100) + "..."); // Log start of body
     const signature = request.headers.get("stripe-signature")
 
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
