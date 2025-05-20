@@ -247,6 +247,7 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-up(.*)",
   "/subscribe(.*)",
+  "/create-profile(.*)",
   "/api/webhook(.*)",
   "/api/check-subscription(.*)",
   "/api/game-session(.*)",
@@ -332,6 +333,10 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (pathname === "/api/check-subscription") {
     return NextResponse.next()
+  }
+
+  if (pathname === "/create-profile") {
+    return NextResponse.next(); // Skip other middleware checks for this path
   }
 
   if (!isPublicRoute(req) && !userId) {

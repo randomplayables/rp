@@ -55,6 +55,11 @@ export async function POST() {
             {status: 201}
         )
     } catch(error: any){
-        return NextResponse.json({error: "internal error"}, {status: 500})
+        // return NextResponse.json({error: "internal error"}, {status: 500})
+        console.error("Profile creation error:", error);
+        return NextResponse.json({
+          error: "internal error", 
+          details: error.message
+        }, {status: 500})
     }
 }

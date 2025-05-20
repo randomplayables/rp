@@ -35,12 +35,20 @@ export default function CreateProfile() {
         }
     })
 
-    useEffect(() => {
-        if (isLoaded && isSignedIn && !isPending) {
-            mutate()
-        }
+    // useEffect(() => {
+    //     if (isLoaded && isSignedIn && !isPending) {
+    //         mutate()
+    //     }
 
-    }, [isLoaded, isSignedIn])
+    // }, [isLoaded, isSignedIn])
+
+    useEffect(() => {
+        console.log("Create profile state:", { isLoaded, isSignedIn, isPending });
+        if (isLoaded && isSignedIn && !isPending) {
+          console.log("Starting profile creation");
+          mutate();
+        }
+      }, [isLoaded, isSignedIn, isPending]);
 
     return <div> Processing sign in...</div>
 }
