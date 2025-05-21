@@ -39,7 +39,7 @@ export async function getModelForUser(userId?: string): Promise<ModelSelectionRe
     if (profile?.subscriptionActive && profile.subscriptionTier) {
       // For premium tiers, use a stronger model
       if (profile.subscriptionTier === "premium" || profile.subscriptionTier === "premium_plus") {
-        model = "anthropic.claude-3-5-sonnet-20240620"; // Example stronger model
+        model = "openai/o4-mini-high"
       }
       
       // Check usage limits
