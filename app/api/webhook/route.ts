@@ -67,22 +67,24 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     }
     
     try {
+      console.log(`Processing subscription for user ${userId}, plan: ${planType}, subId: ${subscriptionId}`);
+      
       // First check if profile exists
       const existingProfile = await prisma.profile.findUnique({
         where: { userId }
       });
       
       if (!existingProfile) {
-        console.error(`Profile for user ${userId} not found, creating one`);
+        console.log(`Profile for user ${userId} not found, creating one`);
         // Create profile if it doesn't exist
         await prisma.profile.create({
           data: {
             userId,
-            username: "user_" + userId.substring(0, 8), // Generate temporary username
+            username: "user_" + userId.substring(0, 8), // Generate username
             email: session.customer_details?.email || "unknown@example.com",
             subscriptionTier: planType || null,
             stripeSubscriptionId: subscriptionId,
-            subscriptionActive: true,
+            subscriptionActive: true, // Set to TRUE!
           }
         });
       } else {
@@ -92,12 +94,12 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
           where: { userId },
           data: {
             stripeSubscriptionId: subscriptionId,
-            subscriptionActive: true,
+            subscriptionActive: true, // Set to TRUE!
             subscriptionTier: planType || null
           }
         });
       }
-    
+      
       // Create or update API usage limits
       const monthlyLimit = planType === "premium_plus" ? 1500 : 500;
       
@@ -121,7 +123,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       console.error(error.stack);
       throw error; // Re-throw to make the webhook fail
     }
-  }
+}
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     const subId = invoice.subscription as string
@@ -166,6 +168,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
 async function handleCustomerSubscriptionDeleted(subscription: Stripe.Subscription) {
     const subId = subscription.id
 
+    // Find the profile
     let userId: string | undefined
     try {
         const profile = await prisma.profile.findUnique({
@@ -186,6 +189,7 @@ async function handleCustomerSubscriptionDeleted(subscription: Stripe.Subscripti
         return
     }
 
+    // Update the profile - THIS IS THE ISSUE
     try {
         await prisma.profile.update({
             where: {userId: userId},
