@@ -7,6 +7,18 @@ interface ModelSelectionResult {
   remainingRequests?: number;
 }
 
+// Helper function to get monthly limit based on tier
+function getMonthlyLimitForTier(tier?: string | null): number {
+  switch (tier) {
+    case "premium":
+      return 500;
+    case "premium_plus":
+      return 1500;
+    default:
+      return 100; // Basic tier gets 100 requests
+  }
+}
+
 export async function getModelForUser(userId?: string): Promise<ModelSelectionResult> {
   try {
     if (!userId) {
@@ -66,15 +78,60 @@ export async function getModelForUser(userId?: string): Promise<ModelSelectionRe
 
 export async function incrementApiUsage(userId: string): Promise<boolean> {
   try {
-    const response = await fetch("/api/usage", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      }
-    });
+    const now = new Date();
     
-    const data = await response.json();
-    return data.remaining > 0;
+    // Get or create usage record
+    let usage = await prisma.apiUsage.findUnique({
+      where: { userId }
+    });
+
+    if (!usage) {
+      const profile = await prisma.profile.findUnique({
+        where: { userId },
+        select: { subscriptionTier: true }
+      });
+
+      const monthlyLimit = getMonthlyLimitForTier(profile?.subscriptionTier);
+      
+      usage = await prisma.apiUsage.create({
+        data: {
+          userId,
+          usageCount: 1,
+          monthlyLimit,
+          lastResetDate: now
+        }
+      });
+      return true;
+    }
+
+    // Check if we need to reset monthly usage
+    const lastReset = new Date(usage.lastResetDate);
+    if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
+      // Reset monthly usage
+      await prisma.apiUsage.update({
+        where: { userId },
+        data: {
+          usageCount: 1,
+          lastResetDate: now
+        }
+      });
+      return true;
+    } else {
+      // Check if user has remaining requests
+      if (usage.usageCount >= usage.monthlyLimit) {
+        return false; // No more requests available
+      }
+      
+      // Increment usage count
+      await prisma.apiUsage.update({
+        where: { userId },
+        data: {
+          usageCount: { increment: 1 }
+        }
+      });
+      
+      return true;
+    }
   } catch (error) {
     console.error("Error incrementing API usage:", error);
     return false;
