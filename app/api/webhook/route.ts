@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+    // Get user ID and subscription ID from the session
     const userId = session.metadata?.clerkUserId;
     
     if (!userId) {

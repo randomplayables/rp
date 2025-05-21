@@ -42,6 +42,11 @@ export async function POST(request: NextRequest) {
             )
         }
 
+        // Make sure NEXT_PUBLIC_BASE_URL is set properly
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        console.log(`🔍 Using base URL: ${baseUrl}`);
+
+        // Create checkout session with clear metadata
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             line_items: [
@@ -52,13 +57,19 @@ export async function POST(request: NextRequest) {
             ],
             customer_email: email,
             mode: "subscription",
-            metadata: {clerkUserId: userId, planType},
-            success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/subscribe`,
+            metadata: {
+                clerkUserId: userId, 
+                planType: planType,
+                source: "randomplayables" // Add this to track the source
+            },
+            success_url: `${baseUrl}/?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${baseUrl}/subscribe`,
         })
 
+        console.log(`✅ Created checkout session: ${session.id}`);
         return NextResponse.json({ url: session.url })
     } catch (error: any) {
+        console.error(`❌ Checkout error: ${error.message}`);
         return NextResponse.json({error: "Internal Server Error."}, {status: 500})
     }
 }
