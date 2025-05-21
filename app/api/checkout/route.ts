@@ -6,6 +6,10 @@ export async function POST(request: NextRequest) {
     try {
         const {planType, userId, email} = await request.json()
 
+        console.log(`🔍 planType: ${planType}`);
+        console.log(`🔍 userId: ${userId}`);
+        console.log(`🔍 email: ${email}`);
+
         if (!planType || !userId || !email) {
             return NextResponse.json(
                 {
