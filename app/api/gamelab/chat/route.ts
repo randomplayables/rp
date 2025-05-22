@@ -7,6 +7,27 @@ import CodeBaseModel from "@/models/CodeBase";
 import { currentUser } from "@clerk/nextjs/server"; // Added
 import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection"; // Added
 
+function createModelRequest(model: string, messages: any[], prompt: string) {
+  // Basic request that works for all models
+  const baseRequest = {
+    model: model,
+    messages: messages,
+    temperature: 0.7,
+    max_tokens: model.includes('o4-mini') ? 4000 : 2000, // Longer responses for more powerful models
+  };
+
+  // Add any model-specific configurations
+  if (model.includes('openai/')) {
+    // OpenAI models may need different formatting
+    console.log(`Using OpenAI model: ${model}`);
+  } else {
+    // Llama models use the standard format
+    console.log(`Using standard model: ${model}`);
+  }
+
+  return baseRequest;
+}
+
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
@@ -392,13 +413,13 @@ export async function POST(request: NextRequest) {
     IMPORTANT REQUIREMENTS FOR ALL GAMES YOU CREATE:
     
     1. Every game MUST be delivered as a COMPLETE single HTML file with:
-       - Proper DOCTYPE and HTML structure
-       - CSS in a <style> tag in the head
-       - JavaScript in a <script> tag before the body closing tag
-       - A <div id="game-container"></div> element that the JavaScript code interacts with
+        - Proper DOCTYPE and HTML structure
+        - CSS in a <style> tag in the head
+        - JavaScript in a <script> tag before the body closing tag
+        - A <div id="game-container"></div> element that the JavaScript code interacts with
     
     2. Interactive elements MUST use standard DOM event listeners, for example:
-       document.getElementById('button-id').addEventListener('click', handleClick);
+        document.getElementById('button-id').addEventListener('click', handleClick);
     
     3. All JavaScript code must reference elements by ID or create elements dynamically.
     
@@ -450,85 +471,106 @@ ${htmlExample}
       { role: "user", content: message }
     ];
     
-    const response = await openAI.chat.completions.create({
-      model: model, // Updated
-      messages: messages as any,
-      temperature: 0.7,
-      max_tokens: 3000,
-    });
+    const response = await openAI.chat.completions.create(
+      createModelRequest(model, messages as any, systemPrompt)
+    );
 
     await incrementApiUsage(clerkUser.id); // Added
     
     const aiResponse = response.choices[0].message.content!;
-    console.log("🔍 GameLab: Received AI response of length:", aiResponse.length);
     
+    console.log("🔍 GameLab: Response type:", typeof aiResponse);
+
     let code = "";
     let language = "html";
-    let message_text = aiResponse;
+    let message_text: string; // Ensure message_text is explicitly typed as string
 
-    const codeBlockRegex = /```([a-zA-Z0-9+#]+)?\n([\s\S]*?)```/g;
-    const codeBlocks: Array<[string, string, string]> = [];
-    
-    let match;
-    while ((match = codeBlockRegex.exec(aiResponse)) !== null) {
-      codeBlocks.push([match[0], match[1] || '', match[2]]);
-    }
+    if (typeof aiResponse === 'string') {
+      console.log("🔍 GameLab: Received AI response of length:", aiResponse.length);
+      console.log("🔍 GameLab: Sample:", aiResponse.substring(0, 100));
 
-    if (codeBlocks.length > 0) {
-      const mainCodeBlock = codeBlocks.reduce((longest, current) => {
-        return current[2].length > longest[2].length ? current : longest;
-      }, codeBlocks[0]);
-      
-      if (mainCodeBlock[1]) {
-        language = mainCodeBlock[1].toLowerCase();
+      // Initialize message_text with the raw string response, might be refined
+      message_text = aiResponse; 
+
+      const codeBlockRegex = /```([a-zA-Z0-9+#]+)?\n([\s\S]*?)```/g;
+      const codeBlocks: Array<[string, string, string]> = [];
+      let match;
+      while ((match = codeBlockRegex.exec(aiResponse)) !== null) {
+        codeBlocks.push([match[0], match[1] || '', match[2]]);
       }
-      
-      code = mainCodeBlock[2].trim();
-      console.log("🔍 GameLab: Extracted code block of length:", code.length, "language:", language);
-      
-      message_text = aiResponse.replace(/```[a-zA-Z0-9+#]*\n[\s\S]*?```/g, "").trim();
-      
-      if (code.includes("<!DOCTYPE html>") || code.includes("<html")) {
-        const htmlMatch = code.match(/<html[\s\S]*?<\/html>/);
+
+      if (codeBlocks.length > 0) {
+        const mainCodeBlock = codeBlocks.reduce((longest, current) => {
+          return current[2].length > longest[2].length ? current : longest;
+        }, codeBlocks[0]);
+        
+        if (mainCodeBlock[1]) {
+          language = mainCodeBlock[1].toLowerCase();
+        }
+        
+        code = mainCodeBlock[2].trim();
+        console.log("🔍 GameLab: Extracted code block of length:", code.length, "language:", language);
+        
+        message_text = aiResponse.replace(/```[a-zA-Z0-9+#]*\n[\s\S]*?```/g, "").trim();
+        
+        if (code.includes("<!DOCTYPE html>") || code.includes("<html")) {
+          const htmlMatch = code.match(/<html[\s\S]*?<\/html>/);
+          if (htmlMatch) {
+            code = htmlMatch[0];
+            console.log("🔍 GameLab: Found complete HTML in code block, length:", code.length);
+          }
+        }
+      } else { // No code blocks found in the string response
+        const htmlMatch = aiResponse.match(/<html[\s\S]*?<\/html>/);
         if (htmlMatch) {
           code = htmlMatch[0];
-          console.log("🔍 GameLab: Found complete HTML in code block, length:", code.length);
-        }
-      }
-    } else {
-      const htmlMatch = aiResponse.match(/<html[\s\S]*?<\/html>/);
-      if (htmlMatch) {
-        code = htmlMatch[0];
-        message_text = aiResponse.replace(htmlMatch[0], "").trim();
-        language = "html";
-        console.log("🔍 GameLab: Extracted HTML directly from response, length:", code.length);
-      } else {
-        const scriptMatch = aiResponse.match(/<script[\s\S]*?<\/script>/);
-        if (scriptMatch) {
-          code = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Game</title>
-</head>
-<body>
-  <div id="game-container"></div>
-  ${scriptMatch[0]}
-</body>
-</html>`;
-          message_text = aiResponse.replace(scriptMatch[0], "").trim();
+          message_text = aiResponse.replace(htmlMatch[0], "").trim();
           language = "html";
-          console.log("🔍 GameLab: Found script tag and wrapped in HTML, length:", code.length);
+          console.log("🔍 GameLab: Extracted HTML directly from response, length:", code.length);
         } else {
-          console.log("🔍 GameLab: No code blocks or HTML found in response");
+          const scriptMatch = aiResponse.match(/<script[\s\S]*?<\/script>/);
+          if (scriptMatch) {
+            code = `<!DOCTYPE html>
+    <html>
+    <head>
+      <title>Game</title>
+    </head>
+    <body>
+      <div id="game-container"></div>
+      ${scriptMatch[0]}
+    </body>
+    </html>`;
+            message_text = aiResponse.replace(scriptMatch[0], "").trim();
+            language = "html";
+            console.log("🔍 GameLab: Found script tag and wrapped in HTML, length:", code.length);
+          } else {
+            console.log("🔍 GameLab: No code blocks or HTML found in response, using full response as code");
+            // If no code blocks found, assume the entire response is code
+            code = aiResponse; // aiResponse is a string here
+            message_text = "Here's your game code:"; // Provide a generic message
+          }
         }
       }
+    } else { // aiResponse is not a string
+      console.log("🔍 GameLab: Received non-string response, handling as plain text");
+      if (aiResponse !== null && aiResponse !== undefined) {
+        console.log("🔍 GameLab: Sample:", JSON.stringify(aiResponse).substring(0, 100));
+        code = JSON.stringify(aiResponse);
+      } else {
+        console.log("🔍 GameLab: Sample: null or undefined");
+        code = "Error: AI response was null or undefined.";
+      }
+      message_text = "Received response in unexpected format. Please try again.";
     }
-    
+
+    console.log("🔍 GameLab: Final code length:", code.length);
+    console.log("🔍 GameLab: Final message length:", message_text.length);
+
     return NextResponse.json({
       message: message_text,
       code: code,
       language: language,
-      remainingRequests // Added
+      remainingRequests
     });
     
   } catch (error: any) {

@@ -70,10 +70,13 @@ export default function GameLabPage() {
       setMessages(prev => [...prev, assistantMessage]);
       
       if (data.code) {
+        console.log("🔍 GameLab Client: Received code of length:", data.code.length);
         setCurrentCode(data.code);
         setCurrentLanguage(data.language || "javascript");
         // Automatically switch to code tab when we get new code
         setCurrentTab('code');
+      } else {
+        console.error("🔍 GameLab Client: No code received in response", data);
       }
       
       if (data.error) {
@@ -83,7 +86,7 @@ export default function GameLabPage() {
       }
     },
     onError: (error: Error) => {
-      console.error("Error:", error);
+      console.error("Error in GameLab chat:", error);
       setCodeError("Failed to communicate with the AI assistant. Please try again.");
     }
   });

@@ -10,6 +10,27 @@ import SurveyModel from "@/models/Survey";
 import SurveyResponseModel from "@/models/SurveyResponse";
 import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection"; // Added
 
+function createModelRequest(model: string, messages: any[], prompt: string) {
+  // Basic request that works for all models
+  const baseRequest = {
+    model: model,
+    messages: messages,
+    temperature: 0.7,
+    max_tokens: model.includes('o4-mini') ? 4000 : 2000, // Longer responses for more powerful models
+  };
+
+  // Add any model-specific configurations
+  if (model.includes('openai/')) {
+    // OpenAI models may need different formatting
+    console.log(`Using OpenAI model: ${model}`);
+  } else {
+    // Llama models use the standard format
+    console.log(`Using standard model: ${model}`);
+  }
+
+  return baseRequest;
+}
+
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
@@ -154,42 +175,50 @@ export async function POST(request: NextRequest) {
       ...chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })),
       { role: "user", content: message }
     ];
-    
-    const response = await openAI.chat.completions.create({
-      model: model, // Updated
-      messages: messages as any,
-      temperature: 0.7,
-      max_tokens: 2000,
-    });
 
-    await incrementApiUsage(clerkUser.id); // Added
-    
+    const response = await openAI.chat.completions.create(
+      createModelRequest(model, messages as any, systemPrompt)
+    );
+
+    await incrementApiUsage(clerkUser.id);
+
     const aiResponse = response.choices[0].message.content!;
-    
+
     let code = "";
     let message_text = aiResponse;
-    
-    const codeMatch = aiResponse.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
-    if (codeMatch) {
-      code = codeMatch[1].trim();
-      message_text = aiResponse.replace(/```(?:javascript|js)?\n[\s\S]*?```/, "").trim();
-    } else {
-      const parts = aiResponse.split('\n\n');
-      if (parts.length > 1) {
-        message_text = parts[0];
-        code = parts.slice(1).join('\n\n');
+
+    console.log("AI Response type:", typeof aiResponse);
+    console.log("AI Response sample:", typeof aiResponse === 'string' ? aiResponse.substring(0, 100) : JSON.stringify(aiResponse).substring(0, 100));
+
+    // Handle different response formats based on model
+    if (typeof aiResponse === 'string') {
+      // For text-based responses (like from Llama)
+      const codeMatch = aiResponse.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
+      if (codeMatch) {
+        code = codeMatch[1].trim();
+        message_text = aiResponse.replace(/```(?:javascript|js)?\n[\s\S]*?```/, "").trim();
       } else {
-        code = aiResponse;
-        message_text = "";
+        // Try alternative parsing if no code block found
+        const parts = aiResponse.split('\n\n');
+        if (parts.length > 1) {
+          message_text = parts[0];
+          code = parts.slice(1).join('\n\n');
+        } else {
+          code = aiResponse;
+          message_text = "";
+        }
       }
     }
-    
+
+    console.log("Extracted code length:", code.length);
+    console.log("Extracted message length:", message_text.length);
+
     return NextResponse.json({
       message: message_text,
       code: code,
-      remainingRequests // Added
+      remainingRequests
     });
-    
+        
   } catch (error: any) {
     console.error("Error in DataLab chat:", error);
     return NextResponse.json(

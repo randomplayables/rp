@@ -6,6 +6,37 @@ import { useState, useEffect, useRef } from "react";
 import * as d3 from 'd3';
 import SaveVisualizationButton from './components/SaveVisualizationButton';
 
+function sanitizeD3Code(code: string): string {
+  // Replace common issues in D3 code that can cause errors
+  
+  // Fix d3.array references (this often causes errors)
+  const fixedCode = code.replace(/d3\.array\.(max|min|extent|sum)/g, 'd3.$1');
+  
+  // Add safety checks for data
+  const withSafetyChecks = `
+  // Safety wrapper for D3 code
+  try {
+    // Check if the container exists
+    if (!container) {
+      console.error("Container element not found");
+      return;
+    }
+
+    ${fixedCode}
+  } catch (error) {
+    console.error("Error in D3 visualization:", error);
+    d3.select(container)
+      .append("div")
+      .style("color", "red")
+      .style("padding", "20px")
+      .style("text-align", "center")
+      .text("Error rendering visualization: " + error.message);
+  }
+  `;
+  
+  return withSafetyChecks;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -56,7 +87,7 @@ export default function DataLabPage() {
       })
       .catch(err => console.error("Error fetching system prompt:", err));
   }, []);
-  
+
   const { mutate, isPending } = useMutation({
     mutationFn: (message: string) => sendChatMessage(message, messages, systemPrompt),
     onSuccess: (data: DataLabResponse) => {
@@ -68,8 +99,11 @@ export default function DataLabPage() {
       setMessages(prev => [...prev, assistantMessage]);
       
       if (data.code) {
+        console.log("Received code:", data.code.substring(0, 100) + "...");
         setCurrentCode(data.code);
         renderD3Plot(data.code);
+      } else {
+        console.error("No code received from API", data);
       }
     },
     onError: (error: Error) => {
@@ -85,7 +119,7 @@ export default function DataLabPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-  
+
   const renderD3Plot = (code: string) => {
     if (!plotRef.current) return;
     
@@ -94,9 +128,31 @@ export default function DataLabPage() {
     setVisualizationError(null);
     
     try {
+      // Apply safety transformations to the code
+      const safeCode = sanitizeD3Code(code);
+      console.log("Running sanitized D3 code");
+      
+      // Ensure D3 functions are properly exposed
+      const d3WithHelpers = {
+        ...d3,
+        array: {
+          max: d3.max,
+          min: d3.min,
+          extent: d3.extent,
+          sum: d3.sum
+        },
+        select: d3.select,
+        selectAll: d3.selectAll,
+        scaleLinear: d3.scaleLinear,
+        scaleBand: d3.scaleBand,
+        scaleOrdinal: d3.scaleOrdinal,
+        axisBottom: d3.axisBottom,
+        axisLeft: d3.axisLeft
+      };
+      
       // Create a function from the code and execute it
-      const plotFunction = new Function('d3', 'container', code);
-      plotFunction(d3, plotRef.current);
+      const plotFunction = new Function('d3', 'container', safeCode);
+      plotFunction(d3WithHelpers, plotRef.current);
     } catch (error) {
       console.error("Error rendering D3 plot:", error);
       setVisualizationError(`Error rendering visualization: ${error instanceof Error ? error.message : 'Unknown error'}`);
