@@ -5,9 +5,10 @@ import GameSessionModel from "@/models/GameSession";
 import GameDataModel from "@/models/GameData";
 import GameModel from "@/models/Game";
 import { prisma } from "@/lib/prisma";
-import { currentUser } from "@clerk/nextjs/server";
+import { currentUser } from "@clerk/nextjs/server"; // Added
 import SurveyModel from "@/models/Survey";
 import SurveyResponseModel from "@/models/SurveyResponse";
+import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection"; // Added
 
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
@@ -123,16 +124,27 @@ async function fetchRelevantData(query: string, userId: string | null) {
 
 export async function POST(request: NextRequest) {
   try {
+    const clerkUser = await currentUser(); // Added
+    if (!clerkUser) { // Added
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); // Added
+    } // Added
+
     const { message, chatHistory, systemPrompt: customSystemPrompt } = await request.json();
     
-    // Get current user if available
-    const clerkUser = await currentUser();
-    const userId = clerkUser?.id || null; // Add this line to define userId
+    // Check subscription and get appropriate model // Added
+    const { model, canUseApi, remainingRequests } = await getModelForUser(clerkUser.id); // Added
     
-    // Fetch relevant data based on the query
+    if (!canUseApi) { // Added
+      return NextResponse.json({  // Added
+        error: "Monthly API request limit reached. Please upgrade your plan for more requests.",  // Added
+        limitReached: true  // Added
+      }, { status: 403 }); // Added
+    } // Added
+    
+    const userId = clerkUser?.id || null;
+    
     const dataContext = await fetchRelevantData(message, userId);
     
-    // Use the custom system prompt if provided, otherwise use the default
     const systemPrompt = customSystemPrompt || `
     You are an AI assistant specialized in creating D3.js visualizations...
     `;
@@ -144,31 +156,29 @@ export async function POST(request: NextRequest) {
     ];
     
     const response = await openAI.chat.completions.create({
-      model: "meta-llama/llama-3.2-3b-instruct:free",
+      model: model, // Updated
       messages: messages as any,
       temperature: 0.7,
       max_tokens: 2000,
     });
+
+    await incrementApiUsage(clerkUser.id); // Added
     
     const aiResponse = response.choices[0].message.content!;
     
-    // Extract code from the response
     let code = "";
     let message_text = aiResponse;
     
-    // Try to extract code between backticks
     const codeMatch = aiResponse.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
     if (codeMatch) {
       code = codeMatch[1].trim();
       message_text = aiResponse.replace(/```(?:javascript|js)?\n[\s\S]*?```/, "").trim();
     } else {
-      // If no markdown code block, assume everything after the explanation is code
       const parts = aiResponse.split('\n\n');
       if (parts.length > 1) {
         message_text = parts[0];
         code = parts.slice(1).join('\n\n');
       } else {
-        // If we can't find a clear separation, assume it's all code
         code = aiResponse;
         message_text = "";
       }
@@ -176,7 +186,8 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       message: message_text,
-      code: code
+      code: code,
+      remainingRequests // Added
     });
     
   } catch (error: any) {

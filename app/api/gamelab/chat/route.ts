@@ -4,36 +4,32 @@ import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
 import { fetchRepoContent, extractRepoInfo } from "@/lib/githubApi";
 import CodeBaseModel from "@/models/CodeBase";
-import { currentUser } from "@clerk/nextjs/server";
+import { currentUser } from "@clerk/nextjs/server"; // Added
+import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection"; // Added
 
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
 });
 
-// Helper function to get game code based on game id or description
 async function fetchGameCode(query: string) {
   try {
     await connectToDatabase();
     console.log("Using cached MongoDB connection");
     
-    // First get all games to check if any are mentioned in the query
     const allGames = await GameModel.find({}).lean();
     console.log(`Found ${allGames.length} games in the database`);
     
     let selectedGames = [];
     
-    // Check if the query mentions any specific games
     const mentionedGames = allGames.filter(game => 
       query.toLowerCase().includes(game.name?.toLowerCase())
     );
     
     if (mentionedGames.length > 0) {
-      // If specific games are mentioned, use those
       selectedGames = mentionedGames;
       console.log(`Query mentions specific games: ${mentionedGames.map(g => g.name).join(', ')}`);
     } else {
-      // Otherwise, use a few games to provide context (limit to 3 for performance)
       selectedGames = allGames.slice(0, 3);
       console.log(`No specific games mentioned, using ${selectedGames.length} games for context`);
     }
@@ -43,30 +39,24 @@ async function fetchGameCode(query: string) {
     
     const gameCodeContext: Record<string, any> = {};
     
-    // For each game, fetch code from MongoDB CodeBase collection
     for (const game of selectedGames) {
       console.log(`🔍 GameLab: Looking for codebase for ${game.name} (ID: ${game.id})`);
       
-      // Find codebase in MongoDB
       const codebase = await CodeBaseModel.findOne({ gameId: game.id }).lean();
       
       if (codebase) {
         console.log(`🔍 GameLab: Found codebase for ${game.name}`);
         
-        // Process based on content type
         if (codebase.contentType === "repomix-xml") {
-          // Parse XML to extract components
           const parsedCode = parseRepomixXml(codebase.codeContent);
           
           gameCodeContext[game.name] = {
             id: game.id,
             name: game.name,
-            // Include parsed code examples
             packageJson: parsedCode.packageJson,
             componentExamples: parsedCode.components,
           };
         } else {
-          // Simple extraction for raw code
           const components = extractComponentsFromCode(codebase.codeContent);
           
           gameCodeContext[game.name] = {
@@ -89,9 +79,7 @@ async function fetchGameCode(query: string) {
   }
 }
 
-// Helper functions to parse codebase content
 function parseRepomixXml(xmlContent: string) {
-  // Add explicit type annotations to fix the TypeScript errors
   const result: {
     packageJson: any | null;
     components: Array<{ name: string; content: string }>;
@@ -105,7 +93,6 @@ function parseRepomixXml(xmlContent: string) {
   };
   
   try {
-    // Look for package.json content
     const packageJsonMatch = xmlContent.match(/<file path="package\.json">([\s\S]*?)<\/file>/);
     if (packageJsonMatch && packageJsonMatch[1]) {
       try {
@@ -115,7 +102,6 @@ function parseRepomixXml(xmlContent: string) {
       }
     }
     
-    // Extract components
     const fileMatches = xmlContent.match(/<file path="([^"]+)">([\s\S]*?)<\/file>/g) || [];
     
     for (const fileMatch of fileMatches) {
@@ -124,7 +110,6 @@ function parseRepomixXml(xmlContent: string) {
         const path = pathMatch[1];
         const content = fileMatch.replace(/<file path="[^"]+">/g, '').replace('</file>', '');
         
-        // Determine file type based on path
         if (path.includes('/components/') || path.endsWith('.jsx') || path.endsWith('.tsx')) {
           result.components.push({
             name: path,
@@ -152,26 +137,17 @@ function parseRepomixXml(xmlContent: string) {
 }
 
 function extractComponentsFromCode(codeContent: string) {
-  // A simple implementation to extract components from raw code
-  // This can be customized based on your codebase structure
   const components = [];
-  
-  // Split the code into potential components by looking for component patterns
   const componentMatches = codeContent.match(/(?:class|function|const)\s+(\w+)(?:\s+extends\s+React\.Component|\s+=\s+\(\)|Component)/g) || [];
   
-  // For each potential component, get the surrounding code
   for (const match of componentMatches) {
-    const componentName = match.split(/\s+/)[1]; // Extract component name
-    
-    // Find the start of the component
+    const componentName = match.split(/\s+/)[1];
     const startIndex = codeContent.indexOf(match);
     if (startIndex === -1) continue;
     
-    // Try to find the end (this is a simplistic approach - could be improved)
     let braceCount = 0;
     let endIndex = startIndex;
     
-    // Simple brace matching to find component boundaries
     for (let i = startIndex; i < codeContent.length; i++) {
       if (codeContent[i] === '{') braceCount++;
       if (codeContent[i] === '}') {
@@ -183,7 +159,6 @@ function extractComponentsFromCode(codeContent: string) {
       }
     }
     
-    // Extract the component code
     const componentCode = codeContent.substring(startIndex, endIndex);
     
     components.push({
@@ -195,7 +170,6 @@ function extractComponentsFromCode(codeContent: string) {
   return components;
 }
 
-// Helper function to get a sample template structure
 function getTemplateStructure() {
   return {
     basic: {
@@ -251,7 +225,6 @@ function getTemplateStructure() {
   };
 }
 
-// HTML Example as a separate string to avoid template string issues
 const htmlExample = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -309,20 +282,17 @@ const htmlExample = `<!DOCTYPE html>
   </div>
   
   <script>
-    // Game initialization code
     const messageElement = document.getElementById('message');
     const guessInput = document.getElementById('guess-input');
     const submitButton = document.getElementById('submit-btn');
     const attemptsElement = document.getElementById('attempts');
     
-    // Game state
     let gameState = {
       secretNumber: Math.floor(Math.random() * 100) + 1,
       attempts: 0,
       gameOver: false
     };
     
-    // Event listeners
     submitButton.addEventListener('click', makeGuess);
     
     function makeGuess() {
@@ -343,7 +313,6 @@ const htmlExample = `<!DOCTYPE html>
         messageElement.style.color = "green";
         gameState.gameOver = true;
         
-        // Create play again button
         const playAgainBtn = document.createElement('button');
         playAgainBtn.textContent = "Play Again";
         playAgainBtn.addEventListener('click', resetGame);
@@ -367,7 +336,6 @@ const htmlExample = `<!DOCTYPE html>
       messageElement.style.color = "black";
       attemptsElement.textContent = "Attempts: 0";
       
-      // Remove play again button
       const playAgainBtn = document.querySelector('#game-container button:last-child');
       if (playAgainBtn && playAgainBtn.textContent === "Play Again") {
         playAgainBtn.remove();
@@ -379,12 +347,25 @@ const htmlExample = `<!DOCTYPE html>
 
 export async function POST(request: NextRequest) {
   try {
-    // Get user message, chat history, and optional custom system prompt
+    const clerkUser = await currentUser(); // Added
+    if (!clerkUser) { // Added
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); // Added
+    } // Added
+
     const { message, chatHistory, systemPrompt: customSystemPrompt } = await request.json();
+    
+    // Check subscription and get appropriate model // Added
+    const { model, canUseApi, remainingRequests } = await getModelForUser(clerkUser.id); // Added
+    
+    if (!canUseApi) { // Added
+      return NextResponse.json({  // Added
+        error: "Monthly API request limit reached. Please upgrade your plan for more requests.",  // Added
+        limitReached: true  // Added
+      }, { status: 403 }); // Added
+    } // Added
     
     console.log("🔍 GameLab: Processing chat request with query:", message);
     
-    // Fetch relevant game code examples based on the query
     const gameCodeExamples = await fetchGameCode(message);
     
     console.log("🔍 GameLab: Found code examples in database:", 
@@ -392,19 +373,16 @@ export async function POST(request: NextRequest) {
       Object.keys(gameCodeExamples).join(", ") : 
       "None");
     
-    // If you find any, add more detail
     if (Object.keys(gameCodeExamples).length > 0) {
       console.log("🔍 GameLab: First example contains components:", 
         gameCodeExamples[Object.keys(gameCodeExamples)[0]]?.componentExamples?.length || 0);
     }
     
-    // Get template structures
     const templateStructure = getTemplateStructure();
     
     console.log("🔍 GameLab: Sending prompt to AI with code examples:", 
       Object.keys(gameCodeExamples).length > 0 ? "Yes" : "No");
     
-    // Use the custom system prompt if provided, otherwise use the default
     const systemPrompt = customSystemPrompt || `
     You are an AI game development assistant for RandomPlayables, a platform for mathematical citizen science games.
     
@@ -473,33 +451,30 @@ ${htmlExample}
     ];
     
     const response = await openAI.chat.completions.create({
-      model: "meta-llama/llama-3.2-3b-instruct:free", // You can use a stronger model if available
+      model: model, // Updated
       messages: messages as any,
       temperature: 0.7,
       max_tokens: 3000,
     });
+
+    await incrementApiUsage(clerkUser.id); // Added
     
     const aiResponse = response.choices[0].message.content!;
     console.log("🔍 GameLab: Received AI response of length:", aiResponse.length);
     
-    // Extract code from the response
     let code = "";
-    let language = "html"; // Default to HTML since we're focusing on complete HTML files
+    let language = "html";
     let message_text = aiResponse;
 
-    // Enhanced regex that handles code blocks
     const codeBlockRegex = /```([a-zA-Z0-9+#]+)?\n([\s\S]*?)```/g;
     const codeBlocks: Array<[string, string, string]> = [];
     
-    // Extract all code blocks
     let match;
     while ((match = codeBlockRegex.exec(aiResponse)) !== null) {
-      // match[1] = language, match[2] = code
       codeBlocks.push([match[0], match[1] || '', match[2]]);
     }
 
     if (codeBlocks.length > 0) {
-      // Get the most substantial code block (usually the last or longest one)
       const mainCodeBlock = codeBlocks.reduce((longest, current) => {
         return current[2].length > longest[2].length ? current : longest;
       }, codeBlocks[0]);
@@ -511,10 +486,8 @@ ${htmlExample}
       code = mainCodeBlock[2].trim();
       console.log("🔍 GameLab: Extracted code block of length:", code.length, "language:", language);
       
-      // Generate a clean message text by removing all code blocks
       message_text = aiResponse.replace(/```[a-zA-Z0-9+#]*\n[\s\S]*?```/g, "").trim();
       
-      // Extract HTML boilerplate if present within the code
       if (code.includes("<!DOCTYPE html>") || code.includes("<html")) {
         const htmlMatch = code.match(/<html[\s\S]*?<\/html>/);
         if (htmlMatch) {
@@ -523,7 +496,6 @@ ${htmlExample}
         }
       }
     } else {
-      // If no markdown code block, attempt alternative extraction methods
       const htmlMatch = aiResponse.match(/<html[\s\S]*?<\/html>/);
       if (htmlMatch) {
         code = htmlMatch[0];
@@ -531,10 +503,8 @@ ${htmlExample}
         language = "html";
         console.log("🔍 GameLab: Extracted HTML directly from response, length:", code.length);
       } else {
-        // Last resort: try to find script tags
         const scriptMatch = aiResponse.match(/<script[\s\S]*?<\/script>/);
         if (scriptMatch) {
-          // Wrap in minimal HTML
           code = `<!DOCTYPE html>
 <html>
 <head>
@@ -557,7 +527,8 @@ ${htmlExample}
     return NextResponse.json({
       message: message_text,
       code: code,
-      language: language
+      language: language,
+      remainingRequests // Added
     });
     
   } catch (error: any) {
