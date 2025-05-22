@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import AnswerModel from "@/models/Answer";
 import { currentUser } from "@clerk/nextjs/server";
+import { incrementUserContribution, decrementUserContribution, ContributionType } from "@/lib/contributionUpdater";
+
 
 // POST - Create a new answer
 export async function POST(request: NextRequest) {
@@ -30,6 +32,12 @@ export async function POST(request: NextRequest) {
       downvotes: [],
       isAccepted: false
     });
+
+    await incrementUserContribution(
+      clerkUser.id, 
+      clerkUser.username || 'unknown',
+      ContributionType.ANSWER
+    );
     
     return NextResponse.json({ 
       success: true, 

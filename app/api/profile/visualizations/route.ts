@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import mongoose from "mongoose";
 import { currentUser } from "@clerk/nextjs/server";
+import { incrementUserContribution, decrementUserContribution, ContributionType } from "@/lib/contributionUpdater";
 
 // Define the schema
 const UserVisualizationSchema = new mongoose.Schema({
@@ -97,6 +98,16 @@ export async function POST(request: NextRequest) {
       await connectToDatabase();
       console.log("Connected to database");
       
+      // const visualization = await UserVisualizationModel.create({
+      //   userId: clerkUser.id,
+      //   username: clerkUser.username,
+      //   title,
+      //   description,
+      //   code,
+      //   previewImage,
+      //   isPublic: isPublic !== undefined ? isPublic : true
+      // });
+
       const visualization = await UserVisualizationModel.create({
         userId: clerkUser.id,
         username: clerkUser.username,
@@ -106,6 +117,13 @@ export async function POST(request: NextRequest) {
         previewImage,
         isPublic: isPublic !== undefined ? isPublic : true
       });
+      
+      // Add contribution tracking
+      await incrementUserContribution(
+        clerkUser.id, 
+        clerkUser.username || 'unknown',
+        ContributionType.VISUALIZATION
+      );
       
       console.log("Visualization created with ID:", visualization._id);
       
@@ -155,7 +173,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Visualization not found or not owned by user" }, { status: 404 });
     }
     
+    // await UserVisualizationModel.deleteOne({ _id: id });
     await UserVisualizationModel.deleteOne({ _id: id });
+    
+    // Decrement contribution
+    await decrementUserContribution(
+      clerkUser.id,
+      ContributionType.VISUALIZATION
+    );
     
     return NextResponse.json({ success: true });
   } catch (error: any) {

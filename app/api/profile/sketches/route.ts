@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import mongoose from "mongoose";
 import { currentUser } from "@clerk/nextjs/server";
+import { incrementUserContribution, decrementUserContribution, ContributionType } from "@/lib/contributionUpdater";
 
 // Define the schema
 const UserSketchSchema = new mongoose.Schema({
@@ -108,6 +109,12 @@ export async function POST(request: NextRequest) {
       previewImage,
       isPublic: isPublic !== undefined ? isPublic : true
     });
+
+    await incrementUserContribution(
+      clerkUser.id, 
+      clerkUser.username || 'unknown',
+      ContributionType.SKETCH
+    );
     
     console.log("Sketch created with ID:", sketch._id);
     
@@ -150,6 +157,11 @@ export async function DELETE(request: NextRequest) {
     }
     
     await UserSketchModel.deleteOne({ _id: id });
+
+    await decrementUserContribution(
+      clerkUser.id,
+      ContributionType.SKETCH
+    );
     
     return NextResponse.json({ success: true });
   } catch (error: any) {

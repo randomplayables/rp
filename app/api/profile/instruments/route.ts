@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import SurveyModel from "@/models/Survey";
 import SurveyResponseModel from "@/models/SurveyResponse";
 import { currentUser } from "@clerk/nextjs/server";
+import { incrementUserContribution, decrementUserContribution, ContributionType } from "@/lib/contributionUpdater";
+
 
 // Define the schema
 const UserInstrumentSchema = new mongoose.Schema({
@@ -128,6 +130,12 @@ export async function POST(request: NextRequest) {
       isPublic: isPublic !== undefined ? isPublic : true,
       shareableLink: survey.shareableLink
     });
+
+    await incrementUserContribution(
+      clerkUser.id, 
+      clerkUser.username || 'unknown',
+      ContributionType.INSTRUMENT
+    );
     
     console.log("Instrument created with ID:", instrument._id);
     
@@ -170,6 +178,11 @@ export async function DELETE(request: NextRequest) {
     }
     
     await UserInstrumentModel.deleteOne({ _id: id });
+
+    await decrementUserContribution(
+      clerkUser.id,
+      ContributionType.INSTRUMENT
+    );
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
