@@ -3,8 +3,8 @@ export const allowedOrigins = [
     'http://localhost:3000',         // Next.js dev server
     'http://172.31.12.157:5173',     // EC2 Vite dev server
     'http://172.31.12.157:3000',     // EC2 Next.js dev server
-    'http://54.151.19.216:5173',      // EC2 public IP Vite dev server
-    'http://54.151.19.216:3000',      // EC2 public IP Next.js dev server
+    'http://18.144.169.34:5173',      // EC2 public IP Vite dev server
+    'http://18.144.169.34:3000',      // EC2 public IP Next.js dev server
     'https://randomplayables.com',
     'https://gothamloops.randomplayables.com'
   ];

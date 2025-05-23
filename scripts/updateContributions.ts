@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' }); // Add this line
+dotenv.config({ path: '.env.local' });
 import { connectToDatabase } from "../lib/mongodb";
 import { UserContributionModel } from "../models/RandomPayables";
 import { prisma } from "../lib/prisma";

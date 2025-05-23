@@ -48,3 +48,15 @@ export async function connectToDatabase() {
     throw error;
   }
 }
+
+// const GitHubIntegrationSchema = new mongoose.Schema({
+//   userId: { type: String, required: true, unique: true },
+//   githubUsername: { type: String, required: true },
+//   accessToken: { type: String, required: true }, // Encrypted in production
+//   refreshToken: { type: String },
+//   connectedAt: { type: Date, default: Date.now },
+//   lastUsed: { type: Date, default: Date.now }
+// });
+
+// export const GitHubIntegrationModel = mongoose.models.GitHubIntegration || 
+//   mongoose.model("GitHubIntegration", GitHubIntegrationSchema);
