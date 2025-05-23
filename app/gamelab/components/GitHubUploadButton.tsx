@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { Spinner } from '@/components/spinner';
 
-interface Props {
-  gameTitle: string;
-  gameCode: string;
-  gameDescription?: string;
+// Define or import ChatMessage type if not already available globally
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
 }
 
 interface GitHubStatus {
@@ -15,7 +16,15 @@ interface GitHubStatus {
   githubUsername?: string;
 }
 
-export default function GitHubUploadButton({ gameTitle, gameCode, gameDescription }: Props) {
+interface Props {
+  gameTitle: string;
+  gameCode: string;
+  gameDescription?: string;
+  currentLanguage: string; // Added prop
+  messages: ChatMessage[];  // Added prop
+}
+
+export default function GitHubUploadButton({ gameTitle, gameCode, gameDescription, currentLanguage, messages }: Props) {
   const { isSignedIn } = useUser();
   const [githubStatus, setGitHubStatus] = useState<GitHubStatus>({ connected: false });
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -26,7 +35,6 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
   const [error, setError] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<{ repositoryUrl: string; repositoryName: string } | null>(null);
 
-  // Check GitHub connection status
   useEffect(() => {
     if (isSignedIn) {
       checkGitHubStatus();
@@ -48,16 +56,36 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
     setError(null);
 
     try {
+      // Save GameLab state to localStorage before redirecting
+      if (gameCode) { // Only save if there's actually code
+        localStorage.setItem('gamelab_pending_code', gameCode);
+        localStorage.setItem('gamelab_pending_language', currentLanguage);
+        localStorage.setItem('gamelab_pending_messages', JSON.stringify(messages));
+        localStorage.setItem('gamelab_restore_on_callback', 'true'); // Flag to indicate state should be restored
+        console.log('GameLab state saved to localStorage.');
+      }
+
       const response = await fetch('/api/github/auth');
       const data = await response.json();
-      
+
       if (data.authUrl) {
         window.location.href = data.authUrl;
       } else {
         setError(data.error || 'Failed to connect to GitHub');
+        // Clear restore flag if auth URL fetch fails
+        localStorage.removeItem('gamelab_restore_on_callback');
+        localStorage.removeItem('gamelab_pending_code');
+        localStorage.removeItem('gamelab_pending_language');
+        localStorage.removeItem('gamelab_pending_messages');
       }
-    } catch (error) {
+    } catch (err) {
+      console.error('GitHub connection error:', err);
       setError('Failed to connect to GitHub');
+      // Clear restore flag on any error during connection initiation
+      localStorage.removeItem('gamelab_restore_on_callback');
+      localStorage.removeItem('gamelab_pending_code');
+      localStorage.removeItem('gamelab_pending_language');
+      localStorage.removeItem('gamelab_pending_messages');
     } finally {
       setIsConnecting(false);
     }
@@ -105,14 +133,14 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
       } else {
         setError(data.error || 'Failed to upload to GitHub');
       }
-    } catch (error) {
+    } catch (err) {
       setError('An error occurred while uploading');
     } finally {
       setIsUploading(false);
     }
   };
 
-  if (!isSignedIn || !gameCode) {
+  if (!isSignedIn) { // Only show button if signed in. Game code check can be lenient here.
     return null;
   }
 
@@ -121,7 +149,8 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
       {!githubStatus.connected ? (
         <button
           onClick={connectGitHub}
-          disabled={isConnecting}
+          disabled={isConnecting || !gameCode} // Disable if no game code to save or if connecting
+          title={!gameCode ? "Create a game first to connect GitHub" : "Connect your GitHub account"}
           className="px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50 flex items-center"
         >
           {isConnecting && <Spinner className="w-4 h-4 mr-2" />}
@@ -131,7 +160,9 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-700"
+            disabled={!gameCode} // Disable if no game code to upload
+            title={!gameCode ? "No game code to upload" : "Upload this game to GitHub"}
+            className="px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50"
           >
             Upload to GitHub
           </button>
@@ -147,7 +178,6 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
         </div>
       )}
 
-      {/* Upload Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
@@ -188,6 +218,7 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
             
             <div className="flex justify-end space-x-2">
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
               >
@@ -195,6 +226,7 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
               </button>
               
               <button
+                type="button" // Changed to type="button" to prevent form submission if wrapped in a form
                 onClick={uploadToGitHub}
                 disabled={isUploading}
                 className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 disabled:opacity-50 flex items-center"
@@ -207,11 +239,10 @@ export default function GitHubUploadButton({ gameTitle, gameCode, gameDescriptio
         </div>
       )}
 
-      {/* Success notification */}
       {uploadResult && (
         <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg shadow-lg z-50">
           <div className="flex items-center">
-            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
             <div>

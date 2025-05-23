@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { GitHubIntegrationModel } from "@/models/GitHubIntegration";
+import GitHubIntegrationModel from "@/models/GitHubIntegration";
 
 export async function GET(request: NextRequest) {
   try {
