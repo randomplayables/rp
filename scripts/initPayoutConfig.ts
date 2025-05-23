@@ -1,4 +1,5 @@
-// scripts/initPayoutConfig.ts
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 import { connectToDatabase } from "../lib/mongodb";
 import { PayoutConfigModel } from "../models/RandomPayables";
 import mongoose from "mongoose";

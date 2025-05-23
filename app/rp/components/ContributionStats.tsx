@@ -1,4 +1,3 @@
-// app/rp/components/ContributionStats.tsx
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -31,6 +30,28 @@ export default function ContributionStats({ userId, username }: ContributionStat
   const [contribution, setContribution] = useState<UserContribution | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await fetch('/api/rp/update-contributions', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        // Reload the contribution data
+        window.location.reload();
+      } else {
+        console.error('Failed to refresh contributions');
+      }
+    } catch (error) {
+      console.error('Error refreshing contributions:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   // Fetch contribution data
   useEffect(() => {
@@ -90,8 +111,16 @@ export default function ContributionStats({ userId, username }: ContributionStat
   
   return (
     <div className="bg-white shadow-sm rounded-lg p-6 border border-gray-200">
-      <h3 className="text-xl font-semibold mb-4">Contribution Stats</h3>
-      
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-semibold">Contribution Stats</h3>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="px-3 py-1 text-sm bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50"
+        >
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
       {isLoading ? (
         <div className="flex justify-center py-6">
           <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-emerald-500"></div>
