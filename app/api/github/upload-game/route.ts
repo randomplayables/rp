@@ -43,12 +43,12 @@ export async function POST(request: NextRequest) {
       name: repoName,
       description: gameDescription || `${gameTitle} - Created with RandomPlayables GameLab`,
       private: isPrivate,
-      auto_init: true,
+      auto_init: false, // MODIFIED: Set to false to prevent initial README.md
     });
 
     const repo = repoResponse.data;
 
-    // Prepare game files
+    // Prepare game files (this already includes README.md)
     const files = prepareGameFiles(gameCode, gameTitle, gameDescription);
 
     // Upload files to repository
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         owner: integration.githubUsername,
         repo: repoName,
         path: file.path,
-        message: `Add ${file.path}`,
+        message: `Add ${file.path}`, // Commit message for each file
         content: Buffer.from(file.content).toString('base64'),
       });
     }
@@ -78,8 +78,12 @@ export async function POST(request: NextRequest) {
     console.error("GitHub upload error:", error);
     
     // Handle specific GitHub API errors
+    // This 422 check might still be relevant for truly invalid repo names
+    // or other 422 errors not related to file conflicts.
     if (error.status === 422) {
-      return NextResponse.json({ error: "Repository name already exists or is invalid" }, { status: 400 });
+      // It's possible the repo name is genuinely taken if createForAuthenticatedUser failed before auto_init change,
+      // or other validation issue from GitHub.
+      return NextResponse.json({ error: "Repository name already exists, is invalid, or another issue occurred with GitHub's validation." }, { status: 400 });
     }
     
     return NextResponse.json({ error: "Failed to upload to GitHub" }, { status: 500 });
