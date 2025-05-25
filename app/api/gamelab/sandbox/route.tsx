@@ -116,7 +116,8 @@ export async function POST(request: NextRequest) {
         const sessionData = {
           sessionId,
           userId,
-          gameId: data.gameId,
+          // gameId: data.gameId,
+          gameId: String(data.gameId), 
           isTestSession: true
         };
         
@@ -129,7 +130,8 @@ export async function POST(request: NextRequest) {
         const gameData = {
           ...data,
           userId,
-          isTestData: true
+          isTestData: true,
+          gameId: String(data.gameId) 
         };
         
         const newGameData = await models.GameData.create(gameData);

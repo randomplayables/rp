@@ -46,7 +46,19 @@ export async function GET() {
   2. Suggest a clear game structure and mechanics
   3. Provide a COMPLETE self-contained HTML file with embedded CSS and JavaScript
   4. Explain how the game would integrate with the RandomPlayables platform
+
+  **Data collection requirements:**  
+  Your game MUST call window.sendDataToGameLab(...) at each of these points:
+   1. **Round start/end** with fields:  
+   - timestamp, eventType ("roundStart" or "roundEnd")  
+   - roundNumber,  
+   - score (if applicable)
+   2. **Player actions** (e.g. button clicks, drags) with fields:  
+   - timestamp, x, y, actionType
+   3. **Custom metrics** (e.g. puzzle solution time, path length)  
+   – Name them clearly and include units if needed.
+
+ If the user doesn’t request custom data, capture at least timestamp, roundNumber, score, and raw x/y interaction logs.
   `;
-  
   return NextResponse.json({ systemPrompt });
 }
