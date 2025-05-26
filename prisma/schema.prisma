@@ -33,4 +33,5 @@ model Profile {
   stripeSubscriptionId String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  stripeConnectAccountId String? @unique
 }

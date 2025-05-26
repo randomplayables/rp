@@ -8,6 +8,8 @@ import {
   IUserContribution,
   IPayoutConfig
 } from "@/models/RandomPayables";
+import { prisma } from "@/lib/prisma"; // Import Prisma client
+import { stripe } from "@/lib/stripe"; // Import Stripe client
 
 // Default weights for contribution types
 const DEFAULT_WEIGHTS = {
@@ -129,66 +131,106 @@ export async function simulatePayouts(amount: number): Promise<Array<{userId: st
  * Execute a real payout and record the results
  */
 export async function executePayout(amount: number): Promise<string> {
-  // Get config
   const config = await PayoutConfigModel.findOne();
   if (!config || config.totalPool < amount) {
     throw new Error('Insufficient funds in the pool');
   }
-  
-  // Generate a batch ID for this payout run
+
   const batchId = uuidv4();
-  
-  // Get all users with their probabilities
   const users = await UserContributionModel.find();
-  
-  // If no users, return early
   if (users.length === 0) return batchId;
-  
-  // Create lookup map for quick access
-  const userMap = new Map<string, IUserContribution>();
-  users.forEach(user => userMap.set(user.userId, user));
-  
-  // Track payouts for this batch
-  const payoutRecords = [];
-  
-  // Distribute dollars one by one
+
+  const payoutRecordsPromises = [];
+  const stripeTransferPromises = [];
+
   for (let i = 0; i < amount; i++) {
-    // Select a winner
     const winnerIndex = weightedRandomSelection(users.map(u => u.winProbability));
-    
     if (winnerIndex !== -1) {
       const winner = users[winnerIndex];
-      
-      // Create payout record
-      payoutRecords.push({
-        batchId,
-        userId: winner.userId,
-        username: winner.username,
-        amount: 1, // $1 at a time
-        probability: winner.winProbability,
-        timestamp: new Date()
+
+      // Fetch winner's Stripe Connect Account ID from Prisma
+      const winnerProfile = await prisma.profile.findUnique({
+        where: { userId: winner.userId },
+        select: { stripeConnectAccountId: true }
       });
-      
-      // Update win count for this user
-      await UserContributionModel.updateOne(
-        { userId: winner.userId },
-        { $inc: { winCount: 1 } }
-      );
+
+      if (winnerProfile && winnerProfile.stripeConnectAccountId) {
+        // Create a Stripe Transfer
+        stripeTransferPromises.push(
+          stripe.transfers.create({
+            amount: 100, // Amount in cents, so $1.00
+            currency: "usd",
+            destination: winnerProfile.stripeConnectAccountId,
+            transfer_group: batchId, // Group transfers by batch
+            description: `Random Playables Payout - Batch ${batchId}`,
+          }).then(transfer => {
+            // Payout record includes Stripe transfer ID for reconciliation
+            payoutRecordsPromises.push(
+              PayoutRecordModel.create({
+                batchId,
+                userId: winner.userId,
+                username: winner.username,
+                amount: 1, // $1
+                probability: winner.winProbability,
+                timestamp: new Date(),
+                stripeTransferId: transfer.id, // Store Stripe Transfer ID
+              })
+            );
+            // Update win count
+            return UserContributionModel.updateOne(
+              { userId: winner.userId },
+              { $inc: { winCount: 1 } }
+            );
+          }).catch(err => {
+            console.error(`Stripe transfer failed for user ${winner.userId}:`, err.message);
+            // Optionally, log this to a separate "failed_transfers" collection
+            // or handle retries. For now, we'll just log it.
+            payoutRecordsPromises.push(
+              PayoutRecordModel.create({ // Record as attempted but failed
+                batchId,
+                userId: winner.userId,
+                username: winner.username,
+                amount: 1,
+                probability: winner.winProbability,
+                timestamp: new Date(),
+                status: 'failed', // Add a status field to your PayoutRecordModel
+                stripeError: err.message,
+              })
+            );
+          })
+        );
+      } else {
+        console.warn(`User <span class="math-inline">\{winner\.username\} \(</span>{winner.userId}) won but has no Stripe Connect account configured.`);
+        // Record as needing setup
+        payoutRecordsPromises.push(
+           PayoutRecordModel.create({
+              batchId,
+              userId: winner.userId,
+              username: winner.username,
+              amount: 1,
+              probability: winner.winProbability,
+              timestamp: new Date(),
+              status: 'requires_stripe_setup', // Add a status field
+           })
+        );
+      }
     }
   }
-  
-  // Save all payout records
-  await PayoutRecordModel.insertMany(payoutRecords);
-  
+
+  // Wait for all Stripe transfers to be attempted and records to be prepared
+  await Promise.allSettled(stripeTransferPromises);
+  await Promise.all(payoutRecordsPromises);
+
+
   // Update the pool
   await PayoutConfigModel.updateOne(
     { _id: config._id },
-    { 
-      $inc: { totalPool: -amount },
+    {
+      $inc: { totalPool: -amount }, // This should reflect successfully transferred amounts
       $set: { lastUpdated: new Date() }
     }
   );
-  
+
   return batchId;
 }
 

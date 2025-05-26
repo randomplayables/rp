@@ -30,6 +30,9 @@ export interface IPayoutRecord extends Document {
   amount: number;               // Amount paid (in dollars)
   probability: number;          // Probability at time of win
   timestamp: Date;              // When the payout occurred
+  stripeTransferId?: string; // Add this
+  status?: 'completed' | 'failed' | 'requires_stripe_setup'; // Add this
+  stripeError?: string; // Add this
 }
 
 // Interface for payout configuration
@@ -71,7 +74,10 @@ const PayoutRecordSchema = new mongoose.Schema({
   username: { type: String, required: true },
   amount: { type: Number, required: true },
   probability: { type: Number, required: true },
-  timestamp: { type: Date, default: Date.now }
+  timestamp: { type: Date, default: Date.now },
+  stripeTransferId: { type: String, index: true }, // Add this
+  status: { type: String, default: 'completed' }, // Add this
+  stripeError: { type: String }, // Add this
 });
 
 // Mongoose schema for payout configuration
