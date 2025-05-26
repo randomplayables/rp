@@ -70,6 +70,12 @@ export async function POST(request: NextRequest) {
                 await handleCustomerSubscriptionDeleted(subscription);
                 break;
             }
+            case "account.updated": {
+                const account = event.data.object as Stripe.Account;
+                console.log(`🔔 Stripe Account Updated: ${account.id}, Payouts Enabled: ${account.payouts_enabled}, Details Submitted: ${account.details_submitted}`);
+                await handleAccountUpdated(account);
+                break;
+            }
             default:
                 console.log(`⏩ Unhandled event type: ${event.type}`);
         }
@@ -252,5 +258,25 @@ async function handleCustomerSubscriptionDeleted(subscription: Stripe.Subscripti
         console.log(`✅ Updated profile:`, JSON.stringify(updatedProfile));
     } catch(error: any) {
         console.error(`❌ Error updating profile: ${error.message}`);
+    }
+}
+
+async function handleAccountUpdated(account: Stripe.Account) {
+    const associatedProfile = await prisma.profile.findFirst({
+        where: { stripeConnectAccountId: account.id }
+    });
+
+    if (associatedProfile) {
+        await prisma.profile.update({
+            where: { id: associatedProfile.id },
+            data: {
+                stripePayoutsEnabled: account.payouts_enabled && account.details_submitted,
+                // You might want to store more details like account.charges_enabled
+                // or if there are any restrictions/requirements on the account.
+            }
+        });
+        console.log(`✅ Updated profile for Stripe account ${account.id}. Payouts enabled: ${account.payouts_enabled && account.details_submitted}`);
+    } else {
+        console.warn(`⚠️ No profile found for Stripe account ID: ${account.id} during account.updated event.`);
     }
 }
