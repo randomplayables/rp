@@ -322,9 +322,6 @@ export default function DataLabPage() {
     }
   };
   
-  const downloadTranscript = () => { /* ... (keep existing implementation) ... */ };
-  const downloadCode = () => { /* ... (keep existing implementation) ... */ };
-
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-7xl flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
@@ -360,20 +357,7 @@ export default function DataLabPage() {
                   msg.role === 'user' ? 'bg-emerald-500 text-white' : 'bg-white border border-gray-200'
                 }`}>
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  {msg.role === 'assistant' && msg.code && msg.dataContext && (
-                    <button
-                      onClick={() => {
-                        setCurrentCode(msg.code!);
-                        setCurrentDataContext(msg.dataContext);
-                        renderD3Plot(msg.code!, msg.dataContext);
-                        setShowCode(true);
-                        toast.success("Visualization reloaded from chat history.");
-                      }}
-                      className="mt-2 text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 transition-colors"
-                    >
-                      Reload Visualization
-                    </button>
-                  )}
+                  {/* Removed Reload Visualization button from here */}
                   <p className="text-xs mt-1 opacity-70">
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -474,22 +458,24 @@ export default function DataLabPage() {
         </div>
 
         {/* Right Panel: Visualization and Code */}
+        {/* Adjusted structure for better layout and scrolling */}
         <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white flex flex-col h-[calc(100vh-4rem)] max-h-[800px]">
           <div className="flex justify-between items-center mb-4 flex-shrink-0">
             <h2 className="text-2xl font-bold text-emerald-700">Visualization</h2>
             <div className="space-x-2">
-              <button onClick={() => setShowCode(!showCode)} className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 transition-colors">
+              <button 
+                onClick={() => setShowCode(!showCode)} 
+                className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+              >
                 {showCode ? 'Hide Details' : 'Show Details'}
               </button>
               {currentCode && <SaveVisualizationButton code={currentCode} />}
-              <button onClick={downloadTranscript} className="px-3 py-1 text-sm bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors">
-                Transcript
-              </button>
-              {currentCode && <button onClick={downloadCode} className="px-3 py-1 text-sm bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors"> Code </button>}
+              {/* Removed Transcript and Code download buttons */}
             </div>
           </div>
 
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg flex-grow min-h-[300px] flex items-center justify-center relative shadow-inner">
+          {/* Visualization Area */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg flex-grow min-h-[300px] flex items-center justify-center relative shadow-inner overflow-hidden">
             <div ref={plotRef} className="w-full h-full" />
             {!currentCode && !isPending && (
               <p className="text-gray-400 absolute inset-0 flex items-center justify-center text-center p-4">
@@ -509,17 +495,18 @@ export default function DataLabPage() {
               <strong>Error:</strong> {visualizationError}
             </div>
           )}
-
+          
+          {/* Details Section (Code and Data Context) - Conditionally rendered and scrollable */}
           {showCode && (
-            <div className="flex flex-col space-y-2 overflow-auto flex-shrink-0">
+            <div className="flex flex-col space-y-2 overflow-y-auto flex-shrink-0 max-h-[calc(100%-300px-3rem-1.5rem-1rem)]"> {/* Adjust max-h based on your layout needs */}
               {currentCode && (
-                <div className="bg-gray-900 text-gray-300 p-3 rounded-lg max-h-48 overflow-y-auto">
+                <div className="bg-gray-900 text-gray-300 p-3 rounded-lg">
                    <h4 className="text-sm font-semibold text-gray-200 mb-1">Generated D3 Code:</h4>
                   <pre className="text-xs whitespace-pre-wrap"><code>{currentCode}</code></pre>
                 </div>
               )}
               {currentDataContext && (
-                <div className="bg-gray-800 text-gray-400 p-3 rounded-lg max-h-48 overflow-y-auto">
+                <div className="bg-gray-800 text-gray-400 p-3 rounded-lg">
                   <h4 className="text-sm font-semibold text-gray-200 mb-1">Data Context for Above Visualization:</h4>
                   <pre className="text-xs whitespace-pre-wrap"><code>{JSON.stringify(currentDataContext, null, 2)}</code></pre>
                 </div>
