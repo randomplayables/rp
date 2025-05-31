@@ -1,7 +1,7 @@
 "use client"
 
 import { Spinner } from "@/components/spinner";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query"; // useQuery is not used for suggestions here
 import { useState, useEffect, useRef } from "react";
 import { CodeBlock } from './components/CodeBlock';
 import GameSandbox from "./components/GameSandbox";
@@ -53,8 +53,21 @@ export default function GameLabPage() {
   const searchParams = useSearchParams();
   const pathname = usePathname(); // For cleaning URL
 
+  // DEFINED STATICALLY: Define suggestedPrompts directly
+  const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([
+    "Create a number guessing game that uses Bayesian probability",
+    "I want to build a grid-based puzzle game similar to Gotham Loops",
+    "Help me design a memory matching game with varying difficulty levels",
+    "Create a game that teaches statistics through coin flipping experiments",
+    "I'd like to make a game about optimizing resource allocation",
+    "Design a game that visualizes the Monty Hall problem",
+    "Create a game about finding patterns in seemingly random data",
+    "Help me build a simple ecosystem simulation game",
+    "I want to make a citizen science game about classifying objects"
+  ]);
+
   useEffect(() => {
-    fetch("/api/gamelab/system-prompt")
+    fetch("/api/gamelab/system-prompt") // System prompt logic kept for now
       .then(res => res.json())
       .then(data => {
         setSystemPrompt(data.systemPrompt);
@@ -235,29 +248,6 @@ export default function GameLabPage() {
     setInputMessage("");
   };
   
-  const fetchGameTemplates = async () => {
-    try {
-      const response = await fetch("/api/gamelab/suggestions");
-      const data = await response.json();
-      return data.suggestions || [];
-    } catch (error) {
-      console.error("Error fetching templates:", error);
-      return [
-        "Create a simple number guessing game", "Help me build a word puzzle game",
-        "I want to make a memory matching game", "Can you create a probability-based game like Gotham Loops?"
-      ];
-    }
-  };
-  
-  const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([
-    "Create a simple number guessing game", "Help me build a word puzzle game",
-    "I want to make a memory matching game", "Can you create a probability-based game like Gotham Loops?"
-  ]);
-  
-  useEffect(() => {
-    fetchGameTemplates().then(setSuggestedPrompts);
-  }, []);
-  
   const downloadCode = () => {
     if (!currentCode) return;
     let extension = "txt";
@@ -376,7 +366,7 @@ export default function GameLabPage() {
             )}
             <div ref={messagesEndRef} />
           </div>
-          <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
+          <form onSubmit={handleSubmit} className="p-4 border-t bg-white"> {/* System prompt UI kept for now */}
             <div className="flex flex-col space-y-2">
               <textarea
                 value={inputMessage}
@@ -401,7 +391,7 @@ export default function GameLabPage() {
                 </button>
               </div>
             </div>
-            <div className="mt-2">
+            <div className="mt-2"> {/* System prompt UI kept for now */}
               <button
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
                 className="text-xs text-gray-500 hover:text-emerald-600"

@@ -1,7 +1,7 @@
 "use client"
 
 import { Spinner } from "@/components/spinner";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query"; // useQuery will be partially removed
 import { useState, useEffect, useRef } from "react";
 import * as d3 from 'd3';
 import SaveVisualizationButton from './components/SaveVisualizationButton';
@@ -21,7 +21,6 @@ const toast = {
     alert(`Success: ${message}`);
   }
 };
-
 
 // Define the structure of the data types for the UI
 interface DataTypeOption {
@@ -121,11 +120,6 @@ async function sendChatMessage(
   return response.json();
 }
 
-async function fetchSuggestions() {
-  const response = await fetch("/api/datalab/suggestions");
-  return response.json();
-}
-
 export default function DataLabPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -143,20 +137,20 @@ export default function DataLabPage() {
   const [showDbAccessOptions, setShowDbAccessOptions] = useState(false);
   const [selectedDataTypes, setSelectedDataTypes] = useState<string[]>([AVAILABLE_DATA_TYPES[0].id]); // Default to "Game"
 
-  const { data: suggestionData } = useQuery({
-    queryKey: ['datalabSuggestions'],
-    queryFn: fetchSuggestions,
-    staleTime: 5 * 60 * 1000, // Cache suggestions for 5 minutes
-  });
-
-  const suggestedPrompts = suggestionData?.suggestions || [
+  // DEFINED STATICALLY: Define suggestedPrompts directly
+  const suggestedPrompts = [
     "Show me a bar chart of game sessions by date for the last 30 days",
     "Create a pie chart showing the distribution of games played",
     "Plot the average scores across different games",
+    "Show me a line chart of user activity over time",
+    "Create a scatter plot of game duration vs score",
+    "Visualize the number of unique players per game",
+    "Show me a heatmap of player activity by hour of day",
+    "Create a stacked bar chart of game sessions by difficulty level"
   ];
 
   useEffect(() => {
-    fetch("/api/datalab/system-prompt")
+    fetch("/api/datalab/system-prompt") // System prompt logic kept for now
       .then(res => res.json())
       .then(data => {
         setSystemPrompt(data.systemPrompt);
@@ -441,7 +435,7 @@ export default function DataLabPage() {
             </div>
 
 
-            <div className="mt-1 border-t pt-3 space-y-1">
+            <div className="mt-1 border-t pt-3 space-y-1"> {/* System prompt UI kept for now */}
                 <button
                     type="button"
                     onClick={() => setShowSystemPrompt(!showSystemPrompt)}

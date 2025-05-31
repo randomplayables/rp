@@ -1,7 +1,7 @@
 "use client"
 
 import { Spinner } from "@/components/spinner";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query"; // useQuery will be partially removed
 import { useState, useEffect, useRef, useCallback } from "react";
 import SurveyPreview from "./components/SurveyPreview";
 import QuestionEditor from "./components/QuestionEditor";
@@ -51,12 +51,7 @@ async function createSurvey(surveyData: {
   return response.json();
 }
 
-async function fetchSuggestions() {
-  const response = await fetch("/api/collect/suggestions");
-  return response.json();
-}
-
-// New function to fetch system prompt
+// New function to fetch system prompt (keeping for now as per user's decision to handle Part 2 separately)
 async function fetchSystemPrompt() {
   const response = await fetch("/api/collect/system-prompt");
   return response.json();
@@ -79,12 +74,12 @@ export default function CollectPage() {
   const [showPreview, setShowPreview] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // New state variables for system prompt functionality
+  // State variables for system prompt functionality (keeping for now)
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [initialSystemPrompt, setInitialSystemPrompt] = useState<string | null>(null);
   
-  // Fetch the default system prompt when component loads
+  // Fetch the default system prompt when component loads (keeping for now)
   useEffect(() => {
     fetch("/api/collect/system-prompt")
       .then(res => res.json())
@@ -95,12 +90,8 @@ export default function CollectPage() {
       .catch(err => console.error("Error fetching system prompt:", err));
   }, []);
   
-  const { data: suggestionData } = useQuery({
-    queryKey: ['collectSuggestions'],
-    queryFn: fetchSuggestions
-  });
-  
-  const suggestedPrompts = suggestionData?.suggestions || [
+  // DEFINED STATICALLY: Define suggestedPrompts directly
+  const suggestedPrompts = [
     "Create a survey about player demographics",
     "Design a questionnaire with Gotham Loops integration",
     "Make a feedback form for my game",
@@ -162,7 +153,6 @@ export default function CollectPage() {
     setInputMessage("");
   };
   
-  // Use useCallback for the question update and delete functions
   const handleQuestionUpdate = useCallback((id: string, data: any) => {
     const newQuestions = [...surveyData.questions];
     const index = newQuestions.findIndex(q => q.questionId === id);
@@ -178,17 +168,12 @@ export default function CollectPage() {
   }, [surveyData.questions]);
   
   const extractQuestions = () => {
-    // This would be a more sophisticated function that parses
-    // the AI's suggestions and extracts structured question data
-    // For now, a simplified version:
-    
     const lastAssistantMessage = messages
       .filter(m => m.role === 'assistant')
       .pop();
       
     if (!lastAssistantMessage) return;
     
-    // Simple extraction for demo - would be more robust in production
     const questions: SurveyQuestion[] = [];
     const lines = lastAssistantMessage.content.split('\n');
     
@@ -197,7 +182,7 @@ export default function CollectPage() {
         const text = line.replace(/^\d+\.\s/, '');
         questions.push({
           questionId: Math.random().toString(36).substring(2, 9),
-          type: 'text', // Default
+          type: 'text', 
           text,
           required: true
         });
@@ -266,7 +251,7 @@ export default function CollectPage() {
             <div ref={messagesEndRef} />
           </div>
           
-          {/* Input Form with System Prompt Toggle */}
+          {/* Input Form with System Prompt Toggle (keeping system prompt UI for now) */}
             <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
               <div className="flex flex-col space-y-2">
                 <textarea
@@ -293,7 +278,7 @@ export default function CollectPage() {
                 </div>
               </div>
             
-            {/* System Prompt Editor */}
+            {/* System Prompt Editor (keeping system prompt UI for now) */}
             <div className="mt-2">
               <button
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
