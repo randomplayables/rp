@@ -1,7 +1,7 @@
 "use client"
 
 import { Spinner } from "@/components/spinner";
-import { useMutation, useQuery } from "@tanstack/react-query"; // useQuery will be partially removed
+import { useMutation } from "@tanstack/react-query";
 import { useState, useEffect, useRef, useCallback } from "react";
 import SurveyPreview from "./components/SurveyPreview";
 import QuestionEditor from "./components/QuestionEditor";
@@ -25,19 +25,49 @@ interface SurveyQuestion {
 interface CollectResponse {
   message: string;
   error?: string;
+  limitReached?: boolean; // Added for consistency with other chat APIs
+  remainingRequests?: number; // Added for consistency
 }
 
-async function sendChatMessage(message: string, chatHistory: ChatMessage[], customSystemPrompt: string | null) {
+// Define the base system prompt template with a placeholder
+const BASE_SYSTEM_PROMPT_TEMPLATE = `
+You are an AI assistant specialized in creating custom surveys for the RandomPlayables platform.
+You help users design effective surveys, questionnaires, and data collection tools that can
+optionally incorporate interactive games.
+
+Available games that can be integrated into surveys:
+%%AVAILABLE_GAMES_LIST%%
+
+When helping design surveys:
+1. Ask clarifying questions about the user's research goals and target audience
+2. Suggest appropriate question types (multiple choice, Likert scale, open-ended, etc.)
+3. Help write clear, unbiased questions
+4. Recommend game integration where appropriate for engagement or data collection
+5. Advise on survey flow and organization
+
+When designing a survey with game integration:
+1. Explain how the game data will complement traditional survey questions
+2. Discuss how to interpret combined qualitative and quantitative results
+3. Suggest appropriate placement of games within the survey flow
+
+Return your suggestions in a clear, structured format. If suggesting multiple questions,
+number them and specify the question type for each.
+`;
+
+async function sendChatMessageToApi(message: string, chatHistory: ChatMessage[], editedSystemPromptWithPlaceholders: string | null) {
   const response = await fetch("/api/collect/chat", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ message, chatHistory, systemPrompt: customSystemPrompt })
+    body: JSON.stringify({
+      message,
+      chatHistory: chatHistory.map(m => ({ role: m.role, content: m.content })), // Send minimal history
+      customSystemPrompt: editedSystemPromptWithPlaceholders // This is the key change
+    })
   });
-  
   return response.json();
 }
 
-async function createSurvey(surveyData: {
+async function createSurveyInApi(surveyData: {
   title: string;
   description: string;
   questions: SurveyQuestion[];
@@ -47,13 +77,15 @@ async function createSurvey(surveyData: {
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(surveyData)
   });
-  
   return response.json();
 }
 
-// New function to fetch system prompt (keeping for now as per user's decision to handle Part 2 separately)
-async function fetchSystemPrompt() {
-  const response = await fetch("/api/collect/system-prompt");
+// Function to fetch Type A context data (games list)
+async function fetchCollectContextData() {
+  const response = await fetch("/api/collect/context-data");
+  if (!response.ok) {
+    throw new Error('Failed to fetch collect context data');
+  }
   return response.json();
 }
 
@@ -73,24 +105,35 @@ export default function CollectPage() {
   });
   const [showPreview, setShowPreview] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // State variables for system prompt functionality (keeping for now)
-  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
-  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
-  const [initialSystemPrompt, setInitialSystemPrompt] = useState<string | null>(null);
-  
-  // Fetch the default system prompt when component loads (keeping for now)
-  useEffect(() => {
-    fetch("/api/collect/system-prompt")
-      .then(res => res.json())
-      .then(data => {
-        setSystemPrompt(data.systemPrompt);
-        setInitialSystemPrompt(data.systemPrompt);
-      })
-      .catch(err => console.error("Error fetching system prompt:", err));
+
+  const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
+  const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(null);
+  const [baseTemplateWithContext, setBaseTemplateWithContext] = useState<string | null>(null);
+  const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(true);
+
+  // Fetch Type A data (games list) and prepare initial system prompt
+  const initializeSystemPrompt = useCallback(async () => {
+    setIsLoadingSystemPrompt(true);
+    try {
+      const contextData = await fetchCollectContextData();
+      const gamesListString = JSON.stringify(contextData.games || [], null, 2);
+      const initialPrompt = BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', gamesListString);
+      setCurrentSystemPrompt(initialPrompt);
+      setBaseTemplateWithContext(initialPrompt); // Store this for "Reset to Default"
+    } catch (err) {
+      console.error("Error fetching initial system prompt context:", err);
+      // Fallback if context API fails, use template with placeholder
+      setCurrentSystemPrompt(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', 'Error: Could not load game list.'));
+      setBaseTemplateWithContext(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', 'Error: Could not load game list.'));
+    } finally {
+      setIsLoadingSystemPrompt(false);
+    }
   }, []);
-  
-  // DEFINED STATICALLY: Define suggestedPrompts directly
+
+  useEffect(() => {
+    initializeSystemPrompt();
+  }, [initializeSystemPrompt]);
+
   const suggestedPrompts = [
     "Create a survey about player demographics",
     "Design a questionnaire with Gotham Loops integration",
@@ -100,9 +143,9 @@ export default function CollectPage() {
     "Design a research tool for measuring player engagement",
     "Build a questionnaire about puzzle-solving strategies"
   ];
-  
+
   const chatMutation = useMutation({
-    mutationFn: (message: string) => sendChatMessage(message, messages, systemPrompt),
+    mutationFn: (message: string) => sendChatMessageToApi(message, messages, currentSystemPrompt),
     onSuccess: (data: CollectResponse) => {
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -110,13 +153,21 @@ export default function CollectPage() {
         timestamp: new Date()
       };
       setMessages(prev => [...prev, assistantMessage]);
+    },
+    onError: (error: Error) => {
+      console.error("Chat mutation error:", error);
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: `Error: Could not get a response. Details: ${error.message}`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, assistantMessage]);
     }
   });
-  
+
   const createSurveyMutation = useMutation({
-    mutationFn: createSurvey,
+    mutationFn: createSurveyInApi,
     onSuccess: (data) => {
-      // Show confirmation and sharable link
       if (data.success) {
         const assistantMessage: ChatMessage = {
           role: 'assistant',
@@ -124,79 +175,121 @@ export default function CollectPage() {
           timestamp: new Date()
         };
         setMessages(prev => [...prev, assistantMessage]);
-        
-        // Store the surveyId for the SaveInstrumentButton
         setSurveyData(prev => ({
           ...prev,
-          savedId: data.survey.id
+          savedId: data.survey.id,
+          // Optionally clear title/description/questions if desired after saving
         }));
+      } else {
+         const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `⚠️ Error creating survey: ${data.error || 'Unknown error'}`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
       }
+    },
+    onError: (error: Error) => {
+       const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `⚠️ Error creating survey: ${error.message}`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
     }
   });
-  
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim()) return;
-    
+    if (!inputMessage.trim() || chatMutation.isPending) return;
+
     const userMessage: ChatMessage = {
       role: 'user',
       content: inputMessage,
       timestamp: new Date()
     };
-    
+
     setMessages(prev => [...prev, userMessage]);
     chatMutation.mutate(inputMessage);
     setInputMessage("");
   };
-  
+
   const handleQuestionUpdate = useCallback((id: string, data: any) => {
-    const newQuestions = [...surveyData.questions];
-    const index = newQuestions.findIndex(q => q.questionId === id);
-    if (index !== -1) {
-      newQuestions[index] = { ...newQuestions[index], ...data };
-      setSurveyData(prev => ({ ...prev, questions: newQuestions }));
-    }
-  }, [surveyData.questions]);
-  
+    setSurveyData(prev => {
+      const newQuestions = [...prev.questions];
+      const index = newQuestions.findIndex(q => q.questionId === id);
+      if (index !== -1) {
+        newQuestions[index] = { ...newQuestions[index], ...data };
+      }
+      return { ...prev, questions: newQuestions };
+    });
+  }, []);
+
   const handleQuestionDelete = useCallback((id: string) => {
-    const newQuestions = surveyData.questions.filter(q => q.questionId !== id);
-    setSurveyData(prev => ({ ...prev, questions: newQuestions }));
-  }, [surveyData.questions]);
-  
+    setSurveyData(prev => ({
+      ...prev,
+      questions: prev.questions.filter(q => q.questionId !== id)
+    }));
+  }, []);
+
   const extractQuestions = () => {
     const lastAssistantMessage = messages
       .filter(m => m.role === 'assistant')
       .pop();
-      
+
     if (!lastAssistantMessage) return;
-    
-    const questions: SurveyQuestion[] = [];
+
+    const extractedQuestions: SurveyQuestion[] = [];
     const lines = lastAssistantMessage.content.split('\n');
-    
+
     for (const line of lines) {
       if (line.match(/^\d+\.\s/)) {
-        const text = line.replace(/^\d+\.\s/, '');
-        questions.push({
-          questionId: Math.random().toString(36).substring(2, 9),
-          type: 'text', 
-          text,
-          required: true
-        });
+        const text = line.replace(/^\d+\.\s/, '').trim();
+        if (text) { // Ensure question text is not empty
+          extractedQuestions.push({
+            questionId: Math.random().toString(36).substring(2, 9),
+            type: 'text', // Default type, user can change
+            text,
+            required: true // Default to required
+          });
+        }
       }
     }
-    
-    if (questions.length > 0) {
+
+    if (extractedQuestions.length > 0) {
       setSurveyData(prev => ({
         ...prev,
-        questions
+        questions: [...prev.questions, ...extractedQuestions] // Append new questions
       }));
+       const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: `Extracted ${extractedQuestions.length} question(s). You can now edit them in the Survey Builder.`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+    } else {
+       const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: `I couldn't find any numbered questions in my last response to extract.`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, assistantMessage]);
     }
   };
   
+  const handleResetSystemPrompt = () => {
+    if (baseTemplateWithContext) {
+      setCurrentSystemPrompt(baseTemplateWithContext);
+    } else {
+      // Fallback if baseTemplateWithContext isn't ready, re-initialize
+      initializeSystemPrompt();
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-7xl flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
@@ -206,8 +299,7 @@ export default function CollectPage() {
             <h1 className="text-2xl font-bold">AI Survey Creator</h1>
             <p className="text-sm">Chat to create surveys with game integration</p>
           </div>
-          
-          {/* Chat Messages */}
+
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-gray-500 text-center mt-8">
@@ -230,8 +322,8 @@ export default function CollectPage() {
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] p-3 rounded-lg ${
-                  msg.role === 'user' 
-                    ? 'bg-emerald-500 text-white' 
+                  msg.role === 'user'
+                    ? 'bg-emerald-500 text-white'
                     : 'bg-white border border-gray-200'
                 }`}>
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -250,56 +342,62 @@ export default function CollectPage() {
             )}
             <div ref={messagesEndRef} />
           </div>
-          
-          {/* Input Form with System Prompt Toggle (keeping system prompt UI for now) */}
-            <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
-              <div className="flex flex-col space-y-2">
-                <textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      if (!chatMutation.isPending && inputMessage.trim()) handleSubmit(e);
-                    }
-                  }}
-                  placeholder="Describe your survey needs..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
+
+          <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
+            <div className="flex flex-col space-y-2">
+              <textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!chatMutation.isPending && inputMessage.trim()) handleSubmit(e);
+                  }
+                }}
+                placeholder="Describe your survey needs..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
+                disabled={chatMutation.isPending}
+              />
+              <div className="flex justify-end">
+                <button
+                  type="submit"
                   disabled={chatMutation.isPending}
-                />
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={chatMutation.isPending}
-                    className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
-                  >
-                    Send
-                  </button>
-                </div>
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                >
+                  Send
+                </button>
               </div>
-            
-            {/* System Prompt Editor (keeping system prompt UI for now) */}
+            </div>
+
             <div className="mt-2">
               <button
-                onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                type="button"
+                onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)}
                 className="text-xs text-gray-500 hover:text-emerald-600"
               >
-                {showSystemPrompt ? "Hide System Prompt" : "Show System Prompt"}
+                {showSystemPromptEditor ? "Hide System Prompt" : "Show System Prompt"}
               </button>
-              
-              {showSystemPrompt && systemPrompt !== null && (
+
+              {showSystemPromptEditor && (
                 <div className="mt-2">
-                  <textarea
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="System prompt is loading..."
-                  />
+                  {isLoadingSystemPrompt ? (
+                    <div className="flex items-center text-xs text-gray-500">
+                      <Spinner className="w-3 h-3 mr-1" /> Loading default prompt...
+                    </div>
+                  ) : (
+                    <textarea
+                      value={currentSystemPrompt || ""}
+                      onChange={(e) => setCurrentSystemPrompt(e.target.value)}
+                      className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="System prompt..."
+                    />
+                  )}
                   <div className="flex justify-end mt-1 space-x-2">
                     <button
                       type="button"
-                      onClick={() => setSystemPrompt(initialSystemPrompt)}
-                      className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                      onClick={handleResetSystemPrompt}
+                      disabled={isLoadingSystemPrompt || !baseTemplateWithContext}
+                      className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
                     >
                       Reset to Default
                     </button>
@@ -309,7 +407,7 @@ export default function CollectPage() {
             </div>
           </form>
         </div>
-        
+
         {/* Right Panel: Survey Editor & Preview */}
         <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white">
           <div className="flex justify-between items-center mb-4">
@@ -317,51 +415,49 @@ export default function CollectPage() {
             <div className="space-x-2">
               <button
                 onClick={extractQuestions}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                title="Extract numbered questions from the last AI response"
               >
                 Extract Questions
               </button>
               <button
                 onClick={() => setShowPreview(!showPreview)}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
               >
                 {showPreview ? 'Edit Survey' : 'Preview Survey'}
               </button>
               <button
                 onClick={() => createSurveyMutation.mutate(surveyData)}
-                disabled={surveyData.questions.length === 0 || !surveyData.title}
-                className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50"
+                disabled={surveyData.questions.length === 0 || !surveyData.title.trim() || createSurveyMutation.isPending}
+                className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 text-sm"
               >
-                Save & Share Survey
+                {createSurveyMutation.isPending ? 'Saving...' : 'Save & Share Survey'}
               </button>
               {surveyData.savedId && <SaveInstrumentButton surveyId={surveyData.savedId} />}
             </div>
           </div>
-          
-          {/* Survey Editor or Preview */}
+
           {showPreview ? (
             <SurveyPreview survey={surveyData} />
           ) : (
-            <div className="bg-gray-50 rounded-lg p-4">
-              {/* Survey Title & Description */}
+            <div className="bg-gray-50 rounded-lg p-4 max-h-[600px] overflow-y-auto">
               <div className="mb-4">
                 <input
                   type="text"
                   value={surveyData.title}
                   onChange={(e) => setSurveyData(prev => ({...prev, title: e.target.value}))}
-                  placeholder="Survey Title"
+                  placeholder="Survey Title (Required)"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
                 />
                 <textarea
                   value={surveyData.description}
                   onChange={(e) => setSurveyData(prev => ({...prev, description: e.target.value}))}
-                  placeholder="Survey Description"
+                  placeholder="Survey Description (Optional)"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   rows={3}
                 />
               </div>
-              
-              {/* Questions List */}
+
               <div className="space-y-4">
                 {surveyData.questions.map((question, idx) => (
                   <QuestionEditor
@@ -373,8 +469,7 @@ export default function CollectPage() {
                     index={idx}
                   />
                 ))}
-                
-                {/* Add Question Button */}
+
                 <button
                   onClick={() => {
                     const newQuestion = {
@@ -384,11 +479,11 @@ export default function CollectPage() {
                       required: true
                     };
                     setSurveyData(prev => ({
-                      ...prev, 
+                      ...prev,
                       questions: [...prev.questions, newQuestion]
                     }));
                   }}
-                  className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50"
+                  className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-100"
                 >
                   + Add Question
                 </button>
