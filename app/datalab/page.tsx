@@ -27,7 +27,7 @@ const AVAILABLE_DATA_TYPES_UI: DataTypeOption[] = [
   { id: "Sandbox", name: "Sandbox Data", description: "Data from GameLab's testing sandbox environment." },
 ];
 
-// Base System Prompt Template for DataLab
+// Base System Prompt Template for DataLab (remains the same)
 const BASE_DATALAB_SYSTEM_PROMPT_TEMPLATE = `
 You are an AI assistant specialized in creating D3.js visualizations for a citizen science gaming platform.
 You have access to data from MongoDB and PostgreSQL based on the user's selection.
@@ -58,7 +58,7 @@ When creating visualizations:
 Example of how to structure your D3 code:
 \`\`\`javascript
 // Access data from the provided dataContext
-const sessions = dataContext.recentSessions || [];
+const sessions = dataContext.recentSessions || []; 
 
 if (dataContext.sandboxFetchError) {
   d3.select(container).append("p").style("color", "orange").text("Note: Sandbox data could not be fetched: " + dataContext.sandboxFetchError);
@@ -131,8 +131,9 @@ async function fetchDatalabContextData() {
 async function sendChatMessageToApi(
   message: string,
   chatHistory: ChatMessage[],
-  editedSystemPromptWithPlaceholders: string | null, // This is the user-edited prompt
-  selectedDataTypes: string[]
+  editedSystemPromptWithPlaceholders: string | null,
+  selectedDataTypes: string[],
+  useCodeReview: boolean // NEW parameter
 ) {
   const response = await fetch("/api/datalab/chat", {
     method: "POST",
@@ -140,8 +141,9 @@ async function sendChatMessageToApi(
     body: JSON.stringify({
       message,
       chatHistory: chatHistory.map(m => ({role: m.role, content: m.content})),
-      customSystemPrompt: editedSystemPromptWithPlaceholders, // Send the user-edited prompt
-      selectedDataTypes
+      customSystemPrompt: editedSystemPromptWithPlaceholders,
+      selectedDataTypes,
+      useCodeReview // NEW: Send the code review flag
     })
   });
   return response.json();
@@ -158,12 +160,13 @@ export default function DataLabPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
-  const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(null); // User-editable, initially populated
-  const [baseTemplateWithContext, setBaseTemplateWithContext] = useState<string | null>(null); // For reset
+  const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(null);
+  const [baseTemplateWithContext, setBaseTemplateWithContext] = useState<string | null>(null);
   const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(true);
 
   const [showDbAccessOptions, setShowDbAccessOptions] = useState(false);
   const [selectedDataTypes, setSelectedDataTypes] = useState<string[]>([AVAILABLE_DATA_TYPES_UI[0].id]);
+  const [useCodeReview, setUseCodeReview] = useState<boolean>(false); // NEW: State for code review checkbox
 
   const suggestedPrompts = [
     "Show me a bar chart of game sessions by date for the last 30 days",
@@ -187,16 +190,13 @@ export default function DataLabPage() {
         '%%DATALAB_GENERAL_SCHEMA_OVERVIEW%%',
         JSON.stringify(contextData.generalContextKeys || ['Not loaded'])
       );
-      // Type B placeholders (like %%DATALAB_QUERY_SPECIFIC_DATACONTEXT_KEYS%% and %%DATALAB_SANDBOX_FETCH_ERROR_NOTE%%)
-      // will be resolved by the backend in the chat API.
-      // However, we can clear them or put a generic message for the user's view.
       populatedPrompt = populatedPrompt.replace(
         '%%DATALAB_QUERY_SPECIFIC_DATACONTEXT_KEYS%%',
         '(This will be filled by the backend based on your query)'
       );
       populatedPrompt = populatedPrompt.replace(
         '%%DATALAB_SANDBOX_FETCH_ERROR_NOTE%%',
-        contextData.sandboxFetchErrorNote || '' // Add sandbox error note if present from context API
+        contextData.sandboxFetchErrorNote || '' 
       );
 
       setCurrentSystemPrompt(populatedPrompt);
@@ -219,8 +219,9 @@ export default function DataLabPage() {
     initializeSystemPrompt();
   }, [initializeSystemPrompt]);
 
-  const { mutate, isPending } = useMutation<DataLabApiResponse, Error, { message: string; chatHistory: ChatMessage[]; editedSystemPrompt: string | null; selectedDataTypes: string[] }>({
-    mutationFn: (vars) => sendChatMessageToApi(vars.message, vars.chatHistory, vars.editedSystemPrompt, vars.selectedDataTypes),
+  // MODIFIED: Add useCodeReview to mutation variables type
+  const { mutate, isPending } = useMutation<DataLabApiResponse, Error, { message: string; chatHistory: ChatMessage[]; editedSystemPrompt: string | null; selectedDataTypes: string[]; useCodeReview: boolean }>({
+    mutationFn: (vars) => sendChatMessageToApi(vars.message, vars.chatHistory, vars.editedSystemPrompt, vars.selectedDataTypes, vars.useCodeReview), // MODIFIED: pass useCodeReview
     onSuccess: (data: DataLabApiResponse) => {
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -233,8 +234,8 @@ export default function DataLabPage() {
 
       if (data.code && data.dataContext) {
         setCurrentCode(data.code);
-        setCurrentDataContext(data.dataContext); // Store the received dataContext
-        renderD3Plot(data.code, data.dataContext); // Pass it to renderD3Plot
+        setCurrentDataContext(data.dataContext);
+        renderD3Plot(data.code, data.dataContext);
       } else if (data.code && !data.dataContext) {
         setCurrentCode(data.code);
         setCurrentDataContext(null);
@@ -267,10 +268,8 @@ export default function DataLabPage() {
 
     try {
       const safeCode = sanitizeD3Code(code);
-      // The D3 code expects 'dataContext' to be globally available or passed in.
-      // Here, we make it available to the Function constructor.
       const plotFunction = new Function('d3', 'container', 'dataContext', safeCode);
-      plotFunction(d3, plotRef.current, dataCtx); // Pass dataCtx here
+      plotFunction(d3, plotRef.current, dataCtx);
     } catch (error) {
       const errorMessage = `Error rendering D3 plot: ${error instanceof Error ? error.message : 'Unknown error'}`;
       setVisualizationError(errorMessage);
@@ -290,8 +289,8 @@ export default function DataLabPage() {
 
     const userMessage: ChatMessage = { role: 'user', content: inputMessage, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
-    // Pass currentSystemPrompt (the user-edited one) to the mutation
-    mutate({ message: inputMessage, chatHistory: messages, editedSystemPrompt: currentSystemPrompt, selectedDataTypes });
+    // MODIFIED: Pass useCodeReview state to the mutation
+    mutate({ message: inputMessage, chatHistory: messages, editedSystemPrompt: currentSystemPrompt, selectedDataTypes, useCodeReview });
     setInputMessage("");
   };
   
@@ -308,17 +307,13 @@ export default function DataLabPage() {
         return [...prev, dataTypeId];
       }
     });
-    // No automatic re-fetch of system prompt context here,
-    // as the general context is meant to be broad.
-    // If specific context is needed per data type selection for Type A,
-    // then initializeSystemPrompt (or a variant) could be called.
   };
 
   const handleResetSystemPrompt = () => {
     if (baseTemplateWithContext) {
       setCurrentSystemPrompt(baseTemplateWithContext);
     } else {
-      initializeSystemPrompt(); // Re-fetch if not available
+      initializeSystemPrompt();
     }
   };
   
@@ -357,7 +352,6 @@ export default function DataLabPage() {
                   msg.role === 'user' ? 'bg-emerald-500 text-white' : 'bg-white border border-gray-200'
                 }`}>
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  {/* Removed Reload Visualization button from here */}
                   <p className="text-xs mt-1 opacity-70">
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -385,6 +379,19 @@ export default function DataLabPage() {
                 disabled={isPending}
                 rows={3}
               />
+              {/* NEW: Code Review Checkbox */}
+              <div className="flex items-center mt-2">
+                <input
+                  type="checkbox"
+                  id="useCodeReview"
+                  checked={useCodeReview}
+                  onChange={(e) => setUseCodeReview(e.target.checked)}
+                  className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                />
+                <label htmlFor="useCodeReview" className="ml-2 text-sm text-gray-700">
+                  Enable AI Code Review (experimental, may use more resources)
+                </label>
+              </div>
               <div className="flex justify-end">
                 <button
                   type="submit"
@@ -458,7 +465,6 @@ export default function DataLabPage() {
         </div>
 
         {/* Right Panel: Visualization and Code */}
-        {/* Adjusted structure for better layout and scrolling */}
         <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white flex flex-col h-[calc(100vh-4rem)] max-h-[800px]">
           <div className="flex justify-between items-center mb-4 flex-shrink-0">
             <h2 className="text-2xl font-bold text-emerald-700">Visualization</h2>
@@ -470,11 +476,9 @@ export default function DataLabPage() {
                 {showCode ? 'Hide Details' : 'Show Details'}
               </button>
               {currentCode && <SaveVisualizationButton code={currentCode} />}
-              {/* Removed Transcript and Code download buttons */}
             </div>
           </div>
 
-          {/* Visualization Area */}
           <div className="mb-6 p-4 bg-gray-50 rounded-lg flex-grow min-h-[300px] flex items-center justify-center relative shadow-inner overflow-hidden">
             <div ref={plotRef} className="w-full h-full" />
             {!currentCode && !isPending && (
@@ -496,9 +500,8 @@ export default function DataLabPage() {
             </div>
           )}
           
-          {/* Details Section (Code and Data Context) - Conditionally rendered and scrollable */}
           {showCode && (
-            <div className="flex flex-col space-y-2 overflow-y-auto flex-shrink-0 max-h-[calc(100%-300px-3rem-1.5rem-1rem)]"> {/* Adjust max-h based on your layout needs */}
+            <div className="flex flex-col space-y-2 overflow-y-auto flex-shrink-0 max-h-[calc(100%-300px-3rem-1.5rem-1rem)]">
               {currentCode && (
                 <div className="bg-gray-900 text-gray-300 p-3 rounded-lg">
                    <h4 className="text-sm font-semibold text-gray-200 mb-1">Generated D3 Code:</h4>

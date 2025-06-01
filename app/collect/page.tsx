@@ -25,11 +25,10 @@ interface SurveyQuestion {
 interface CollectResponse {
   message: string;
   error?: string;
-  limitReached?: boolean; // Added for consistency with other chat APIs
-  remainingRequests?: number; // Added for consistency
+  limitReached?: boolean;
+  remainingRequests?: number;
 }
 
-// Define the base system prompt template with a placeholder
 const BASE_SYSTEM_PROMPT_TEMPLATE = `
 You are an AI assistant specialized in creating custom surveys for the RandomPlayables platform.
 You help users design effective surveys, questionnaires, and data collection tools that can
@@ -54,14 +53,16 @@ Return your suggestions in a clear, structured format. If suggesting multiple qu
 number them and specify the question type for each.
 `;
 
-async function sendChatMessageToApi(message: string, chatHistory: ChatMessage[], editedSystemPromptWithPlaceholders: string | null) {
+// MODIFIED: Add useCodeReview parameter
+async function sendChatMessageToApi(message: string, chatHistory: ChatMessage[], editedSystemPromptWithPlaceholders: string | null, useCodeReview: boolean) {
   const response = await fetch("/api/collect/chat", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
       message,
-      chatHistory: chatHistory.map(m => ({ role: m.role, content: m.content })), // Send minimal history
-      customSystemPrompt: editedSystemPromptWithPlaceholders // This is the key change
+      chatHistory: chatHistory.map(m => ({ role: m.role, content: m.content })),
+      customSystemPrompt: editedSystemPromptWithPlaceholders,
+      useCodeReview // NEW: Send the code review flag
     })
   });
   return response.json();
@@ -80,7 +81,6 @@ async function createSurveyInApi(surveyData: {
   return response.json();
 }
 
-// Function to fetch Type A context data (games list)
 async function fetchCollectContextData() {
   const response = await fetch("/api/collect/context-data");
   if (!response.ok) {
@@ -110,8 +110,8 @@ export default function CollectPage() {
   const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(null);
   const [baseTemplateWithContext, setBaseTemplateWithContext] = useState<string | null>(null);
   const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(true);
+  const [useCodeReview, setUseCodeReview] = useState<boolean>(false); // NEW: State for code review
 
-  // Fetch Type A data (games list) and prepare initial system prompt
   const initializeSystemPrompt = useCallback(async () => {
     setIsLoadingSystemPrompt(true);
     try {
@@ -119,10 +119,9 @@ export default function CollectPage() {
       const gamesListString = JSON.stringify(contextData.games || [], null, 2);
       const initialPrompt = BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', gamesListString);
       setCurrentSystemPrompt(initialPrompt);
-      setBaseTemplateWithContext(initialPrompt); // Store this for "Reset to Default"
+      setBaseTemplateWithContext(initialPrompt);
     } catch (err) {
       console.error("Error fetching initial system prompt context:", err);
-      // Fallback if context API fails, use template with placeholder
       setCurrentSystemPrompt(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', 'Error: Could not load game list.'));
       setBaseTemplateWithContext(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', 'Error: Could not load game list.'));
     } finally {
@@ -144,8 +143,9 @@ export default function CollectPage() {
     "Build a questionnaire about puzzle-solving strategies"
   ];
 
-  const chatMutation = useMutation({
-    mutationFn: (message: string) => sendChatMessageToApi(message, messages, currentSystemPrompt),
+  // MODIFIED: Add useCodeReview to mutation variables type
+  const chatMutation = useMutation<CollectResponse, Error, { message: string, useCodeReview: boolean }>({
+    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, currentSystemPrompt, vars.useCodeReview), // MODIFIED: pass useCodeReview
     onSuccess: (data: CollectResponse) => {
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -178,7 +178,6 @@ export default function CollectPage() {
         setSurveyData(prev => ({
           ...prev,
           savedId: data.survey.id,
-          // Optionally clear title/description/questions if desired after saving
         }));
       } else {
          const assistantMessage: ChatMessage = {
@@ -214,7 +213,8 @@ export default function CollectPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
-    chatMutation.mutate(inputMessage);
+    // MODIFIED: Pass useCodeReview state to the mutation
+    chatMutation.mutate({ message: inputMessage, useCodeReview: useCodeReview });
     setInputMessage("");
   };
 
@@ -249,12 +249,12 @@ export default function CollectPage() {
     for (const line of lines) {
       if (line.match(/^\d+\.\s/)) {
         const text = line.replace(/^\d+\.\s/, '').trim();
-        if (text) { // Ensure question text is not empty
+        if (text) {
           extractedQuestions.push({
             questionId: Math.random().toString(36).substring(2, 9),
-            type: 'text', // Default type, user can change
+            type: 'text',
             text,
-            required: true // Default to required
+            required: true
           });
         }
       }
@@ -263,7 +263,7 @@ export default function CollectPage() {
     if (extractedQuestions.length > 0) {
       setSurveyData(prev => ({
         ...prev,
-        questions: [...prev.questions, ...extractedQuestions] // Append new questions
+        questions: [...prev.questions, ...extractedQuestions]
       }));
        const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -285,7 +285,6 @@ export default function CollectPage() {
     if (baseTemplateWithContext) {
       setCurrentSystemPrompt(baseTemplateWithContext);
     } else {
-      // Fallback if baseTemplateWithContext isn't ready, re-initialize
       initializeSystemPrompt();
     }
   };
@@ -358,12 +357,26 @@ export default function CollectPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
                 disabled={chatMutation.isPending}
               />
+              {/* NEW: Code Review Checkbox */}
+              <div className="flex items-center mt-1">
+                <input
+                  type="checkbox"
+                  id="useCodeReviewCollect"
+                  checked={useCodeReview}
+                  onChange={(e) => setUseCodeReview(e.target.checked)}
+                  className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                />
+                <label htmlFor="useCodeReviewCollect" className="ml-2 text-sm text-gray-700">
+                  Enable AI Review (experimental)
+                </label>
+              </div>
               <div className="flex justify-end">
                 <button
                   type="submit"
                   disabled={chatMutation.isPending}
                   className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
                 >
+                  {chatMutation.isPending ? <Spinner className="w-4 h-4 inline mr-1"/> : null}
                   Send
                 </button>
               </div>

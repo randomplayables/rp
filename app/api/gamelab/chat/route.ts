@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { currentUser } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/prisma"; // Import prisma
 import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection";
-import { 
-    getTemplateStructure, 
+import {
+    getTemplateStructure,
     fetchGameCodeExamplesForQuery,
 } from "./gamelabHelper";
 
-// New React + TypeScript example for the prompt
+// React + TypeScript example for the prompt (remains the same)
 const reactTsxExample = `
 // Example of a simple App.tsx component:
 import React, { useState, useEffect } from 'react';
@@ -95,6 +96,7 @@ const App: React.FC = () => {
 // in a main.tsx file.
 `;
 
+// Fallback System Prompt Template (remains the same)
 const FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE = `
 You are an AI game development assistant for RandomPlayables, a platform for mathematical citizen science games.
 Your goal is to help users create games using React and TypeScript. These games can be simple sketches runnable in our GameLab sandbox or more complete projects ready for deployment on RandomPlayables.com.
@@ -146,42 +148,121 @@ When responding:
 const openAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
+  defaultHeaders: {
+    "HTTP-Referer": process.env.NEXT_PUBLIC_BASE_URL || "https://randomplayables.com",
+    "X-Title": "randomplayables",
+  },
 });
 
-function createModelRequest(model: string, messages: any[]) {
-  return {
-    model: model,
-    messages: messages,
+// Helper function to call OpenAI API
+async function callOpenAIChat(modelName: string, messages: any[], customMaxTokens?: number) {
+  const max_tokens = customMaxTokens ?? (modelName.includes('o4-mini') ? 4000 : 2000);
+  const messagesForApi = messages.map(msg => {
+    if (typeof msg.content === 'string') {
+        if (modelName.startsWith("meta-llama/") || modelName.startsWith("deepseek/")) {
+            return { role: msg.role, content: msg.content };
+        }
+        return { role: msg.role, content: [{ type: "text", text: msg.content }] };
+    }
+    return msg;
+  });
+  
+  return openAI.chat.completions.create({
+    model: modelName,
+    messages: messagesForApi as any,
     temperature: 0.7,
-    max_tokens: model.includes('o4-mini') ? 4000 : 2000, // Adjusted based on your existing logic
-  };
+    max_tokens: max_tokens,
+  });
 }
+
+// Helper function to extract code and language from GameLab AI response
+function extractGameLabCodeFromResponse(aiResponseContent: string | null, defaultLanguage: string = "tsx"): { code: string; language: string; message_text: string } {
+  if (!aiResponseContent) {
+    return { code: "", language: defaultLanguage, message_text: "No content from AI." };
+  }
+
+  let code = "";
+  let language = defaultLanguage;
+  let message_text = aiResponseContent;
+
+  const codeBlockRegex = /```([a-zA-Z0-9+#-_]+)?\n([\s\S]*?)```/g;
+  const codeBlocks: Array<[string, string, string]> = []; // [fullMatch, lang, codeContent]
+  let match;
+  while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) {
+      codeBlocks.push([match[0], match[1] || '', match[2]]);
+  }
+
+  if (codeBlocks.length > 0) {
+      const tsxBlock = codeBlocks.find(block => ['tsx', 'typescript', 'jsx', 'javascript', 'react'].includes(block[1].toLowerCase()));
+      const htmlBlock = codeBlocks.find(block => block[1].toLowerCase() === 'html');
+      
+      let mainCodeBlock: [string, string, string] | undefined = tsxBlock || htmlBlock;
+
+      if (!mainCodeBlock) {
+        // If no specific tsx or html, pick the longest one
+        mainCodeBlock = codeBlocks.reduce((longest, current) => current[2].length > longest[2].length ? current : longest, codeBlocks[0]);
+      }
+      
+      language = mainCodeBlock[1].toLowerCase() || defaultLanguage;
+      if (['typescript', 'javascript', 'react'].includes(language) && !code.includes("<!DOCTYPE html>")) language = 'tsx'; // Normalize to tsx for React components
+      if (language === 'html' && mainCodeBlock[2].includes('<script type="text/babel">')) language = 'tsx';
+
+
+      code = mainCodeBlock[2].trim();
+      message_text = aiResponseContent;
+      for (const block of codeBlocks) {
+          // A more sophisticated removal might be needed if the AI includes text between code blocks
+          message_text = message_text.replace(block[0], `\n[Code for ${block[1] || 'file'} was generated]\n`);
+      }
+      message_text = message_text.trim();
+      if (!message_text) message_text = "Game code generated.";
+
+  } else { 
+      if ((aiResponseContent.includes("React.FC") || aiResponseContent.includes("useState") || aiResponseContent.includes("useEffect")) && (aiResponseContent.includes("const App") || aiResponseContent.includes("function App"))) {
+          code = aiResponseContent;
+          language = "tsx";
+          message_text = "Generated React/TypeScript component:";
+      } else if (aiResponseContent.includes("<!DOCTYPE html>")) {
+          code = aiResponseContent;
+          language = "html";
+          message_text = "Generated HTML content:";
+      } else if (aiResponseContent.length < 200 && !aiResponseContent.match(/<[^>]+>/) && !aiResponseContent.includes("import React")) { 
+          code = ""; 
+          message_text = aiResponseContent;
+      } else { 
+          code = aiResponseContent; // Fallback
+          language = defaultLanguage; // Assume default
+          message_text = "AI response (code extraction might be imperfect):";
+      }
+  }
+  return { code, language, message_text };
+}
+
 
 export async function POST(request: NextRequest) {
   try {
     const clerkUser = await currentUser();
-    if (!clerkUser) {
+    if (!clerkUser || !clerkUser.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { message: userQuery, chatHistory, customSystemPrompt } = await request.json();
+    // MODIFIED: Include useCodeReview
+    const { message: userQuery, chatHistory, customSystemPrompt, useCodeReview } = await request.json();
     
-    const { model, canUseApi, remainingRequests } = await getModelForUser(clerkUser.id);
-    
-    if (!canUseApi) {
-      return NextResponse.json({ 
-        error: "Monthly API request limit reached. Please upgrade your plan.", 
-        limitReached: true 
-      }, { status: 403 });
-    }
-    
+    const profile = await prisma.profile.findUnique({
+        where: { userId: clerkUser.id },
+        select: { subscriptionActive: true },
+    });
+    const isSubscribed = profile?.subscriptionActive || false;
+
+    // --- Prepare System Prompt (common logic) ---
+    const templateStructure = getTemplateStructure();
     const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery);
     const gameCodeExamplesString = Object.keys(querySpecificGameCodeExamples).length > 0
         ? JSON.stringify(querySpecificGameCodeExamples, null, 2)
         : "No specific game code examples match the query. Generic examples or templates may be used by the AI.";
 
     let finalSystemPrompt: string;
-
     if (customSystemPrompt && customSystemPrompt.trim() !== "") {
       finalSystemPrompt = customSystemPrompt.replace(
         '%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%',
@@ -189,7 +270,6 @@ export async function POST(request: NextRequest) {
       );
       if (finalSystemPrompt.includes('%%GAMELAB_TEMPLATE_STRUCTURES%%')) {
         console.warn("GameLab Chat API: Frontend-provided system prompt still contains %%GAMELAB_TEMPLATE_STRUCTURES%%. Resolving now.");
-        const templateStructure = getTemplateStructure();
         finalSystemPrompt = finalSystemPrompt.replace(
           '%%GAMELAB_TEMPLATE_STRUCTURES%%',
           JSON.stringify(templateStructure, null, 2)
@@ -197,96 +277,157 @@ export async function POST(request: NextRequest) {
       }
     } else {
       console.log("GameLab Chat API: No customSystemPrompt from frontend, using fallback.");
-      const templateStructure = getTemplateStructure();
       finalSystemPrompt = FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE
         .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', JSON.stringify(templateStructure, null, 2))
         .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString);
     }
+    // --- End System Prompt Preparation ---
+
+    let finalApiResponse: { message: string; code?: string; language?: string; remainingRequests?: number; };
     
-    const messagesToAI = [
-      { role: "system", content: finalSystemPrompt },
-      ...chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })),
-      { role: "user", content: userQuery }
+    const initialUserMessages = [
+        ...chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })),
+        { role: "user", content: userQuery }
     ];
+    const systemMessage = { role: "system", content: finalSystemPrompt };
+
+    if (useCodeReview) {
+      const chatbot1Model = isSubscribed ? "openai/o4-mini-high" : "meta-llama/llama-3.3-8b-instruct:free";
+      const chatbot2Model = isSubscribed ? "google/gemini-2.5-flash-preview-05-20" : "deepseek/deepseek-r1-0528:free";
+
+      // 1. Chatbot1 generates initial code
+      const messagesToChatbot1Initial = [systemMessage, ...initialUserMessages];
+      const response1 = await callOpenAIChat(chatbot1Model, messagesToChatbot1Initial);
+      const initialGenerationContent = response1.choices[0].message.content;
+      const { code: initialCode, language: initialLanguage, message_text: initialMessageText } = extractGameLabCodeFromResponse(initialGenerationContent);
+
+      if (!initialCode.trim()) {
+        finalApiResponse = {
+            message: `Chatbot1 (Model: ${chatbot1Model}) did not produce code in the first pass. Response: ${initialMessageText}`,
+            code: "",
+            language: initialLanguage,
+        };
+      } else {
+        // 2. Chatbot2 reviews the code
+        const reviewPrompt = `
+          You are an expert code reviewer for game development. Review the following game code generated by Chatbot1.
+          The game is intended for the RandomPlayables platform, often as a React/TypeScript sketch or a self-contained HTML file.
+          Please look for:
+          - Bugs, syntax errors, or logical errors.
+          - Adherence to the GameLab requirements (React+TS for sketches, self-contained HTML, use of #game-container, DOM event listeners, sandbox compatibility).
+          - Completeness of the code for its intended purpose (e.g., a full HTML file if requested, or a complete App.tsx).
+          - Potential issues when running in a sandboxed iframe.
+          - Clarity, efficiency, and best practices for web game development.
+
+          Provide concise and actionable feedback.
+
+          Original User Prompt to Chatbot1:
+          ---
+          ${userQuery}
+          ---
+
+          System Prompt used for Chatbot1:
+          ---
+          ${finalSystemPrompt}
+          ---
+
+          Code generated by Chatbot1 (Language: ${initialLanguage}):
+          ---
+          \`\`\`${initialLanguage}
+          ${initialCode}
+          \`\`\`
+          ---
+          Your review:
+        `;
+        const messagesToChatbot2 = [{ role: "user", content: reviewPrompt }];
+        const response2 = await callOpenAIChat(chatbot2Model, messagesToChatbot2);
+        const reviewFromChatbot2 = response2.choices[0].message.content || "No review feedback provided.";
+
+        // 3. Chatbot1 revises the code based on review
+        const revisionPrompt = `
+          You are an AI game development assistant. You generated the initial game code below.
+          Another AI (Chatbot2) has reviewed your code and provided feedback.
+          Please carefully consider the feedback and revise your original code to address the points raised.
+          Ensure the revised code still accurately addresses the original user prompt and adheres to ALL requirements in the original system prompt you received (e.g., React+TS for sketches, complete single HTML file, etc.).
+          Output ONLY the complete, revised code block. Do not include any other explanatory text or markdown formatting outside the code block.
+
+          Original User Prompt:
+          ---
+          ${userQuery}
+          ---
+
+          Original System Prompt You Followed:
+          ---
+          ${finalSystemPrompt}
+          ---
+
+          Your Initial Code (Language: ${initialLanguage}):
+          ---
+          \`\`\`${initialLanguage}
+          ${initialCode}
+          \`\`\`
+          ---
+
+          Chatbot2's Review of Your Code:
+          ---
+          ${reviewFromChatbot2}
+          ---
+
+          Your Revised Code (only the code block in the correct language, ${initialLanguage}):
+        `;
+        const messagesToChatbot1Revision = [
+          systemMessage,
+          { role: "user", content: revisionPrompt }
+        ];
+        const response3 = await callOpenAIChat(chatbot1Model, messagesToChatbot1Revision);
+        const revisedGenerationContent = response3.choices[0].message.content;
+        const { code: revisedCode, language: revisedLanguage, message_text: revisedMessageText } = extractGameLabCodeFromResponse(revisedGenerationContent, initialLanguage);
+        
+        finalApiResponse = {
+          message: `Code generated with review. Initial AI message: "${initialMessageText}". Review: "${reviewFromChatbot2}". Final AI message: "${revisedMessageText}"`,
+          code: revisedCode,
+          language: revisedLanguage,
+        };
+      }
+    } else {
+      // Original Flow (No Code Review)
+      const { model, canUseApi, remainingRequests: modelSelectionRemaining } = await getModelForUser(clerkUser.id);
     
-    const response = await openAI.chat.completions.create(
-      createModelRequest(model, messagesToAI as any)
-    );
+      if (!canUseApi) {
+        return NextResponse.json({ 
+          error: "Monthly API request limit reached. Please upgrade your plan.", 
+          limitReached: true 
+        }, { status: 403 });
+      }
+      
+      const messagesToAI = [systemMessage, ...initialUserMessages];
+      const response = await callOpenAIChat(model, messagesToAI);
+      const aiResponseContent = response.choices[0].message.content;
+      const { code, language, message_text } = extractGameLabCodeFromResponse(aiResponseContent);
+    
+      finalApiResponse = {
+        message: message_text,
+        code: code,
+        language: language,
+        remainingRequests: modelSelectionRemaining
+      };
+    }
 
     await incrementApiUsage(clerkUser.id);
+    const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
+    const remainingRequestsAfterIncrement = Math.max(0, (usageData?.monthlyLimit || 0) - (usageData?.usageCount || 0));
+    finalApiResponse.remainingRequests = remainingRequestsAfterIncrement;
     
-    const aiResponseContent = response.choices[0].message.content!;
-    let code = "";
-    // Default to tsx as per new guidelines
-    let language = "tsx"; 
-    let message_text = aiResponseContent;
-
-    // Enhanced code extraction logic (from original file, slight modification for tsx default)
-    const codeBlockRegex = /```([a-zA-Z0-9+#-_]+)?\n([\s\S]*?)```/g; // Allow hyphen in lang name e.g. react-typescript
-    const codeBlocks: Array<[string, string, string]> = [];
-    let match;
-    while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) {
-        codeBlocks.push([match[0], match[1] || '', match[2]]);
-    }
-
-    if (codeBlocks.length > 0) {
-        // Try to find the main App.tsx or a TSX/JSX block first
-        const tsxBlock = codeBlocks.find(block => ['tsx', 'typescript', 'jsx', 'javascript', 'react'].includes(block[1].toLowerCase()));
-        const mainCodeBlock = tsxBlock || codeBlocks.reduce((longest, current) => current[2].length > longest[2].length ? current : longest, codeBlocks[0]);
-        
-        language = mainCodeBlock[1].toLowerCase() || 'tsx'; // Default to tsx if language not specified
-        if (['typescript', 'javascript', 'react'].includes(language)) language = 'tsx'; // Normalize to tsx
-        if (language === 'html' && mainCodeBlock[2].includes('<script type="text/babel">')) language = 'tsx';
-
-
-        code = mainCodeBlock[2].trim();
-        // Remove identified code block(s) from message_text
-        // This needs to be more robust if multiple blocks are expected for a project structure
-        message_text = aiResponseContent;
-        for (const block of codeBlocks) {
-            message_text = message_text.replace(block[0], `\n[Code for ${block[1] || 'file'} was generated]\n`);
-        }
-        message_text = message_text.trim();
-
-    } else { 
-        // No ```code blocks``` found. Try to heuristically find React/TSX code.
-        // This is less reliable. The AI should be prompted to use markdown code blocks.
-        if ((aiResponseContent.includes("React.FC") || aiResponseContent.includes("useState") || aiResponseContent.includes("useEffect")) && (aiResponseContent.includes("const App") || aiResponseContent.includes("function App"))) {
-            code = aiResponseContent; // Assume the whole response is the App.tsx code
-            language = "tsx";
-            message_text = "Generated React/TypeScript component:";
-        } else if (aiResponseContent.includes("<!DOCTYPE html>")) { // Fallback for HTML if explicitly generated
-            code = aiResponseContent;
-            language = "html";
-            message_text = "Generated HTML content:";
-        }
-         // If still no specific code, and the response is short, it might be just a message.
-        else if (aiResponseContent.length < 200 && !aiResponseContent.match(/<[^>]+>/) && !aiResponseContent.includes("import React")) { 
-            code = ""; 
-            message_text = aiResponseContent;
-        } else { 
-            // Fallback: treat the whole response as code, default language to tsx
-            code = aiResponseContent;
-            language = "tsx";
-            message_text = "Here's the code I generated (assuming React/TSX):";
-        }
-    }
-    
-    // If the AI provides multiple files, it should be in the message_text,
-    // and the 'code' variable would contain the primary file (e.g., App.tsx).
-    // The prompt guides for this.
-
-    return NextResponse.json({
-      message: message_text,
-      code: code,
-      language: language, // Send detected or default language
-      remainingRequests
-    });
+    return NextResponse.json(finalApiResponse);
     
   } catch (error: any) {
     console.error("Error in GameLab chat:", error);
+    let errorDetails = error.message;
+    if (error.response && error.response.data && error.response.data.error) {
+        errorDetails = error.response.data.error.message || error.message;
+    }
     return NextResponse.json(
-      { error: "Failed to generate game code", details: error.message, stack: error.stack },
+      { error: "Failed to generate game code", details: errorDetails, stack: error.stack },
       { status: 500 }
     );
   }
