@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
 import { currentUser } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/prisma"; // Import prisma
+import { prisma } from "@/lib/prisma";
 import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection";
+import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService"; // Import shared functions
+import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
 
-// Default system prompt template (remains the same)
+
 const FALLBACK_SYSTEM_PROMPT_TEMPLATE = `
 You are an AI assistant specialized in creating custom surveys for the RandomPlayables platform.
 You help users design effective surveys, questionnaires, and data collection tools that can
@@ -31,43 +32,12 @@ Return your suggestions in a clear, structured format. If suggesting multiple qu
 number them and specify the question type for each.
 `;
 
-// Reusable function to fetch game data (Type A)
 async function fetchActiveGamesList() {
   await connectToDatabase();
   const games = await GameModel.find({}, {
     id: 1, name: 1, description: 1, _id: 0
   }).limit(10).lean();
   return games;
-}
-
-const openAI = new OpenAI({
-  apiKey: process.env.OPEN_ROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-  defaultHeaders: {
-    "HTTP-Referer": process.env.NEXT_PUBLIC_BASE_URL || "https://randomplayables.com",
-    "X-Title": "randomplayables",
-  },
-});
-
-// Helper function to call OpenAI API
-async function callOpenAIChat(modelName: string, messages: any[], customMaxTokens?: number) {
-  const max_tokens = customMaxTokens ?? (modelName.includes('o4-mini') ? 4000 : 2000);
-  const messagesForApi = messages.map(msg => {
-    if (typeof msg.content === 'string') {
-        if (modelName.startsWith("meta-llama/") || modelName.startsWith("deepseek/")) {
-            return { role: msg.role, content: msg.content };
-        }
-        return { role: msg.role, content: [{ type: "text", text: msg.content }] };
-    }
-    return msg;
-  });
-  
-  return openAI.chat.completions.create({
-    model: modelName,
-    messages: messagesForApi as any,
-    temperature: 0.7,
-    max_tokens: max_tokens,
-  });
 }
 
 export async function POST(request: NextRequest) {
@@ -77,52 +47,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // MODIFIED: Include useCodeReview
     const { message: userQuery, chatHistory, customSystemPrompt, useCodeReview } = await request.json();
-    
+
     const profile = await prisma.profile.findUnique({
         where: { userId: clerkUser.id },
         select: { subscriptionActive: true },
     });
     const isSubscribed = profile?.subscriptionActive || false;
-    
-    // --- Prepare System Prompt (common logic) ---
+
     let finalSystemPrompt: string;
-    // Fetch Type A data (games list) - common for both flows
     const games = await fetchActiveGamesList();
     const gamesListString = JSON.stringify(games, null, 2);
 
     if (customSystemPrompt && customSystemPrompt.trim() !== "") {
       finalSystemPrompt = customSystemPrompt;
       if (finalSystemPrompt.includes("%%AVAILABLE_GAMES_LIST%%")) {
-        console.warn("Collect Chat API: Frontend-provided system prompt still contains %%AVAILABLE_GAMES_LIST%%. Resolving now.");
         finalSystemPrompt = finalSystemPrompt.replace("%%AVAILABLE_GAMES_LIST%%", gamesListString);
       }
     } else {
-      console.log("Collect Chat API: No customSystemPrompt from frontend, using fallback template.");
       finalSystemPrompt = FALLBACK_SYSTEM_PROMPT_TEMPLATE.replace("%%AVAILABLE_GAMES_LIST%%", gamesListString);
     }
-    // --- End System Prompt Preparation ---
-    
+
     let finalApiResponse: { message: string; remainingRequests?: number; };
-    
-    const initialUserMessages = [
-        ...chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })),
+
+    const initialUserMessages: ChatCompletionMessageParam[] = [
+        ...(chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })) as ChatCompletionMessageParam[]),
         { role: "user", content: userQuery }
     ];
-    const systemMessage = { role: "system", content: finalSystemPrompt };
+    const systemMessage: ChatCompletionSystemMessageParam = { role: "system", content: finalSystemPrompt };
 
     if (useCodeReview) {
       const chatbot1Model = isSubscribed ? "openai/o4-mini-high" : "meta-llama/llama-3.3-8b-instruct:free";
       const chatbot2Model = isSubscribed ? "google/gemini-2.5-flash-preview-05-20" : "deepseek/deepseek-r1-0528:free";
 
-      // 1. Chatbot1 generates initial survey design
-      const messagesToChatbot1Initial = [systemMessage, ...initialUserMessages];
-      const response1 = await callOpenAIChat(chatbot1Model, messagesToChatbot1Initial);
-      const initialSurveyDesign = response1.choices[0].message.content || "Chatbot1 did not provide an initial survey design.";
-
-      // 2. Chatbot2 reviews the survey design
-      const reviewPrompt = `
+      const createReviewerPrompt = (initialSurveyDesign: string | null): string => `
         You are an expert survey design reviewer. Review the following survey design generated by Chatbot1.
         The survey is for the RandomPlayables platform and may involve game integrations.
         Please look for:
@@ -148,16 +106,12 @@ export async function POST(request: NextRequest) {
 
         Survey Design generated by Chatbot1:
         ---
-        ${initialSurveyDesign}
+        ${initialSurveyDesign || "Chatbot1 did not provide an initial survey design."}
         ---
         Your review:
       `;
-      const messagesToChatbot2 = [{ role: "user", content: reviewPrompt }];
-      const response2 = await callOpenAIChat(chatbot2Model, messagesToChatbot2);
-      const reviewFromChatbot2 = response2.choices[0].message.content || "No review feedback provided.";
 
-      // 3. Chatbot1 revises the survey design
-      const revisionPrompt = `
+      const createRevisionPrompt = (initialSurveyDesign: string | null, reviewFromChatbot2: string | null): string => `
         You are an AI assistant that generated the initial survey design below.
         Another AI (Chatbot2) has reviewed your design and provided feedback.
         Please carefully consider the feedback and revise your original survey design.
@@ -176,46 +130,48 @@ export async function POST(request: NextRequest) {
 
         Your Initial Survey Design:
         ---
-        ${initialSurveyDesign}
+        ${initialSurveyDesign || "No initial survey design was provided."}
         ---
 
         Chatbot2's Review of Your Design:
         ---
-        ${reviewFromChatbot2}
+        ${reviewFromChatbot2 || "No review feedback provided."}
         ---
 
         Your Revised Survey Design:
       `;
-      const messagesToChatbot1Revision = [
+
+      const reviewCycleOutputs: AiReviewCycleRawOutputs = await performAiReviewCycle(
+        chatbot1Model,
         systemMessage,
-        { role: "user", content: revisionPrompt }
-      ];
-      const response3 = await callOpenAIChat(chatbot1Model, messagesToChatbot1Revision);
-      const revisedSurveyDesign = response3.choices[0].message.content || initialSurveyDesign; // Fallback to initial if revision fails
+        initialUserMessages,
+        chatbot2Model,
+        createReviewerPrompt,
+        createRevisionPrompt
+      );
 
       finalApiResponse = {
-        message: revisedSurveyDesign,
-        // Add a note about the review process if desired, or just return the final design.
-        // For example: `// Survey design revised based on review.\n${revisedSurveyDesign}`
+        message: reviewCycleOutputs.chatbot1RevisionResponse.content ||
+                   reviewCycleOutputs.chatbot1InitialResponse.content ||
+                   "Could not generate a revised response.",
       };
 
     } else {
-      // Original Flow (No Code Review)
       const { model, canUseApi, remainingRequests: modelSelectionRemaining } = await getModelForUser(clerkUser.id);
-    
+
       if (!canUseApi) {
-        return NextResponse.json({ 
-          error: "Monthly API request limit reached. Please upgrade your plan for more requests.", 
-          limitReached: true 
+        return NextResponse.json({
+          error: "Monthly API request limit reached. Please upgrade your plan for more requests.",
+          limitReached: true
         }, { status: 403 });
       }
-      
-      const messagesToAI = [systemMessage, ...initialUserMessages];
+
+      const messagesToAI: ChatCompletionMessageParam[] = [systemMessage, ...initialUserMessages];
       const response = await callOpenAIChat(model, messagesToAI);
-      
+
       finalApiResponse = {
         message: response.choices[0].message.content || "Could not generate a response.",
-        remainingRequests: modelSelectionRemaining 
+        remainingRequests: modelSelectionRemaining
       };
     }
 
@@ -223,7 +179,7 @@ export async function POST(request: NextRequest) {
     const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
     const remainingRequestsAfterIncrement = Math.max(0, (usageData?.monthlyLimit || 0) - (usageData?.usageCount || 0));
     finalApiResponse.remainingRequests = remainingRequestsAfterIncrement;
-    
+
     return NextResponse.json(finalApiResponse);
 
   } catch (error: any) {
