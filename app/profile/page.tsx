@@ -9,8 +9,9 @@ import { availablePlans } from "@/lib/plans"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation";
 import UsageDisplay from './UsageDisplay'; 
+import GitHubConnectButton from '@/components/GitHubConnectButton'; // IMPORT THE NEW COMPONENT
 
-// Define types for the data we'll fetch
+// ... (keep existing interfaces: ProfileDetails, Payout) ...
 interface ProfileDetails {
     subscriptionTier: string | null;
     stripeSubscriptionId: string | null;
@@ -27,7 +28,7 @@ interface Payout {
     stripeTransferId?: string;
 }
 
-// Function to fetch full profile details (including Stripe Connect status)
+// ... (keep existing fetch functions: fetchProfileDetails, fetchPayoutHistory, updatePlan, unsubscribe) ...
 async function fetchProfileDetails(): Promise<{ profile: ProfileDetails } | null> {
     const response = await fetch("/api/profile/details");
     if (!response.ok) {
@@ -37,7 +38,6 @@ async function fetchProfileDetails(): Promise<{ profile: ProfileDetails } | null
     return response.json();
 }
 
-// Function to fetch payout history
 async function fetchPayoutHistory(): Promise<{ payouts: Payout[] }> {
     const response = await fetch("/api/profile/payouts"); 
     if (!response.ok) {
@@ -72,27 +72,26 @@ async function unsubscribe() {
     return response.json()
 }
 
+
 export default function Profile() {
     const [selectedPlan, setSelectedPlan] = useState<string>("") 
     const { isLoaded, isSignedIn, user } = useUser() 
     const queryClient = useQueryClient() 
     const router = useRouter() 
-    const [isDisconnectingStripe, setIsDisconnectingStripe] = useState(false); // New state for disconnect
+    const [isDisconnectingStripe, setIsDisconnectingStripe] = useState(false);
 
-    // Query for profile details (includes subscription and Stripe Connect status)
     const { data: profileData, isLoading: isLoadingProfile, isError: isProfileError, error: profileError, refetch: refetchProfileDetails } = useQuery({
         queryKey: ["profileDetails"],
         queryFn: fetchProfileDetails,
         enabled: isLoaded && isSignedIn,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 5 * 60 * 1000,
     });
 
-    // Query for payout history
     const { data: payoutHistoryData, isLoading: isLoadingPayouts, isError: isPayoutHistoryError, error: payoutHistoryError } = useQuery({
         queryKey: ["payoutHistory"],
         queryFn: fetchPayoutHistory,
-        enabled: isLoaded && isSignedIn && !!profileData?.profile.stripeConnectAccountId, // Only fetch if Stripe is connected
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        enabled: isLoaded && isSignedIn && !!profileData?.profile.stripeConnectAccountId,
+        staleTime: 5 * 60 * 1000,
     });
 
     const {
@@ -118,7 +117,7 @@ export default function Profile() {
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: ["profileDetails"]}) 
             toast.success("Unsubscribed successfully.");
-            refetchProfileDetails(); // Refetch to update UI, then redirect if needed
+            refetchProfileDetails(); 
             router.push("/subscribe");
         },
         onError: (e: Error) => {
@@ -171,10 +170,9 @@ export default function Profile() {
             const response = await fetch('/api/profile/stripe-disconnect', { method: 'POST' });
             const data = await response.json();
             toast.dismiss();
-
             if (response.ok && data.success) {
                 toast.success("Stripe account disconnected successfully!");
-                refetchProfileDetails(); // Refetch profile details to update the UI
+                refetchProfileDetails();
             } else {
                 toast.error(data.error || 'Failed to disconnect Stripe account.');
             }
@@ -187,16 +185,16 @@ export default function Profile() {
         }
     };
 
-    // Effect to check for Stripe setup completion from redirect
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('stripe_setup_complete') === 'true') {
             toast.success('Stripe account setup complete! Your payout information is being verified by Stripe.');
-            refetchProfileDetails(); // Refresh profile to get latest Stripe status
-            // Clean up URL by replacing the history state
+            refetchProfileDetails(); 
             router.replace('/profile', { scroll: false });
         }
-    }, [router, refetchProfileDetails]); // Added refetchProfileDetails to dependency array
+        // No need to explicitly handle github_connected here,
+        // GitHubConnectButton handles its own toast and state refresh.
+    }, [router, refetchProfileDetails]);
 
 
     if (!isLoaded || isLoadingProfile){ 
@@ -224,7 +222,6 @@ export default function Profile() {
           <div className="w-full max-w-5xl bg-white shadow-lg rounded-lg overflow-hidden">
             <div className="flex flex-col md:flex-row">
       
-              {/* Left: User Info */}
               <div className="w-full md:w-1/3 p-6 bg-emerald-500 text-white flex flex-col items-center text-center">
                 {user.imageUrl && (
                   <Image
@@ -256,7 +253,6 @@ export default function Profile() {
                 )}
               </div>
       
-              {/* Right: Details */}
               <div className="w-full md:w-2/3 p-6 bg-gray-50">
                 <h2 className="text-2xl font-bold mb-6 text-emerald-700">
                   Account Management
@@ -266,6 +262,11 @@ export default function Profile() {
                   <p className="text-red-500">Error loading profile: {(profileError as Error)?.message}</p>
                 ) : profile ? (
                   <div className="space-y-6">
+                    {/* GitHub Connection Section - ADD THIS */}
+                    <div className="mt-6">
+                        <GitHubConnectButton />
+                    </div>
+
                     {/* Subscription Management */}
                     <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
                       <h3 className="text-xl font-semibold mb-2 text-emerald-600">
@@ -299,7 +300,7 @@ export default function Profile() {
                               Select a New Plan
                             </option>
                             {availablePlans.map(plan => (
-                              plan.planType !== profile.subscriptionTier && // Don't show current plan as an option to change to
+                              plan.planType !== profile.subscriptionTier &&
                               <option key={plan.planType} value={plan.planType}>
                                 {plan.name} — ${plan.amount}/{plan.interval}
                               </option> 
@@ -369,7 +370,7 @@ export default function Profile() {
                                     <p>⚙️ Your Stripe account setup is in progress or requires more information from Stripe.</p>
                                     <p className="text-sm mt-1">You might need to complete identity verification or add/update bank details on Stripe.</p>
                                     <button
-                                        onClick={handleSetupPayouts} // This re-uses the onboarding link flow
+                                        onClick={handleSetupPayouts}
                                         className="mt-3 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
                                     >
                                         Continue Stripe Setup
@@ -389,8 +390,7 @@ export default function Profile() {
                         )}
                     </div>
 
-                    {/* Payout History */}
-                    {profile.stripeConnectAccountId && ( // Only show history if connected
+                    {profile.stripeConnectAccountId && (
                         <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
                             <h3 className="text-xl font-semibold mb-2 text-emerald-600">
                                 Payout History
@@ -417,7 +417,6 @@ export default function Profile() {
                         </div>
                     )}
 
-                    {/* Disconnect Stripe Account Section - NEW */}
                     {profile.stripeConnectAccountId && (
                         <div className="bg-white shadow-md rounded-lg p-4 border border-red-200 mt-6">
                             <h3 className="text-xl font-semibold mb-2 text-red-600">
@@ -441,7 +440,6 @@ export default function Profile() {
                         </div>
                     )}
       
-                    {/* API Usage */}
                     <div className="mt-6">
                       <UsageDisplay /> 
                     </div>
