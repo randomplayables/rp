@@ -1,52 +1,61 @@
-// models/RandomPayables.ts
 import mongoose, { Document, Model } from "mongoose";
 
 // Interface for contribution metrics
 export interface ContributionMetrics {
-  codeContributions: number;    // Points from code submissions
-  contentCreation: number;      // Points from games, visualizations created
-  communityEngagement: number;  // Points from forum participation
-  bugReports: number;           // Points from valid bug reports
-  totalPoints: number;          // Sum of all weighted points
+  codeContributions: number;
+  contentCreation: number;
+  communityEngagement: number;
+  bugReports: number;
+  githubRepoPoints: number;
+  totalPoints: number; // Represents "Other Category Points"
 }
 
-// Interface for user contribution records
-export interface IUserContribution extends Document {
-  userId: string;               // User ID from Clerk
-  username: string;             // Username for display
-  metrics: ContributionMetrics; // Contribution metrics
-  winProbability: number;       // Calculated probability of winning
-  winCount: number;             // Number of times user has won
-  lastCalculated: Date;         // Last time probability was calculated
-  createdAt: Date;              // Record creation date
-  updatedAt: Date;              // Record update date
-}
-
-// Interface for payout records
-export interface IPayoutRecord extends Document {
-  batchId: string;              // Unique ID for a payout batch
-  userId: string;               // User ID who received payment
-  username: string;             // Username of recipient
-  amount: number;               // Amount paid (in dollars)
-  probability: number;          // Probability at time of win
-  timestamp: Date;              // When the payout occurred
-  stripeTransferId?: string; // Add this
-  status?: 'completed' | 'failed' | 'requires_stripe_setup'; // Add this
-  stripeError?: string; // Add this
-}
-
-// Interface for payout configuration
-export interface IPayoutConfig extends Document {
-  totalPool: number;            // Total amount in the pool
-  batchSize: number;            // Dollars to distribute per batch
-  weights: {                    // Weights for different contribution types
-    codeWeight: number;         // Weight for code contributions
-    contentWeight: number;      // Weight for content creation
-    communityWeight: number;    // Weight for community engagement
-    bugReportWeight: number;    // Weight for bug reports
+// Base interface for Payout Configuration (plain object structure)
+export interface IPayoutConfigBase {
+  totalPool: number;
+  batchSize: number;
+  weights: {
+    codeWeight: number;
+    contentWeight: number;
+    communityWeight: number;
+    bugReportWeight: number;
   };
-  lastUpdated: Date;            // Last time config was updated
-  nextScheduledRun: Date;       // Next scheduled payout run
+  githubRepoDetails: {
+    owner: string;
+    repo: string;
+    pointsPerCommit: number;
+    pointsPerLineChanged: number;
+  };
+  lastUpdated: Date;
+  nextScheduledRun: Date;
+}
+
+// Mongoose Document interface for Payout Configuration
+export interface IPayoutConfig extends IPayoutConfigBase, Document {}
+
+// Interface for user contribution records (no changes needed here for this error set)
+export interface IUserContribution extends Document {
+  userId: string;
+  username: string;
+  metrics: ContributionMetrics;
+  winProbability: number;
+  winCount: number;
+  lastCalculated: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Interface for payout records (no changes needed here for this error set)
+export interface IPayoutRecord extends Document {
+  batchId: string;
+  userId: string;
+  username: string;
+  amount: number;
+  probability: number;
+  timestamp: Date;
+  stripeTransferId?: string;
+  status?: 'completed' | 'failed' | 'requires_stripe_setup';
+  stripeError?: string;
 }
 
 // Mongoose schema for user contributions
@@ -58,6 +67,7 @@ const UserContributionSchema = new mongoose.Schema({
     contentCreation: { type: Number, default: 0 },
     communityEngagement: { type: Number, default: 0 },
     bugReports: { type: Number, default: 0 },
+    githubRepoPoints: { type: Number, default: 0 },
     totalPoints: { type: Number, default: 0 }
   },
   winProbability: { type: Number, default: 0 },
@@ -75,13 +85,13 @@ const PayoutRecordSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   probability: { type: Number, required: true },
   timestamp: { type: Date, default: Date.now },
-  stripeTransferId: { type: String, index: true }, // Add this
-  status: { type: String, default: 'completed' }, // Add this
-  stripeError: { type: String }, // Add this
+  stripeTransferId: { type: String, index: true },
+  status: { type: String, default: 'completed' },
+  stripeError: { type: String },
 });
 
 // Mongoose schema for payout configuration
-const PayoutConfigSchema = new mongoose.Schema({
+const PayoutConfigSchemaDefinition = {
   totalPool: { type: Number, default: 0 },
   batchSize: { type: Number, default: 100 },
   weights: {
@@ -90,18 +100,26 @@ const PayoutConfigSchema = new mongoose.Schema({
     communityWeight: { type: Number, default: 0.5 },
     bugReportWeight: { type: Number, default: 0.3 }
   },
+  githubRepoDetails: {
+    owner: { type: String, default: "randomplayables" },
+    repo: { type: String, default: "rp" },
+    pointsPerCommit: { type: Number, default: 10 },
+    pointsPerLineChanged: { type: Number, default: 0.1 }
+  },
   lastUpdated: { type: Date, default: Date.now },
   nextScheduledRun: { type: Date }
-});
+};
+const PayoutConfigSchema = new mongoose.Schema(PayoutConfigSchemaDefinition);
+
 
 // Create the models
-export const UserContributionModel: Model<IUserContribution> = 
+export const UserContributionModel: Model<IUserContribution> =
   mongoose.models.UserContribution || mongoose.model<IUserContribution>("UserContribution", UserContributionSchema);
 
-export const PayoutRecordModel: Model<IPayoutRecord> = 
+export const PayoutRecordModel: Model<IPayoutRecord> =
   mongoose.models.PayoutRecord || mongoose.model<IPayoutRecord>("PayoutRecord", PayoutRecordSchema);
 
-export const PayoutConfigModel: Model<IPayoutConfig> = 
+export const PayoutConfigModel: Model<IPayoutConfig> =
   mongoose.models.PayoutConfig || mongoose.model<IPayoutConfig>("PayoutConfig", PayoutConfigSchema);
 
 export default { UserContributionModel, PayoutRecordModel, PayoutConfigModel };

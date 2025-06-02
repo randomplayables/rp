@@ -1,4 +1,3 @@
-// lib/payablesEngine.ts
 import { v4 as uuidv4 } from "uuid";
 import {
   UserContributionModel,
@@ -8,11 +7,11 @@ import {
   IUserContribution,
   IPayoutConfig
 } from "@/models/RandomPayables";
-import { prisma } from "@/lib/prisma"; // Import Prisma client
-import { stripe } from "@/lib/stripe"; // Import Stripe client
+import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
 
-// Default weights for contribution types
-const DEFAULT_WEIGHTS = {
+// Default weights for "other" contribution types (applied within the 40% bucket)
+const DEFAULT_OTHER_WEIGHTS = {
   codeWeight: 1.0,
   contentWeight: 0.8,
   communityWeight: 0.5,
@@ -20,116 +19,125 @@ const DEFAULT_WEIGHTS = {
 };
 
 /**
- * Calculate the total points for a user based on their metrics and weights
+ * Calculate the "Other Category" points for a user.
+ * These are points from non-GitHub repo contributions.
  */
-export function calculateTotalPoints(metrics: ContributionMetrics, weights: IPayoutConfig['weights']): number {
+export function calculateOtherCategoryPoints(metrics: ContributionMetrics, otherWeights: IPayoutConfig['weights']): number {
   return (
-    metrics.codeContributions * weights.codeWeight +
-    metrics.contentCreation * weights.contentWeight +
-    metrics.communityEngagement * weights.communityWeight +
-    metrics.bugReports * weights.bugReportWeight
+    metrics.codeContributions * otherWeights.codeWeight +
+    metrics.contentCreation * otherWeights.contentWeight +
+    metrics.communityEngagement * otherWeights.communityWeight +
+    metrics.bugReports * otherWeights.bugReportWeight
   );
 }
 
 /**
- * Calculate win probability for a single user
- */
-export function calculateWinProbability(userPoints: number, totalPointsAllUsers: number): number {
-  if (totalPointsAllUsers === 0) return 0;
-  return userPoints / totalPointsAllUsers;
-}
-
-/**
- * Update all user probabilities
- * This recalculates all users' total points and win probabilities
+ * Update all user probabilities.
+ * This recalculates final win probabilities based on the 60/40 split.
  */
 export async function updateAllProbabilities(): Promise<void> {
-  // Get the current configuration
-  const config = await PayoutConfigModel.findOne();
-  const weights = config?.weights || DEFAULT_WEIGHTS;
-  
-  // Get all user contributions
+  const config = await PayoutConfigModel.findOne().lean();
+  const otherWeights = config?.weights || DEFAULT_OTHER_WEIGHTS;
+
   const users = await UserContributionModel.find();
-  
-  // Calculate total points across all users
-  let totalPointsAllUsers = 0;
-  
-  // First pass: calculate total points for each user and sum them up
+  if (users.length === 0) return;
+
+  let totalGlobalGitHubRepoPoints = 0;
+  let totalGlobalOtherCategoryPoints = 0;
+
+  // First pass: Calculate OtherCategoryPoints for each user and sum up global totals
   for (const user of users) {
-    user.metrics.totalPoints = calculateTotalPoints(user.metrics, weights);
-    totalPointsAllUsers += user.metrics.totalPoints;
+    const otherCategoryPoints = calculateOtherCategoryPoints(user.metrics, otherWeights);
+    // Store this intermediate calculation in user.metrics.totalPoints for transparency/debugging
+    // This field now represents Points_OtherCategory
+    user.metrics.totalPoints = otherCategoryPoints;
+
+    totalGlobalGitHubRepoPoints += user.metrics.githubRepoPoints || 0;
+    totalGlobalOtherCategoryPoints += otherCategoryPoints;
   }
-  
-  // Second pass: calculate win probability for each user and save
+
+  // Second pass: Calculate final win probability for each user and save
   const updates = users.map(user => {
-    const winProbability = calculateWinProbability(user.metrics.totalPoints, totalPointsAllUsers);
+    let probFromGitHub = 0;
+    if (totalGlobalGitHubRepoPoints > 0 && (user.metrics.githubRepoPoints || 0) > 0) {
+      probFromGitHub = (user.metrics.githubRepoPoints || 0) / totalGlobalGitHubRepoPoints;
+    }
+
+    let probFromOther = 0;
+    if (totalGlobalOtherCategoryPoints > 0 && user.metrics.totalPoints > 0) {
+      probFromOther = user.metrics.totalPoints / totalGlobalOtherCategoryPoints;
+    }
+
+    let finalWinProbability: number;
+
+    // Determine effective weights for combining probabilities
+    const ghHasContributions = totalGlobalGitHubRepoPoints > 0;
+    const otherHasContributions = totalGlobalOtherCategoryPoints > 0;
+
+    if (ghHasContributions && otherHasContributions) {
+      finalWinProbability = (0.6 * probFromGitHub) + (0.4 * probFromOther);
+    } else if (ghHasContributions) { // Only GitHub contributions exist in the system
+      finalWinProbability = probFromGitHub;
+    } else if (otherHasContributions) { // Only "other" contributions exist
+      finalWinProbability = probFromOther;
+    } else { // No contributions of any kind, or only one user with no points
+      finalWinProbability = users.length > 0 ? 1 / users.length : 0;
+    }
     
+    // Ensure the sum of probabilities doesn't exceed 1 due to this combined approach
+    // This is naturally handled if individual probFromGitHub and probFromOther are correct.
+
     return UserContributionModel.updateOne(
       { _id: user._id },
-      { 
-        $set: { 
-          'metrics.totalPoints': user.metrics.totalPoints,
-          winProbability,
-          lastCalculated: new Date() 
-        } 
+      {
+        $set: {
+          'metrics.totalPoints': user.metrics.totalPoints, // This is Points_OtherCategory
+          winProbability: finalWinProbability,
+          lastCalculated: new Date()
+        }
       }
     );
   });
-  
-  // Execute all updates
+
   await Promise.all(updates);
+  console.log("All user win probabilities updated with 60/40 split logic.");
 }
 
-/**
- * Get a user's current win probability
- */
+
 export async function getUserWinProbability(userId: string): Promise<number> {
   const user = await UserContributionModel.findOne({ userId });
   if (!user) return 0;
-  
-  // Check if probability needs to be recalculated (older than 24 hours)
+
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   if (user.lastCalculated < twentyFourHoursAgo) {
+    console.log(`Win probability for ${user.username} is stale, recalculating all...`);
     await updateAllProbabilities();
     const updatedUser = await UserContributionModel.findOne({ userId });
     return updatedUser?.winProbability || 0;
   }
-  
+
   return user.winProbability;
 }
 
-/**
- * Run a simulation for a payout (for visualization purposes)
- */
 export async function simulatePayouts(amount: number): Promise<Array<{userId: string; username: string; dollars: number}>> {
-  // Get all users with their probabilities
   const users = await UserContributionModel.find().lean();
-  
-  // If no users, return empty array
   if (users.length === 0) return [];
-  
-  // Create output array to track how many dollars each user wins
+
   const results = users.map(user => ({
     userId: user.userId,
     username: user.username,
     dollars: 0
   }));
-  
-  // Distribute dollars one by one based on probabilities
+
   for (let i = 0; i < amount; i++) {
     const winnerIndex = weightedRandomSelection(users.map(u => u.winProbability));
     if (winnerIndex !== -1) {
       results[winnerIndex].dollars += 1;
     }
   }
-  
-  // Sort by dollars (highest first) and return
   return results.sort((a, b) => b.dollars - a.dollars);
 }
 
-/**
- * Execute a real payout and record the results
- */
 export async function executePayout(amount: number): Promise<string> {
   const config = await PayoutConfigModel.findOne();
   if (!config || config.totalPool < amount) {
@@ -138,70 +146,83 @@ export async function executePayout(amount: number): Promise<string> {
 
   const batchId = uuidv4();
   const users = await UserContributionModel.find();
-  if (users.length === 0) return batchId;
+  if (users.length === 0) {
+    console.log("No users found to execute payout.");
+    return batchId;
+  }
+  
+  console.log(`Starting payout execution for batch ${batchId} with amount $${amount}`);
 
   const payoutRecordsPromises = [];
   const stripeTransferPromises = [];
+  let successfulPayoutAmount = 0;
 
   for (let i = 0; i < amount; i++) {
     const winnerIndex = weightedRandomSelection(users.map(u => u.winProbability));
     if (winnerIndex !== -1) {
       const winner = users[winnerIndex];
+      console.log(`Dollar ${i+1}/${amount}: Winner selected - ${winner.username} (Prob: ${winner.winProbability.toFixed(6)})`);
 
-      // Fetch winner's Stripe Connect Account ID from Prisma
       const winnerProfile = await prisma.profile.findUnique({
         where: { userId: winner.userId },
-        select: { stripeConnectAccountId: true }
+        select: { stripeConnectAccountId: true, stripePayoutsEnabled: true }
       });
 
-      if (winnerProfile && winnerProfile.stripeConnectAccountId) {
-        // Create a Stripe Transfer
+      if (winnerProfile && winnerProfile.stripeConnectAccountId && winnerProfile.stripePayoutsEnabled) {
+        console.log(`  Attempting Stripe transfer to ${winnerProfile.stripeConnectAccountId} for ${winner.username}`);
         stripeTransferPromises.push(
           stripe.transfers.create({
-            amount: 100, // Amount in cents, so $1.00
+            amount: 100, // $1.00 in cents
             currency: "usd",
             destination: winnerProfile.stripeConnectAccountId,
-            transfer_group: batchId, // Group transfers by batch
-            description: `Random Playables Payout - Batch ${batchId}`,
-          }).then(transfer => {
-            // Payout record includes Stripe transfer ID for reconciliation
-            payoutRecordsPromises.push(
-              PayoutRecordModel.create({
-                batchId,
+            transfer_group: batchId,
+            description: `Random Playables Payout - Batch ${batchId} - User ${winner.username}`,
+            metadata: {
                 userId: winner.userId,
                 username: winner.username,
-                amount: 1, // $1
-                probability: winner.winProbability,
-                timestamp: new Date(),
-                stripeTransferId: transfer.id, // Store Stripe Transfer ID
-              })
-            );
-            // Update win count
-            return UserContributionModel.updateOne(
-              { userId: winner.userId },
-              { $inc: { winCount: 1 } }
-            );
-          }).catch(err => {
-            console.error(`Stripe transfer failed for user ${winner.userId}:`, err.message);
-            // Optionally, log this to a separate "failed_transfers" collection
-            // or handle retries. For now, we'll just log it.
+                batchId: batchId
+            }
+          }).then(transfer => {
+            console.log(`  Stripe transfer successful for ${winner.username}, Transfer ID: ${transfer.id}`);
+            successfulPayoutAmount += 1;
             payoutRecordsPromises.push(
-              PayoutRecordModel.create({ // Record as attempted but failed
+              PayoutRecordModel.create({
                 batchId,
                 userId: winner.userId,
                 username: winner.username,
                 amount: 1,
                 probability: winner.winProbability,
                 timestamp: new Date(),
-                status: 'failed', // Add a status field to your PayoutRecordModel
+                stripeTransferId: transfer.id,
+                status: 'completed',
+              })
+            );
+            return UserContributionModel.updateOne(
+              { userId: winner.userId },
+              { $inc: { winCount: 1 } }
+            );
+          }).catch(err => {
+            console.error(`  Stripe transfer FAILED for ${winner.username} (Stripe ID: ${winnerProfile.stripeConnectAccountId}):`, err.message);
+            payoutRecordsPromises.push(
+              PayoutRecordModel.create({
+                batchId,
+                userId: winner.userId,
+                username: winner.username,
+                amount: 1,
+                probability: winner.winProbability,
+                timestamp: new Date(),
+                status: 'failed',
                 stripeError: err.message,
               })
             );
           })
         );
       } else {
-        console.warn(`User <span class="math-inline">\{winner\.username\} \(</span>{winner.userId}) won but has no Stripe Connect account configured.`);
-        // Record as needing setup
+        let reason = "No Stripe Connect account configured.";
+        if (winnerProfile && winnerProfile.stripeConnectAccountId && !winnerProfile.stripePayoutsEnabled) {
+            reason = "Stripe account connected but payouts not enabled.";
+        }
+        console.warn(`  User ${winner.username} (${winner.userId}) won but payout cannot be processed: ${reason}`);
         payoutRecordsPromises.push(
            PayoutRecordModel.create({
               batchId,
@@ -210,71 +231,70 @@ export async function executePayout(amount: number): Promise<string> {
               amount: 1,
               probability: winner.winProbability,
               timestamp: new Date(),
-              status: 'requires_stripe_setup', // Add a status field
+              status: 'requires_stripe_setup',
            })
         );
       }
+    } else {
+        console.log(`Dollar ${i+1}/${amount}: No winner selected (total probability less than 1 or error).`);
     }
   }
 
-  // Wait for all Stripe transfers to be attempted and records to be prepared
   await Promise.allSettled(stripeTransferPromises);
   await Promise.all(payoutRecordsPromises);
+  console.log(`Payout execution for batch ${batchId} completed. Successfully transferred $${successfulPayoutAmount}.`);
 
+  if (successfulPayoutAmount > 0) {
+    await PayoutConfigModel.updateOne(
+      { _id: config._id },
+      {
+        $inc: { totalPool: -successfulPayoutAmount },
+        $set: { lastUpdated: new Date() }
+      }
+    );
+    console.log(`Updated totalPool. New pool size: ${config.totalPool - successfulPayoutAmount}`);
+  }
 
-  // Update the pool
-  await PayoutConfigModel.updateOne(
-    { _id: config._id },
-    {
-      $inc: { totalPool: -amount }, // This should reflect successfully transferred amounts
-      $set: { lastUpdated: new Date() }
-    }
-  );
 
   return batchId;
 }
 
-/**
- * Get a user's payout history
- */
-export async function getUserPayoutHistory(userId: string): Promise<{ 
-  totalAmount: number; 
-  recentPayouts: Array<{ amount: number; timestamp: Date }> 
+export async function getUserPayoutHistory(userId: string): Promise<{
+  totalAmount: number;
+  recentPayouts: Array<{ amount: number; timestamp: Date, status?: string, stripeTransferId?: string }>
 }> {
-  const payouts = await PayoutRecordModel.find({ userId }).sort({ timestamp: -1 }).limit(100);
-  
-  const totalAmount = payouts.reduce((sum, payout) => sum + payout.amount, 0);
-  
+  const payouts = await PayoutRecordModel.find({ userId })
+                    .sort({ timestamp: -1 })
+                    .limit(100)
+                    .lean(); // Use .lean() for performance if not modifying
+
+  const totalAmount = payouts.reduce((sum, payout) => payout.status === 'completed' ? sum + payout.amount : sum, 0);
+
   const recentPayouts = payouts.map(payout => ({
     amount: payout.amount,
-    timestamp: payout.timestamp
+    timestamp: payout.timestamp,
+    status: payout.status,
+    stripeTransferId: payout.stripeTransferId
   }));
-  
+
   return { totalAmount, recentPayouts };
 }
 
-/**
- * Utility function for weighted random selection
- * Returns the index of the selected item based on weights
- */
 function weightedRandomSelection(weights: number[]): number {
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-  
-  // If total weight is 0, return -1 (no selection)
-  if (totalWeight === 0) return -1;
-  
-  // Get a random number between 0 and totalWeight
-  const random = Math.random() * totalWeight;
-  
-  // Find the item that corresponds to this random point
-  let weightSum = 0;
+  const totalWeight = weights.reduce((sum, weight) => sum + (weight || 0), 0);
+  if (totalWeight <= 0) return -1; // Handle cases where no weights or all are zero
+
+  let random = Math.random() * totalWeight;
   for (let i = 0; i < weights.length; i++) {
-    weightSum += weights[i];
-    if (random < weightSum) {
+    if (random < (weights[i] || 0)) {
       return i;
     }
+    random -= (weights[i] || 0);
   }
-  
-  // Fallback in case of floating point issues
-  return weights.length - 1;
+  // Fallback, should ideally not be reached if totalWeight > 0
+  // Can happen with floating point inaccuracies if random is extremely close to totalWeight
+  // Or if weights array has issues.
+  // For safety, return the last index if it's a valid scenario, or -1 if something is wrong.
+  // Consider logging an anomaly if this path is hit frequently.
+  return weights.length > 0 ? weights.length -1 : -1;
 }

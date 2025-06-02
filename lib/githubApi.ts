@@ -1,10 +1,11 @@
-import { Octokit } from "octokit";
-import RepoCacheModel from "@/models/RepoCache";
+import { Octokit } from "@octokit/rest";
+import RepoCacheModel from "@/models/RepoCache"; // Assuming you might want to cache this too
 import { connectToDatabase } from "@/lib/mongodb";
+import GitHubIntegrationModel from "@/models/GitHubIntegration"; // To get githubUsername
 
 // Initialize the Octokit instance with token
 const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN
+  auth: process.env.GITHUB_TOKEN // This token needs read access to randomplayables/rp
 });
 
 // Define return type for rate limit function
@@ -30,6 +31,86 @@ export async function checkRateLimit(): Promise<RateLimit | null> {
   }
 }
 
+interface UserRepoActivity {
+  commits: number;
+  linesChanged: number;
+}
+
+/**
+ * Fetches the number of commits and total lines changed by a specific GitHub user in a given repository.
+ * @param owner The owner of the repository.
+ * @param repo The name of the repository.
+ * @param githubUsername The GitHub username of the contributor.
+ * @returns An object with commit count and total lines changed, or null if an error occurs.
+ */
+export async function fetchUserRepoActivity(owner: string, repo: string, githubUsername: string): Promise<UserRepoActivity | null> {
+  console.log(`Fetching GitHub activity for ${githubUsername} in ${owner}/${repo}`);
+  let commitCount = 0;
+  let totalLinesChanged = 0;
+
+  try {
+    // Ensure DB connection for potential caching or other operations if extended
+    await connectToDatabase();
+
+    // Note: @octokit/rest doesn't have the same paginate.iterator method as the meta package
+    // We'll implement pagination manually
+    let page = 1;
+    const perPage = 100;
+    let hasMoreCommits = true;
+
+    while (hasMoreCommits) {
+      const commitsResponse = await octokit.rest.repos.listCommits({
+        owner,
+        repo,
+        author: githubUsername,
+        per_page: perPage,
+        page: page,
+      });
+
+      const commitsData = commitsResponse.data;
+      
+      if (commitsData.length === 0) {
+        hasMoreCommits = false;
+        break;
+      }
+
+      commitCount += commitsData.length;
+      
+      for (const commitMeta of commitsData) {
+        try {
+          const { data: commitDetails } = await octokit.rest.repos.getCommit({
+            owner,
+            repo,
+            ref: commitMeta.sha,
+          });
+          if (commitDetails.stats) {
+            totalLinesChanged += commitDetails.stats.total || 0;
+          }
+        } catch (commitDetailError) {
+          console.error(`Error fetching details for commit ${commitMeta.sha}:`, commitDetailError);
+          // Continue to next commit if one fails
+        }
+      }
+
+      // If we got fewer commits than perPage, we've reached the end
+      if (commitsData.length < perPage) {
+        hasMoreCommits = false;
+      } else {
+        page++;
+      }
+    }
+
+    console.log(`Activity for ${githubUsername} in ${owner}/${repo}: ${commitCount} commits, ${totalLinesChanged} lines changed.`);
+    return { commits: commitCount, linesChanged: totalLinesChanged };
+
+  } catch (error) {
+    console.error(`Error fetching repository activity for user ${githubUsername} in ${owner}/${repo}:`, error);
+    return null; // Return null or specific error object as needed
+  }
+}
+
+
+// (Keep existing functions like fetchRepoContent, getRepoStructure, extractRepoInfo, getGameCode)
 // Define a generic type for fetched content
 type RepoContent = string | Array<{name: string; path: string; content: string}> | null;
 
@@ -38,10 +119,8 @@ export async function fetchRepoContent(owner: string, repo: string, path: string
   try {
     await connectToDatabase();
     
-    // Check cache first
     const cached = await RepoCacheModel.findOne({ owner, repo, path });
     
-    // If cache is recent (less than 1 day old), use it
     if (cached && (Date.now() - cached.lastUpdated.getTime() < 24 * 60 * 60 * 1000)) {
       console.log(`Using cached content for ${owner}/${repo}/${path}`);
       return cached.content;
@@ -49,7 +128,6 @@ export async function fetchRepoContent(owner: string, repo: string, path: string
     
     console.log(`Fetching content from GitHub for ${owner}/${repo}/${path}`);
     
-    // Fetch from GitHub
     const response = await octokit.rest.repos.getContent({
       owner,
       repo,
@@ -58,13 +136,10 @@ export async function fetchRepoContent(owner: string, repo: string, path: string
     
     let result: RepoContent = null;
     
-    // Handle directory vs file
     if (Array.isArray(response.data)) {
-      // This is a directory, process each item
       const contents: Array<{name: string; path: string; content: string}> = [];
       for (const item of response.data) {
         if (item.type === "file" && 
-            // Filter to relevant file types
             (item.name.endsWith('.js') || 
              item.name.endsWith('.ts') || 
              item.name.endsWith('.tsx') || 
@@ -72,7 +147,6 @@ export async function fetchRepoContent(owner: string, repo: string, path: string
              item.name.endsWith('.html') ||
              item.name.endsWith('.css'))) {
           try {
-            // Fetch the file content
             const fileContent = await fetchRepoContent(owner, repo, item.path);
             if (typeof fileContent === 'string') {
               contents.push({
@@ -88,8 +162,6 @@ export async function fetchRepoContent(owner: string, repo: string, path: string
       }
       result = contents;
     } else {
-      // This is a file or symlink, check for content property
-      // Use type assertion with check to safely access properties
       if ('content' in response.data && 'encoding' in response.data) {
         const file = response.data;
         if (file.content && file.encoding === 'base64') {
@@ -98,7 +170,6 @@ export async function fetchRepoContent(owner: string, repo: string, path: string
       }
     }
     
-    // Update cache
     if (cached) {
       await RepoCacheModel.updateOne(
         { owner, repo, path },
@@ -117,14 +188,12 @@ export async function fetchRepoContent(owner: string, repo: string, path: string
     return result;
   } catch (error) {
     console.error(`Error fetching repo content for ${owner}/${repo}/${path}:`, error);
-    // If there's an error but we have cached content, return that
     const cached = await RepoCacheModel.findOne({ owner, repo, path });
     if (cached) return cached.content;
     return null;
   }
 }
 
-// Define type for repository structure
 interface RepoStructure {
   repo: string;
   description: string | null;
@@ -132,10 +201,8 @@ interface RepoStructure {
   files: string[];
 }
 
-// Get repository structure
 export async function getRepoStructure(owner: string, repo: string): Promise<RepoStructure | null> {
   try {
-    // First check if we have a cached structure
     await connectToDatabase();
     const cached = await RepoCacheModel.findOne({ owner, repo, path: 'structure' });
     
@@ -146,7 +213,6 @@ export async function getRepoStructure(owner: string, repo: string): Promise<Rep
     
     console.log(`Fetching repository structure for ${owner}/${repo}`);
     
-    // Get the default branch
     const { data: repoData } = await octokit.rest.repos.get({
       owner,
       repo
@@ -154,7 +220,6 @@ export async function getRepoStructure(owner: string, repo: string): Promise<Rep
     
     const defaultBranch = repoData.default_branch;
     
-    // Get the tree of the default branch
     const { data: treeData } = await octokit.rest.git.getTree({
       owner,
       repo,
@@ -162,25 +227,23 @@ export async function getRepoStructure(owner: string, repo: string): Promise<Rep
       recursive: '1'
     });
     
-    // Filter to relevant files
     const relevantFiles = treeData.tree
       .filter(item => 
         item.type === 'blob' && 
-        (item.path.endsWith('.js') || 
-         item.path.endsWith('.ts') || 
-         item.path.endsWith('.tsx') || 
-         item.path.endsWith('.jsx') ||
-         item.path.endsWith('.html') ||
-         item.path.endsWith('.css')));
+        (item.path?.endsWith('.js') || 
+         item.path?.endsWith('.ts') || 
+         item.path?.endsWith('.tsx') || 
+         item.path?.endsWith('.jsx') ||
+         item.path?.endsWith('.html') ||
+         item.path?.endsWith('.css')));
     
     const structure: RepoStructure = {
       repo: repoData.name,
       description: repoData.description,
       defaultBranch,
-      files: relevantFiles.map(file => file.path)
+      files: relevantFiles.map(file => file.path).filter((path): path is string => !!path)
     };
     
-    // Update cache
     if (cached) {
       await RepoCacheModel.updateOne(
         { owner, repo, path: 'structure' },
@@ -205,13 +268,11 @@ export async function getRepoStructure(owner: string, repo: string): Promise<Rep
   }
 }
 
-// Type for repo info return value
 interface RepoInfo {
   owner: string | null;
   repo: string | null;
 }
 
-// Extract repo owner and name from GitHub URL
 export function extractRepoInfo(url: string): RepoInfo {
   if (!url || !url.includes('github.com')) {
     return { owner: null, repo: null };
@@ -223,7 +284,7 @@ export function extractRepoInfo(url: string): RepoInfo {
     
     if (repoIndex !== -1 && urlParts.length >= repoIndex + 3) {
       const owner = urlParts[repoIndex + 1];
-      const repo = urlParts[repoIndex + 2];
+      const repo = urlParts[repoIndex + 2].replace(/\.git$/, ''); // Remove .git if present
       return { owner, repo };
     }
   } catch (error) {
@@ -233,7 +294,6 @@ export function extractRepoInfo(url: string): RepoInfo {
   return { owner: null, repo: null };
 }
 
-// Type for game code return value
 interface GameCodeResult {
   game: {
     id: number;
@@ -251,15 +311,12 @@ interface GameCodeResult {
   types: Array<{name: string; path: string; content: string}>;
 }
 
-// Main function to get game code from a game
 export async function getGameCode(game: any): Promise<GameCodeResult | null> {
-  // Check if codeUrl exists
   if (!game?.codeUrl || !game.codeUrl.includes('github.com')) {
     console.log(`No GitHub URL found in codeUrl for game ${game?.name || 'unknown'}`);
     return null;
   }
   
-  // Extract repo info from codeUrl
   const { owner, repo } = extractRepoInfo(game.codeUrl);
   
   if (!owner || !repo) {
@@ -269,21 +326,23 @@ export async function getGameCode(game: any): Promise<GameCodeResult | null> {
   
   console.log(`Getting code for ${owner}/${repo} from game ${game.name}`);
   
-  // Get repository structure
   const structure = await getRepoStructure(owner, repo);
+  const packageJsonContent = await fetchRepoContent(owner, repo, 'package.json');
+  let packageJson = null;
+  if (typeof packageJsonContent === 'string') {
+    try {
+      packageJson = JSON.parse(packageJsonContent);
+    } catch (e) {
+      console.error("Failed to parse package.json", e);
+    }
+  }
   
-  // Fetch specific important files
-  const packageJson = await fetchRepoContent(owner, repo, 'package.json');
-  
-  // Get component examples
   const componentsResult = await fetchRepoContent(owner, repo, 'src/components');
   const components = Array.isArray(componentsResult) ? componentsResult : [];
   
-  // Get services for API integration
   const servicesResult = await fetchRepoContent(owner, repo, 'src/services');
   const services = Array.isArray(servicesResult) ? servicesResult : [];
   
-  // Get type definitions
   const typesResult = await fetchRepoContent(owner, repo, 'src/types');
   const types = Array.isArray(typesResult) ? typesResult : [];
   
