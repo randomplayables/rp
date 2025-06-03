@@ -6,6 +6,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import SurveyPreview from "./components/SurveyPreview";
 import QuestionEditor from "./components/QuestionEditor";
 import SaveInstrumentButton from './components/SaveInstrumentButton';
+import { useUser } from "@clerk/nextjs";
+import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -53,16 +55,24 @@ Return your suggestions in a clear, structured format. If suggesting multiple qu
 number them and specify the question type for each.
 `;
 
-// MODIFIED: Add useCodeReview parameter
-async function sendChatMessageToApi(message: string, chatHistory: ChatMessage[], editedSystemPromptWithPlaceholders: string | null, useCodeReview: boolean) {
+async function sendChatMessageToApi(
+    message: string,
+    chatHistory: ChatMessage[],
+    editedSystemPromptWithPlaceholders: string | null,
+    useCodeReview: boolean,
+    selectedCoderModelId?: string, // Renamed for clarity
+    selectedReviewerModelId?: string // New for reviewer model
+) {
   const response = await fetch("/api/collect/chat", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
       message,
-      chatHistory: chatHistory.map(m => ({ role: m.role, content: m.content })),
+      chatHistory: chatHistory.map((m: ChatMessage) => ({ role: m.role, content: m.content })),
       customSystemPrompt: editedSystemPromptWithPlaceholders,
-      useCodeReview // NEW: Send the code review flag
+      useCodeReview,
+      selectedCoderModelId, // Pass coder model
+      selectedReviewerModelId // Pass reviewer model
     })
   });
   return response.json();
@@ -110,7 +120,13 @@ export default function CollectPage() {
   const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(null);
   const [baseTemplateWithContext, setBaseTemplateWithContext] = useState<string | null>(null);
   const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(true);
-  const [useCodeReview, setUseCodeReview] = useState<boolean>(false); // NEW: State for code review
+  const [useCodeReview, setUseCodeReview] = useState<boolean>(false);
+
+  const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
+  const [selectedCoderModel, setSelectedCoderModel] = useState<string>(""); 
+  const [selectedReviewerModel, setSelectedReviewerModel] = useState<string>(""); // New state for reviewer model
+  const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   const initializeSystemPrompt = useCallback(async () => {
     setIsLoadingSystemPrompt(true);
@@ -122,8 +138,9 @@ export default function CollectPage() {
       setBaseTemplateWithContext(initialPrompt);
     } catch (err) {
       console.error("Error fetching initial system prompt context:", err);
-      setCurrentSystemPrompt(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', 'Error: Could not load game list.'));
-      setBaseTemplateWithContext(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', 'Error: Could not load game list.'));
+      const errorPromptText = 'Error: Could not load game list.';
+      setCurrentSystemPrompt(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', errorPromptText));
+      setBaseTemplateWithContext(BASE_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', errorPromptText));
     } finally {
       setIsLoadingSystemPrompt(false);
     }
@@ -132,6 +149,31 @@ export default function CollectPage() {
   useEffect(() => {
     initializeSystemPrompt();
   }, [initializeSystemPrompt]);
+
+  useEffect(() => {
+    async function fetchModelsForUser() {
+      if (isUserLoaded) {
+        setIsLoadingModels(true);
+        try {
+          let userIsSubscribed = false;
+          if (isSignedIn && user?.id) {
+            const profileResponse = await fetch(`/api/check-subscription?userId=${user.id}`);
+            if (profileResponse.ok) {
+              const profileData = await profileResponse.json();
+              userIsSubscribed = profileData?.subscriptionActive || false;
+            }
+          }
+          setAvailableModels(getAvailableModelsForUser(userIsSubscribed));
+        } catch (error) {
+          console.error("Failed to fetch available models for CollectPage:", error);
+          setAvailableModels(getAvailableModelsForUser(false));
+        } finally {
+          setIsLoadingModels(false);
+        }
+      }
+    }
+    fetchModelsForUser();
+  }, [isUserLoaded, isSignedIn, user]);
 
   const suggestedPrompts = [
     "Create a survey about player demographics",
@@ -143,9 +185,8 @@ export default function CollectPage() {
     "Build a questionnaire about puzzle-solving strategies"
   ];
 
-  // MODIFIED: Add useCodeReview to mutation variables type
-  const chatMutation = useMutation<CollectResponse, Error, { message: string, useCodeReview: boolean }>({
-    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, currentSystemPrompt, vars.useCodeReview), // MODIFIED: pass useCodeReview
+  const chatMutation = useMutation<CollectResponse, Error, { message: string, useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string }>({
+    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, currentSystemPrompt, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
     onSuccess: (data: CollectResponse) => {
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -177,7 +218,7 @@ export default function CollectPage() {
         setMessages(prev => [...prev, assistantMessage]);
         setSurveyData(prev => ({
           ...prev,
-          savedId: data.survey.id,
+          savedId: data.survey.id, // Assuming your API returns survey.id now
         }));
       } else {
          const assistantMessage: ChatMessage = {
@@ -213,8 +254,12 @@ export default function CollectPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
-    // MODIFIED: Pass useCodeReview state to the mutation
-    chatMutation.mutate({ message: inputMessage, useCodeReview: useCodeReview });
+    chatMutation.mutate({ 
+        message: inputMessage, 
+        useCodeReview: useCodeReview, 
+        selectedCoderModelId: selectedCoderModel || undefined,
+        selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined
+    });
     setInputMessage("");
   };
 
@@ -254,7 +299,7 @@ export default function CollectPage() {
             questionId: Math.random().toString(36).substring(2, 9),
             type: 'text',
             text,
-            required: true
+            required: true // Default to required
           });
         }
       }
@@ -285,20 +330,18 @@ export default function CollectPage() {
     if (baseTemplateWithContext) {
       setCurrentSystemPrompt(baseTemplateWithContext);
     } else {
-      initializeSystemPrompt();
+      initializeSystemPrompt(); // Re-initialize if base is not set
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-7xl flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
-        {/* Left Panel: Chat Interface */}
         <div className="w-full md:w-1/3 lg:w-1/3 flex flex-col h-[700px] bg-gray-50">
           <div className="p-4 bg-emerald-500 text-white">
             <h1 className="text-2xl font-bold">AI Survey Creator</h1>
             <p className="text-sm">Chat to create surveys with game integration</p>
           </div>
-
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-gray-500 text-center mt-8">
@@ -357,13 +400,72 @@ export default function CollectPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
                 disabled={chatMutation.isPending}
               />
-              {/* NEW: Code Review Checkbox */}
+              
+              <div className="mt-2">
+                <label htmlFor="modelSelectorCoderCollect" className="block text-xs font-medium text-gray-600">
+                  {useCodeReview ? "Coder Model" : "AI Model"} (Optional)
+                </label>
+                <select
+                  id="modelSelectorCoderCollect"
+                  value={selectedCoderModel}
+                  onChange={(e) => setSelectedCoderModel(e.target.value)}
+                  disabled={isLoadingModels || chatMutation.isPending}
+                  className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
+                >
+                  <option value="">-- Use Default --</option>
+                  {isLoadingModels ? (
+                    <option disabled>Loading models...</option>
+                  ) : availableModels.length === 0 ? (
+                     <option disabled>No models available.</option>
+                  ) : (
+                    availableModels.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {useCodeReview && (
+                <div className="mt-2">
+                  <label htmlFor="modelSelectorReviewerCollect" className="block text-xs font-medium text-gray-600">
+                    Reviewer Model (Optional)
+                  </label>
+                  <select
+                    id="modelSelectorReviewerCollect"
+                    value={selectedReviewerModel}
+                    onChange={(e) => setSelectedReviewerModel(e.target.value)}
+                    disabled={isLoadingModels || chatMutation.isPending}
+                    className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
+                  >
+                    <option value="">-- Use Default Peer --</option>
+                     {isLoadingModels ? (
+                       <option disabled>Loading models...</option>
+                     ) : availableModels.length === 0 ? (
+                       <option disabled>No models available.</option>
+                     ) : (
+                       availableModels.map(model => (
+                         <option key={model.id + "-reviewer"} value={model.id}>
+                           {model.name}
+                         </option>
+                       ))
+                     )}
+                  </select>
+                </div>
+              )}
+
               <div className="flex items-center mt-1">
                 <input
                   type="checkbox"
                   id="useCodeReviewCollect"
                   checked={useCodeReview}
-                  onChange={(e) => setUseCodeReview(e.target.checked)}
+                  onChange={(e) => {
+                      setUseCodeReview(e.target.checked);
+                      // Reset model selections when toggling code review to avoid invalid states
+                      setSelectedCoderModel(""); 
+                      setSelectedReviewerModel("");
+                  }}
                   className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                 />
                 <label htmlFor="useCodeReviewCollect" className="ml-2 text-sm text-gray-700">
@@ -420,89 +522,92 @@ export default function CollectPage() {
             </div>
           </form>
         </div>
-
-        {/* Right Panel: Survey Editor & Preview */}
         <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-emerald-700">Survey Builder</h2>
-            <div className="space-x-2">
-              <button
-                onClick={extractQuestions}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
-                title="Extract numbered questions from the last AI response"
-              >
-                Extract Questions
-              </button>
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
-              >
-                {showPreview ? 'Edit Survey' : 'Preview Survey'}
-              </button>
-              <button
-                onClick={() => createSurveyMutation.mutate(surveyData)}
-                disabled={surveyData.questions.length === 0 || !surveyData.title.trim() || createSurveyMutation.isPending}
-                className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 text-sm"
-              >
-                {createSurveyMutation.isPending ? 'Saving...' : 'Save & Share Survey'}
-              </button>
-              {surveyData.savedId && <SaveInstrumentButton surveyId={surveyData.savedId} />}
+             <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-emerald-700">Survey Builder</h2>
+                <div className="space-x-2">
+                  <button
+                    onClick={extractQuestions}
+                    className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                    title="Extract numbered questions from the last AI response"
+                  >
+                    Extract Questions
+                  </button>
+                  <button
+                    onClick={() => setShowPreview(!showPreview)}
+                    className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                  >
+                    {showPreview ? 'Edit Survey' : 'Preview Survey'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!surveyData.title.trim()) {
+                        alert("Survey title is required before saving.");
+                        return;
+                      }
+                      createSurveyMutation.mutate(surveyData);
+                    }}
+                    disabled={surveyData.questions.length === 0 || !surveyData.title.trim() || createSurveyMutation.isPending}
+                    className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 text-sm"
+                  >
+                    {createSurveyMutation.isPending ? 'Saving...' : 'Save & Share Survey'}
+                  </button>
+                  {surveyData.savedId && <SaveInstrumentButton surveyId={surveyData.savedId} />}
+                </div>
             </div>
-          </div>
-
-          {showPreview ? (
-            <SurveyPreview survey={surveyData} />
-          ) : (
-            <div className="bg-gray-50 rounded-lg p-4 max-h-[600px] overflow-y-auto">
-              <div className="mb-4">
-                <input
-                  type="text"
-                  value={surveyData.title}
-                  onChange={(e) => setSurveyData(prev => ({...prev, title: e.target.value}))}
-                  placeholder="Survey Title (Required)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
-                />
-                <textarea
-                  value={surveyData.description}
-                  onChange={(e) => setSurveyData(prev => ({...prev, description: e.target.value}))}
-                  placeholder="Survey Description (Optional)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-4">
-                {surveyData.questions.map((question, idx) => (
-                  <QuestionEditor
-                    key={question.questionId}
-                    questionId={question.questionId}
-                    initialData={question}
-                    onUpdate={handleQuestionUpdate}
-                    onDelete={handleQuestionDelete}
-                    index={idx}
-                  />
-                ))}
-
-                <button
-                  onClick={() => {
-                    const newQuestion = {
-                      questionId: Math.random().toString(36).substring(2, 9),
-                      type: 'text',
-                      text: '',
-                      required: true
-                    };
-                    setSurveyData(prev => ({
-                      ...prev,
-                      questions: [...prev.questions, newQuestion]
-                    }));
-                  }}
-                  className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-100"
-                >
-                  + Add Question
-                </button>
-              </div>
-            </div>
-          )}
+            {showPreview ? (
+              <SurveyPreview survey={surveyData} />
+            ) : (
+                <div className="bg-gray-50 rounded-lg p-4 max-h-[600px] overflow-y-auto">
+                    <div className="mb-4">
+                        <input
+                          type="text"
+                          value={surveyData.title}
+                          onChange={(e) => setSurveyData(prev => ({...prev, title: e.target.value}))}
+                          placeholder="Survey Title (Required)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
+                        />
+                        <textarea
+                          value={surveyData.description}
+                          onChange={(e) => setSurveyData(prev => ({...prev, description: e.target.value}))}
+                          placeholder="Survey Description (Optional)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          rows={3}
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        {surveyData.questions.map((question, idx) => (
+                            <QuestionEditor
+                              key={question.questionId}
+                              questionId={question.questionId}
+                              initialData={question}
+                              onUpdate={handleQuestionUpdate}
+                              onDelete={handleQuestionDelete}
+                              index={idx}
+                            />
+                        ))}
+                        <button
+                          onClick={() => {
+                            const newQuestion: SurveyQuestion = {
+                              questionId: Math.random().toString(36).substring(2, 9),
+                              type: 'text',
+                              text: '',
+                              options: [],
+                              gameId: '',
+                              required: true
+                            };
+                            setSurveyData(prev => ({
+                              ...prev,
+                              questions: [...prev.questions, newQuestion]
+                            }));
+                          }}
+                          className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-100"
+                        >
+                          + Add Question
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
       </div>
     </div>

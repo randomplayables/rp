@@ -5,8 +5,9 @@ import { useMutation } from "@tanstack/react-query";
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from 'd3';
 import SaveVisualizationButton from './components/SaveVisualizationButton';
+import { useUser } from "@clerk/nextjs";
+import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
 
-// Simple toast utility (can be replaced with a library like react-hot-toast)
 const toast = {
   error: (message: string) => { console.error("Toast (Error):", message); alert(`Error: ${message}`); },
   success: (message: string) => { console.log("Toast (Success):", message); alert(`Success: ${message}`); }
@@ -27,7 +28,6 @@ const AVAILABLE_DATA_TYPES_UI: DataTypeOption[] = [
   { id: "Sandbox", name: "Sandbox Data", description: "Data from GameLab's testing sandbox environment." },
 ];
 
-// Base System Prompt Template for DataLab (remains the same)
 const BASE_DATALAB_SYSTEM_PROMPT_TEMPLATE = `
 You are an AI assistant specialized in creating D3.js visualizations for a citizen science gaming platform.
 You have access to data from MongoDB and PostgreSQL based on the user's selection.
@@ -69,7 +69,7 @@ if (!sessions || sessions.length === 0) {
     .append("p")
     .style("text-align", "center")
     .text("No session data available for visualization based on your selection.");
-  return;
+  return; // IMPORTANT: return early if no data to prevent errors
 }
 
 const margin = {top: 20, right: 30, bottom: 40, left: 90};
@@ -88,14 +88,16 @@ function sanitizeD3Code(code: string): string {
   const withSafetyChecks = `
   try {
     if (!container) { console.error("D3 Render: Container element not found"); return; }
-    if (!d3) { console.error("D3 Render: D3 library not found"); d3.select(container).text("D3 library not available."); return; }
-    if (typeof dataContext === 'undefined') { console.error("D3 Render: dataContext is not defined."); d3.select(container).text("Data context not available."); return; }
+    if (!d3) { console.error("D3 Render: D3 library not found"); if(container) { d3.select(container).text("D3 library not available."); } return; }
+    if (typeof dataContext === 'undefined') { console.error("D3 Render: dataContext is not defined."); if(container) { d3.select(container).text("Data context not available."); } return; }
     ${fixedCode}
   } catch (error) {
     console.error("Error in D3 visualization:", error);
-    const vizContainer = d3.select(container || document.createElement('div'));
-    vizContainer.selectAll("*").remove();
-    vizContainer.append("div").style("color", "red").style("padding", "20px").style("text-align", "center").text("Error rendering D3: " + error.message);
+    if (container) {
+      const vizContainer = d3.select(container);
+      vizContainer.selectAll("*").remove(); // Clear previous content before showing error
+      vizContainer.append("div").style("color", "red").style("padding", "20px").style("text-align", "center").text("Error rendering D3: " + error.message);
+    }
   }`;
   return withSafetyChecks;
 }
@@ -117,7 +119,6 @@ interface DataLabApiResponse {
   remainingRequests?: number;
 }
 
-// Function to fetch Type A context data for DataLab
 async function fetchDatalabContextData() {
   const response = await fetch("/api/datalab/context-data");
   if (!response.ok) {
@@ -133,17 +134,21 @@ async function sendChatMessageToApi(
   chatHistory: ChatMessage[],
   editedSystemPromptWithPlaceholders: string | null,
   selectedDataTypes: string[],
-  useCodeReview: boolean // NEW parameter
+  useCodeReview: boolean,
+  selectedCoderModelId?: string,
+  selectedReviewerModelId?: string // Added reviewer
 ) {
   const response = await fetch("/api/datalab/chat", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
       message,
-      chatHistory: chatHistory.map(m => ({role: m.role, content: m.content})),
+      chatHistory: chatHistory.map((m: ChatMessage) => ({role: m.role, content: m.content})),
       customSystemPrompt: editedSystemPromptWithPlaceholders,
       selectedDataTypes,
-      useCodeReview // NEW: Send the code review flag
+      useCodeReview,
+      selectedCoderModelId,
+      selectedReviewerModelId // Pass both
     })
   });
   return response.json();
@@ -165,8 +170,16 @@ export default function DataLabPage() {
   const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(true);
 
   const [showDbAccessOptions, setShowDbAccessOptions] = useState(false);
-  const [selectedDataTypes, setSelectedDataTypes] = useState<string[]>([AVAILABLE_DATA_TYPES_UI[0].id]);
-  const [useCodeReview, setUseCodeReview] = useState<boolean>(false); // NEW: State for code review checkbox
+  const [selectedDataTypes, setSelectedDataTypes] = useState<string[]>(
+    AVAILABLE_DATA_TYPES_UI.length > 0 ? [AVAILABLE_DATA_TYPES_UI[0].id] : []
+  );
+  const [useCodeReview, setUseCodeReview] = useState<boolean>(false);
+
+  const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
+  const [selectedCoderModel, setSelectedCoderModel] = useState<string>("");
+  const [selectedReviewerModel, setSelectedReviewerModel] = useState<string>(""); // New
+  const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   const suggestedPrompts = [
     "Show me a bar chart of game sessions by date for the last 30 days",
@@ -219,9 +232,33 @@ export default function DataLabPage() {
     initializeSystemPrompt();
   }, [initializeSystemPrompt]);
 
-  // MODIFIED: Add useCodeReview to mutation variables type
-  const { mutate, isPending } = useMutation<DataLabApiResponse, Error, { message: string; chatHistory: ChatMessage[]; editedSystemPrompt: string | null; selectedDataTypes: string[]; useCodeReview: boolean }>({
-    mutationFn: (vars) => sendChatMessageToApi(vars.message, vars.chatHistory, vars.editedSystemPrompt, vars.selectedDataTypes, vars.useCodeReview), // MODIFIED: pass useCodeReview
+  useEffect(() => {
+    async function fetchModelsForUser() {
+      if (isUserLoaded) {
+        setIsLoadingModels(true);
+        try {
+          let userIsSubscribed = false;
+          if (isSignedIn && user?.id) {
+            const profileResponse = await fetch(`/api/check-subscription?userId=${user.id}`);
+             if (profileResponse.ok) {
+                const profileData = await profileResponse.json();
+                userIsSubscribed = profileData?.subscriptionActive || false;
+            }
+          }
+          setAvailableModels(getAvailableModelsForUser(userIsSubscribed));
+        } catch (error) {
+          console.error("Failed to fetch available models for DataLabPage:", error);
+          setAvailableModels(getAvailableModelsForUser(false));
+        } finally {
+          setIsLoadingModels(false);
+        }
+      }
+    }
+    fetchModelsForUser();
+  }, [isUserLoaded, isSignedIn, user]);
+
+  const { mutate, isPending } = useMutation<DataLabApiResponse, Error, { message: string; chatHistory: ChatMessage[]; editedSystemPrompt: string | null; selectedDataTypes: string[]; useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string }>({
+    mutationFn: (vars) => sendChatMessageToApi(vars.message, vars.chatHistory, vars.editedSystemPrompt, vars.selectedDataTypes, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
     onSuccess: (data: DataLabApiResponse) => {
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -236,13 +273,19 @@ export default function DataLabPage() {
         setCurrentCode(data.code);
         setCurrentDataContext(data.dataContext);
         renderD3Plot(data.code, data.dataContext);
-      } else if (data.code && !data.dataContext) {
-        setCurrentCode(data.code);
-        setCurrentDataContext(null);
-        renderD3Plot(data.code, null);
+      } else if (data.code && !data.dataContext) { // Case where code is text but no data context (e.g. explanation)
+        setCurrentCode(data.code); // Still set code for display
+        setCurrentDataContext(null); // Ensure data context is null
+        // Check if it's actual D3 code before trying to render
+        if (data.code.includes("d3.select") || data.code.includes("new Function")) {
+            renderD3Plot(data.code, null); // Attempt render, might show error if dataContext was essential
+        } else {
+            if (plotRef.current) d3.select(plotRef.current).selectAll("*").remove(); // Clear plot area
+        }
       } else if (data.error) {
          setVisualizationError(data.error);
          toast.error(data.error);
+         if (plotRef.current) d3.select(plotRef.current).selectAll("*").remove(); 
       }
       if (data.limitReached) {
           toast.error(data.error || "Monthly API request limit reached.");
@@ -252,10 +295,14 @@ export default function DataLabPage() {
       setMessages(prev => [...prev, {role: 'assistant', content: `Error: ${error.message}`, timestamp: new Date()}]);
       setVisualizationError("Failed to generate visualization: " + error.message);
       toast.error("Failed to generate visualization: " + error.message);
+      if (plotRef.current) d3.select(plotRef.current).selectAll("*").remove();
     }
   });
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (): void => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   useEffect(scrollToBottom, [messages]);
 
   const renderD3Plot = (code: string, dataCtx: any) => {
@@ -274,7 +321,9 @@ export default function DataLabPage() {
       const errorMessage = `Error rendering D3 plot: ${error instanceof Error ? error.message : 'Unknown error'}`;
       setVisualizationError(errorMessage);
       try {
-        d3.select(plotRef.current).append("div").style("color", "red").style("padding", "20px").style("text-align", "center").text(errorMessage);
+        if (plotRef.current) { // Check ref again before d3 select
+            d3.select(plotRef.current).append("div").style("color", "red").style("padding", "20px").style("text-align", "center").text(errorMessage);
+        }
       } catch (d3Error) { console.error("D3 Render (Error Display):", d3Error); }
     }
   };
@@ -289,8 +338,15 @@ export default function DataLabPage() {
 
     const userMessage: ChatMessage = { role: 'user', content: inputMessage, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
-    // MODIFIED: Pass useCodeReview state to the mutation
-    mutate({ message: inputMessage, chatHistory: messages, editedSystemPrompt: currentSystemPrompt, selectedDataTypes, useCodeReview });
+    mutate({ 
+        message: inputMessage, 
+        chatHistory: messages, 
+        editedSystemPrompt: currentSystemPrompt, 
+        selectedDataTypes, 
+        useCodeReview, 
+        selectedCoderModelId: selectedCoderModel || undefined,
+        selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined
+    });
     setInputMessage("");
   };
   
@@ -373,23 +429,86 @@ export default function DataLabPage() {
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isPending && inputMessage.trim()) handleSubmit(e); }}}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!isPending && inputMessage.trim()) handleSubmit(e);
+                  }
+                }}
                 placeholder="Ask about your data..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
                 disabled={isPending}
                 rows={3}
               />
-              {/* NEW: Code Review Checkbox */}
+              
+              <div className="mt-2">
+                <label htmlFor="modelSelectorCoderDataLab" className="block text-xs font-medium text-gray-600">
+                  {useCodeReview ? "Coder Model" : "AI Model"} (Optional)
+                </label>
+                <select
+                  id="modelSelectorCoderDataLab"
+                  value={selectedCoderModel}
+                  onChange={(e) => setSelectedCoderModel(e.target.value)}
+                  disabled={isLoadingModels || isPending}
+                  className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
+                >
+                  <option value="">-- Use Default --</option>
+                  {isLoadingModels ? (
+                    <option disabled>Loading models...</option>
+                  ) : availableModels.length === 0 ? (
+                     <option disabled>No models available.</option>
+                  ) : (
+                    availableModels.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {useCodeReview && (
+                <div className="mt-2">
+                  <label htmlFor="modelSelectorReviewerDataLab" className="block text-xs font-medium text-gray-600">
+                    Reviewer Model (Optional)
+                  </label>
+                  <select
+                    id="modelSelectorReviewerDataLab"
+                    value={selectedReviewerModel}
+                    onChange={(e) => setSelectedReviewerModel(e.target.value)}
+                    disabled={isLoadingModels || isPending}
+                    className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
+                  >
+                    <option value="">-- Use Default Peer --</option>
+                    {isLoadingModels ? (
+                      <option disabled>Loading models...</option>
+                    ) : availableModels.length === 0 ? (
+                      <option disabled>No models available.</option>
+                    ) : (
+                      availableModels.map(model => (
+                        <option key={model.id + "-reviewer"} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              )}
+
               <div className="flex items-center mt-2">
                 <input
                   type="checkbox"
-                  id="useCodeReview"
+                  id="useCodeReviewDataLab"
                   checked={useCodeReview}
-                  onChange={(e) => setUseCodeReview(e.target.checked)}
+                  onChange={(e) => {
+                      setUseCodeReview(e.target.checked);
+                      setSelectedCoderModel("");
+                      setSelectedReviewerModel("");
+                  }}
                   className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                 />
-                <label htmlFor="useCodeReview" className="ml-2 text-sm text-gray-700">
-                  Enable AI Code Review (experimental, may use more resources)
+                <label htmlFor="useCodeReviewDataLab" className="ml-2 text-sm text-gray-700">
+                  Enable AI Code Review (experimental)
                 </label>
               </div>
               <div className="flex justify-end">
@@ -486,7 +605,7 @@ export default function DataLabPage() {
                 Your D3.js visualization will appear here.
               </p>
             )}
-            {isPending && messages.length > 0 && (
+            {isPending && messages.length > 0 && ( // Show spinner only after first message if pending
                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 bg-opacity-75">
                     <Spinner className="h-10 w-10 mb-2"/>
                     <p className="text-gray-600 text-sm">Generating visualization...</p>
@@ -501,7 +620,7 @@ export default function DataLabPage() {
           )}
           
           {showCode && (
-            <div className="flex flex-col space-y-2 overflow-y-auto flex-shrink-0 max-h-[calc(100%-300px-3rem-1.5rem-1rem)]">
+            <div className="flex flex-col space-y-2 overflow-y-auto flex-shrink-0 max-h-[calc(100%-300px-3rem-1.5rem-1rem)]"> {/* Adjusted max-h */}
               {currentCode && (
                 <div className="bg-gray-900 text-gray-300 p-3 rounded-lg">
                    <h4 className="text-sm font-semibold text-gray-200 mb-1">Generated D3 Code:</h4>

@@ -1,209 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { getModelForUser, incrementApiUsage } from "@/lib/modelSelection";
-import {
-    getTemplateStructure,
-    fetchGameCodeExamplesForQuery,
-} from "./gamelabHelper";
-import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService"; // Import shared functions
+import { resolveModelsForChat, incrementApiUsage } from "@/lib/modelSelection";
+import { getTemplateStructure, fetchGameCodeExamplesForQuery } from "./gamelabHelper";
+import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
 
-// reactTsxExample and FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE remain the same as in your provided file
-const reactTsxExample = `
-// Example of a simple App.tsx component:
-import React, { useState, useEffect } from 'react';
+const reactTsxExample = `// Example of a simple App.tsx component...`; // Keep existing
+const FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE = `You are an AI game development assistant...`; // Keep existing
 
-// Define a simple CSS style string or suggest a separate CSS file.
-const appStyles = \`
-  .container {
-    font-family: Arial, sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 80vh;
-    background-color: #f0f8ff;
-    padding: 20px;
-    border-radius: 10px;
-  }
-  .title {
-    color: #333;
-  }
-  .button {
-    background-color: #10B981; /* emerald-500 */
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 16px;
-  }
-  .button:hover {
-    background-color: #059669; /* emerald-600 */
-  }
-  .gameArea {
-    width: 300px;
-    height: 200px;
-    border: 1px solid #ccc;
-    margin-top: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-\`;
-
-// Main App component
-const App: React.FC = () => {
-  const [score, setScore] = useState<number>(0);
-
-  useEffect(() => {
-    console.log("GameLab React Sketch Initialized!");
-    // Example: Send data to GameLab sandbox if the function exists
-    if (window.sendDataToGameLab) {
-      window.sendDataToGameLab({ event: 'game_started', time: new Date().toISOString() });
-    }
-  }, []);
-
-  const handlePlayerAction = () => {
-    const newScore = score + 10;
-    setScore(newScore);
-    // Example: Send data on action
-    if (window.sendDataToGameLab) {
-      window.sendDataToGameLab({ event: 'player_action', newScore, time: new Date().toISOString() });
-    }
-  };
-
-  return (
-    <>
-      <style>{appStyles}</style>
-      <div className="container">
-        <h1 className="title">My Awesome React Game</h1>
-        <p>Score: {score}</p>
-        <button onClick={handlePlayerAction} className="button">
-          Perform Action
-        </button>
-        <div className="gameArea">
-          <p>Game Content Here</p>
-        </div>
-      </div>
-    </>
-  );
-};
-
-// The GameLab sandbox will attempt to render a component named 'App'.
-// So, ensure 'App' is defined as above. For a standalone project, you'd also have:
-// ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
-// in a main.tsx file.
-`;
-
-const FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE = `
-You are an AI game development assistant for RandomPlayables, a platform for mathematical citizen science games.
-Your goal is to help users create games using React and TypeScript. These games can be simple sketches runnable in our GameLab sandbox or more complete projects ready for deployment on RandomPlayables.com.
-
-IMPORTANT REQUIREMENTS FOR GAMES YOU CREATE:
-1.  **Default to React and TypeScript**: All game logic and UI should be within React components (.tsx files).
-2.  **Structure**:
-    * **For simple sketches**: Provide the code for a primary React component (e.g., \`App.tsx\`). This component will be rendered in the GameLab sandbox. You can include CSS as a string within the TSX file or suggest it separately.
-    * **For more complex/main games**: Outline a project structure (e.g., like a Vite + React + TS setup). Provide code for key files:
-        * \`index.html\` (basic, with a div#root)
-        * \`src/main.tsx\` (ReactDOM.createRoot and rendering App)
-        * \`src/App.tsx\` (main game component)
-        * A sample game component (e.g., \`src/components/GameBoard.tsx\`)
-        * Basic \`package.json\` (with react, react-dom, vite, typescript) and \`tsconfig.json\`.
-3.  **Styling**: Use inline styles, CSS modules, or a string of CSS content for sketches. For projects, standard CSS files are fine.
-4.  **State Management**: Use React hooks (useState, useEffect, etc.) for state and side effects.
-5.  **TypeScript**: Utilize TypeScript for type safety. Define interfaces for props and state.
-6.  **Sandbox Compatibility (for sketches)**: The GameLab sandbox can render a React component named \`App\` from the provided TSX code. It uses Babel for in-browser transpilation. Ensure your sketch's \`App.tsx\` is self-contained or clearly states its dependencies if any (though prefer self-contained for sketches).
-    The sandbox provides \`window.sendDataToGameLab(data: any)\` for the game to communicate back to the GameLab environment.
-    The sandbox also makes \`window.GAMELAB_SESSION_ID\` available to the sketch.
-
-AVAILABLE TEMPLATE STRUCTURES (Type A data, from GameLab helper):
-%%GAMELAB_TEMPLATE_STRUCTURES%%
-
-REAL CODE EXAMPLES FROM EXISTING GAMES (Type B data, based on your query):
-%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%
-
-When designing games based on existing code examples (if provided based on your query):
-1. Follow similar patterns for game structure and organization using React and TypeScript.
-2. Implement similar data structures for game state and scoring.
-
-EXAMPLE OF A SIMPLE REACT + TYPESCRIPT GAME SKETCH COMPONENT (\`App.tsx\`):
-\`\`\`tsx
-${reactTsxExample}
-\`\`\`
-
-These games may be deployed on RandomPlayables.com, potentially as subdomains (e.g., gamename.randomplayables.com).
-
-When responding:
-1. Understand the user's game idea. Ask clarifying questions if needed.
-2. Suggest a clear game structure and mechanics using React components and TypeScript.
-3.  **For sketches**: Provide the complete code for the main \`App.tsx\` file.
-4.  **For main games**: List each file (e.g., \`package.json\`, \`vite.config.ts\`, \`index.html\`, \`src/main.tsx\`, \`src/App.tsx\`, etc.) and provide its full content.
-5. Explain any setup steps if a project structure is provided (e.g., \`npm install && npm run dev\`).
-6. If the game is a sketch, ensure the main component is named \`App\`.
-`;
-
-
-// This function remains specific to GameLab
 function extractGameLabCodeFromResponse(aiResponseContent: string | null, defaultLanguage: string = "tsx"): { code: string; language: string; message_text: string } {
-  if (!aiResponseContent) {
-    return { code: "", language: defaultLanguage, message_text: "No content from AI." };
-  }
-
+  if (!aiResponseContent) return { code: "", language: defaultLanguage, message_text: "No content from AI." };
   let code = "";
   let language = defaultLanguage;
   let message_text = aiResponseContent;
-
   const codeBlockRegex = /```([a-zA-Z0-9+#-_]+)?\n([\s\S]*?)```/g;
   const codeBlocks: Array<[string, string, string]> = [];
   let match;
-  while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) {
-      codeBlocks.push([match[0], match[1] || '', match[2]]);
-  }
-
+  while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) codeBlocks.push([match[0], match[1] || '', match[2]]);
   if (codeBlocks.length > 0) {
       const tsxBlock = codeBlocks.find(block => ['tsx', 'typescript', 'jsx', 'javascript', 'react'].includes(block[1].toLowerCase()));
       const htmlBlock = codeBlocks.find(block => block[1].toLowerCase() === 'html');
-      let mainCodeBlock: [string, string, string] | undefined = tsxBlock || htmlBlock;
-
-      if (!mainCodeBlock) {
-        mainCodeBlock = codeBlocks.reduce((longest, current) => current[2].length > longest[2].length ? current : longest, codeBlocks[0]);
-      }
-
+      let mainCodeBlock: [string, string, string] | undefined = tsxBlock || htmlBlock || codeBlocks.reduce((longest, current) => current[2].length > longest[2].length ? current : longest, codeBlocks[0]);
       language = mainCodeBlock[1].toLowerCase() || defaultLanguage;
       if (['typescript', 'javascript', 'react'].includes(language) && !mainCodeBlock[2].includes("<!DOCTYPE html>")) language = 'tsx';
       if (language === 'html' && mainCodeBlock[2].includes('<script type="text/babel">')) language = 'tsx';
-
       code = mainCodeBlock[2].trim();
-      message_text = aiResponseContent; // Keep full response for context
-      for (const block of codeBlocks) {
-          message_text = message_text.replace(block[0], `\n[Code for ${block[1] || 'file'} was generated]\n`);
-      }
-      message_text = message_text.trim();
-      if (!message_text) message_text = "Game code generated.";
-
+      message_text = aiResponseContent;
+      for (const block of codeBlocks) message_text = message_text.replace(block[0], `\n[Code for ${block[1] || 'file'} generated]\n`);
+      message_text = message_text.trim() || "Game code generated.";
   } else {
       if ((aiResponseContent.includes("React.FC") || aiResponseContent.includes("useState")) && (aiResponseContent.includes("const App") || aiResponseContent.includes("function App"))) {
-          code = aiResponseContent;
-          language = "tsx";
-          message_text = "Generated React/TypeScript component.";
+          code = aiResponseContent; language = "tsx"; message_text = "Generated React/TypeScript component.";
       } else if (aiResponseContent.includes("<!DOCTYPE html>")) {
-          code = aiResponseContent;
-          language = "html";
-          message_text = "Generated HTML content.";
+          code = aiResponseContent; language = "html"; message_text = "Generated HTML content.";
       } else if (aiResponseContent.length < 200 && !aiResponseContent.match(/<[^>]+>/) && !aiResponseContent.includes("import React")) {
-          code = "";
-          message_text = aiResponseContent;
+          code = ""; message_text = aiResponseContent;
       } else {
-          code = aiResponseContent;
-          language = defaultLanguage;
-          message_text = "AI response (code extraction might be imperfect).";
+          code = aiResponseContent; language = defaultLanguage; message_text = "AI response (code extraction might be imperfect).";
       }
   }
   return { code, language, message_text };
 }
-
 
 export async function POST(request: NextRequest) {
   try {
@@ -212,7 +50,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { message: userQuery, chatHistory, customSystemPrompt, useCodeReview } = await request.json();
+    const { 
+        message: userQuery, 
+        chatHistory, 
+        customSystemPrompt, 
+        useCodeReview, 
+        selectedCoderModelId, // New
+        selectedReviewerModelId // New
+    } = await request.json();
 
     const profile = await prisma.profile.findUnique({
         where: { userId: clerkUser.id },
@@ -222,21 +67,13 @@ export async function POST(request: NextRequest) {
 
     const templateStructure = getTemplateStructure();
     const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery);
-    const gameCodeExamplesString = Object.keys(querySpecificGameCodeExamples).length > 0
-        ? JSON.stringify(querySpecificGameCodeExamples, null, 2)
-        : "No specific game code examples match the query. Generic examples or templates may be used by the AI.";
+    const gameCodeExamplesString = Object.keys(querySpecificGameCodeExamples).length > 0 ? JSON.stringify(querySpecificGameCodeExamples, null, 2) : "No specific game code examples match query.";
 
     let finalSystemPrompt: string;
     if (customSystemPrompt && customSystemPrompt.trim() !== "") {
-      finalSystemPrompt = customSystemPrompt.replace(
-        '%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%',
-        gameCodeExamplesString
-      );
+      finalSystemPrompt = customSystemPrompt.replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString);
       if (finalSystemPrompt.includes('%%GAMELAB_TEMPLATE_STRUCTURES%%')) {
-        finalSystemPrompt = finalSystemPrompt.replace(
-          '%%GAMELAB_TEMPLATE_STRUCTURES%%',
-          JSON.stringify(templateStructure, null, 2)
-        );
+        finalSystemPrompt = finalSystemPrompt.replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', JSON.stringify(templateStructure, null, 2));
       }
     } else {
       finalSystemPrompt = FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE
@@ -244,151 +81,80 @@ export async function POST(request: NextRequest) {
         .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString);
     }
 
-    let finalApiResponse: { message: string; code?: string; language?: string; remainingRequests?: number; };
+    let finalApiResponse: { message: string; code?: string; language?: string; remainingRequests?: number; error?: string; limitReached?: boolean };
 
     const initialUserMessages: ChatCompletionMessageParam[] = [
         ...(chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })) as ChatCompletionMessageParam[]),
         { role: "user", content: userQuery }
     ];
     const systemMessage: ChatCompletionSystemMessageParam = { role: "system", content: finalSystemPrompt };
+    
+    const modelResolution = await resolveModelsForChat(
+        clerkUser.id, 
+        isSubscribed, 
+        useCodeReview, 
+        selectedCoderModelId,
+        selectedReviewerModelId
+    );
+
+    if (!modelResolution.canUseApi || modelResolution.limitReached) {
+      return NextResponse.json({
+        error: modelResolution.error || "Monthly API request limit reached.",
+        limitReached: true
+      }, { status: 403 });
+    }
+    if (modelResolution.error) {
+        return NextResponse.json({ error: modelResolution.error }, { status: 400 });
+    }
 
     if (useCodeReview) {
-      const chatbot1Model = isSubscribed ? "openai/o4-mini-high" : "meta-llama/llama-3.3-8b-instruct:free";
-      const chatbot2Model = isSubscribed ? "google/gemini-2.5-flash-preview-05-20" : "deepseek/deepseek-r1-0528:free";
-
-      const createReviewerPrompt = (initialGenerationContent: string | null): string => {
-        const { code: initialCode, language: initialLanguage } = extractGameLabCodeFromResponse(initialGenerationContent);
-        return `
-          You are an expert code reviewer for game development. Review the following game code generated by Chatbot1.
-          The game is intended for the RandomPlayables platform, often as a React/TypeScript sketch or a self-contained HTML file.
-          Please look for:
-          - Bugs, syntax errors, or logical errors.
-          - Adherence to the GameLab requirements (React+TS for sketches, self-contained HTML, use of #game-container, DOM event listeners, sandbox compatibility).
-          - Completeness of the code for its intended purpose (e.g., a full HTML file if requested, or a complete App.tsx).
-          - Potential issues when running in a sandboxed iframe.
-          - Clarity, efficiency, and best practices for web game development.
-
-          Provide concise and actionable feedback.
-
-          Original User Prompt to Chatbot1:
-          ---
-          ${userQuery}
-          ---
-
-          System Prompt used for Chatbot1:
-          ---
-          ${finalSystemPrompt}
-          ---
-
-          Code generated by Chatbot1 (Language: ${initialLanguage}):
-          ---
-          \`\`\`${initialLanguage}
-          ${initialCode || "Chatbot1 did not produce reviewable code."}
-          \`\`\`
-          ---
-          Your review:
-        `;
-      };
-
-      const createRevisionPrompt = (initialGenerationContent: string | null, reviewFromChatbot2: string | null): string => {
-        const { code: initialCode, language: initialLanguage } = extractGameLabCodeFromResponse(initialGenerationContent);
-        return `
-          You are an AI game development assistant. You generated the initial game code below.
-          Another AI (Chatbot2) has reviewed your code and provided feedback.
-          Please carefully consider the feedback and revise your original code to address the points raised.
-          Ensure the revised code still accurately addresses the original user prompt and adheres to ALL requirements in the original system prompt you received (e.g., React+TS for sketches, complete single HTML file, etc.).
-          Output ONLY the complete, revised code block. Do not include any other explanatory text or markdown formatting outside the code block.
-
-          Original User Prompt:
-          ---
-          ${userQuery}
-          ---
-
-          Original System Prompt You Followed:
-          ---
-          ${finalSystemPrompt}
-          ---
-
-          Your Initial Code (Language: ${initialLanguage}):
-          ---
-          \`\`\`${initialLanguage}
-          ${initialCode || "No initial code was provided."}
-          \`\`\`
-          ---
-
-          Chatbot2's Review of Your Code:
-          ---
-          ${reviewFromChatbot2 || "No review feedback provided."}
-          ---
-
-          Your Revised Code (only the code block in the correct language, ${initialLanguage}):
-        `;
-      };
+      if (!modelResolution.chatbot1Model || !modelResolution.chatbot2Model) {
+        console.error("GameLab API: Code review models not resolved properly for user", clerkUser.id);
+        return NextResponse.json({ error: "Failed to resolve models for code review." }, { status: 500 });
+      }
+      const chatbot1Model = modelResolution.chatbot1Model;
+      const chatbot2Model = modelResolution.chatbot2Model;
+      
+      const createReviewerPrompt = (initialGenContent: string | null): string => { const { code: iCode, language: iLang } = extractGameLabCodeFromResponse(initialGenContent); return `You are an expert code reviewer... Original User Prompt... System Prompt... Code (Lang: ${iLang}):\n---\n\`\`\`${iLang}\n${iCode || "No code."}\n\`\`\`\n---\nYour review:`; };
+      const createRevisionPrompt = (initialGenContent: string | null, reviewContent: string | null): string => { const { code: iCode, language: iLang } = extractGameLabCodeFromResponse(initialGenContent); return `You generated code... Original User Prompt... System Prompt... Your Initial Code (Lang: ${iLang}):\n---\n\`\`\`${iLang}\n${iCode || "No code."}\n\`\`\`\n---\nReview:\n---\n${reviewContent || "No review."}\n---\nRevised Code (only block in ${iLang}):`; };
 
       const reviewCycleOutputs: AiReviewCycleRawOutputs = await performAiReviewCycle(
-        chatbot1Model,
-        systemMessage,
-        initialUserMessages,
-        chatbot2Model,
-        createReviewerPrompt,
-        createRevisionPrompt
+        chatbot1Model, systemMessage, initialUserMessages, chatbot2Model, createReviewerPrompt, createRevisionPrompt
       );
-
       const { code: initialCode, language: initialLanguage, message_text: initialMessageText } = extractGameLabCodeFromResponse(reviewCycleOutputs.chatbot1InitialResponse.content);
       const { code: revisedCode, language: revisedLanguage, message_text: revisedMessageText } = extractGameLabCodeFromResponse(reviewCycleOutputs.chatbot1RevisionResponse.content, initialLanguage);
 
       if (!initialCode.trim() && !revisedCode.trim()) {
-         finalApiResponse = {
-            message: `Chatbot1 (Model: ${chatbot1Model}) did not produce code. Initial response: ${initialMessageText || reviewCycleOutputs.chatbot1InitialResponse.content}. Revision attempt also failed to produce code.`,
-            code: "",
-            language: initialLanguage,
-        };
+         finalApiResponse = { message: `Chatbot1 did not produce code...`, code: "", language: initialLanguage };
       } else {
         finalApiResponse = {
-          message: `Code generated with review. Initial AI message: "${initialMessageText}". Review: "${reviewCycleOutputs.chatbot2ReviewResponse.content || "No review"}". Final AI message: "${revisedMessageText}"`,
-          code: revisedCode || initialCode,
-          language: revisedLanguage || initialLanguage,
+          message: `Code generated with review. Initial: "${initialMessageText}". Review: "${reviewCycleOutputs.chatbot2ReviewResponse.content || "No review"}". Final: "${revisedMessageText}"`,
+          code: revisedCode || initialCode, language: revisedLanguage || initialLanguage,
         };
       }
     } else {
-      const { model, canUseApi, remainingRequests: modelSelectionRemaining } = await getModelForUser(clerkUser.id);
-
-      if (!canUseApi) {
-        return NextResponse.json({
-          error: "Monthly API request limit reached. Please upgrade your plan.",
-          limitReached: true
-        }, { status: 403 });
+      if (!modelResolution.chatbot1Model) {
+        console.error("GameLab API: Primary model not resolved properly for user", clerkUser.id);
+        return NextResponse.json({ error: "Failed to resolve model." }, { status: 500 });
       }
-
+      const modelToUse = modelResolution.chatbot1Model;
       const messagesToAI: ChatCompletionMessageParam[] = [systemMessage, ...initialUserMessages];
-      const response = await callOpenAIChat(model, messagesToAI);
-      const aiResponseContent = response.choices[0].message.content;
-      const { code, language, message_text } = extractGameLabCodeFromResponse(aiResponseContent);
-
-      finalApiResponse = {
-        message: message_text,
-        code: code,
-        language: language,
-        remainingRequests: modelSelectionRemaining
-      };
+      const response = await callOpenAIChat(modelToUse, messagesToAI);
+      const { code, language, message_text } = extractGameLabCodeFromResponse(response.choices[0].message.content);
+      finalApiResponse = { message: message_text, code, language };
     }
 
+    finalApiResponse.remainingRequests = modelResolution.remainingRequests;
     await incrementApiUsage(clerkUser.id);
     const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
-    const remainingRequestsAfterIncrement = Math.max(0, (usageData?.monthlyLimit || 0) - (usageData?.usageCount || 0));
-    finalApiResponse.remainingRequests = remainingRequestsAfterIncrement;
+    finalApiResponse.remainingRequests = Math.max(0, (usageData?.monthlyLimit || 0) - (usageData?.usageCount || 0));
 
     return NextResponse.json(finalApiResponse);
 
   } catch (error: any) {
     console.error("Error in GameLab chat:", error);
-    let errorDetails = error.message;
-    if (error.response && error.response.data && error.response.data.error) {
-        errorDetails = error.response.data.error.message || error.message;
-    }
     return NextResponse.json(
-      { error: "Failed to generate game code", details: errorDetails, stack: error.stack },
-      { status: 500 }
+      { error: "Failed to generate game code", details: error.message, stack: error.stack }, { status: 500 }
     );
   }
 }

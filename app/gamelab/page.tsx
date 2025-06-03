@@ -8,6 +8,8 @@ import GameSandbox from "./components/GameSandbox";
 import SaveSketchButton from './components/SaveSketchButton';
 import GitHubUploadButton from './components/GitHubUploadButton';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useUser } from "@clerk/nextjs";
+import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -24,7 +26,6 @@ interface GameLabApiResponse {
   remainingRequests?: number;
 }
 
-// CORRECTED: reactTsxExample definition
 const reactTsxExample = `
 // Example of a simple App.tsx component:
 import React, { useState, useEffect } from 'react';
@@ -74,7 +75,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     console.log("GameLab React Sketch Initialized!");
-    // Example: Send data to GameLab sandbox if the function exists
     if (window.sendDataToGameLab) {
       window.sendDataToGameLab({ event: 'game_started', time: new Date().toISOString() });
     }
@@ -83,7 +83,6 @@ const App: React.FC = () => {
   const handlePlayerAction = () => {
     const newScore = score + 10;
     setScore(newScore);
-    // Example: Send data on action
     if (window.sendDataToGameLab) {
       window.sendDataToGameLab({ event: 'player_action', newScore, time: new Date().toISOString() });
     }
@@ -105,62 +104,18 @@ const App: React.FC = () => {
     </>
   );
 };
-
-// The GameLab sandbox will attempt to render a component named 'App'.
-// So, ensure 'App' is defined as above. For a standalone project, you'd also have:
-// ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
-// in a main.tsx file.
-`; // End of reactTsxExample string
+`;
 
 const BASE_GAMELAB_SYSTEM_PROMPT_TEMPLATE = `
-You are an AI game development assistant for RandomPlayables, a platform for mathematical citizen science games.
-Your goal is to help users create games that can be deployed on the RandomPlayables platform.
-
-IMPORTANT REQUIREMENTS FOR ALL GAMES YOU CREATE:
-1.  **Default to React and TypeScript**: All game logic and UI should be within React components (.tsx files).
-2.  **Structure**:
-    * **For simple sketches**: Provide the code for a primary React component (e.g., \`App.tsx\`). This component will be rendered in the GameLab sandbox. You can include CSS as a string within the TSX file or suggest it separately.
-    * **For more complex/main games**: Outline a project structure (e.g., like a Vite + React + TS setup). Provide code for key files:
-        * \`index.html\` (basic, with a div#root)
-        * \`src/main.tsx\` (ReactDOM.createRoot and rendering App)
-        * \`src/App.tsx\` (main game component)
-        * A sample game component (e.g., \`src/components/GameBoard.tsx\`)
-        * Basic \`package.json\` (with react, react-dom, vite, typescript) and \`tsconfig.json\`.
-3.  **Styling**: Use inline styles, CSS modules, or a string of CSS content for sketches. For projects, standard CSS files are fine.
-4.  **State Management**: Use React hooks (useState, useEffect, etc.) for state and side effects.
-5.  **TypeScript**: Utilize TypeScript for type safety. Define interfaces for props and state.
-6.  **Sandbox Compatibility (for sketches)**: The GameLab sandbox can render a React component named \`App\` from the provided TSX code. It uses Babel for in-browser transpilation. Ensure your sketch's \`App.tsx\` is self-contained or clearly states its dependencies if any (though prefer self-contained for sketches).
-    The sandbox provides \`window.sendDataToGameLab(data: any)\` for the game to communicate back to the GameLab environment.
-    The sandbox also makes \`window.GAMELAB_SESSION_ID\` available to the sketch.
-
-AVAILABLE TEMPLATE STRUCTURES (Type A data, from GameLab helper):
-%%GAMELAB_TEMPLATE_STRUCTURES%%
-
-REAL CODE EXAMPLES FROM EXISTING GAMES (Type B data, based on your query):
-%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%
-
-When designing games based on existing code examples (if provided based on your query):
-1. Follow similar patterns for game structure and organization using React and TypeScript.
-2. Implement similar data structures for game state and scoring.
-
+You are an AI game development assistant for RandomPlayables...
 EXAMPLE OF A SIMPLE REACT + TYPESCRIPT GAME SKETCH COMPONENT (\`App.tsx\`):
 \`\`\`tsx
 ${reactTsxExample}
 \`\`\`
-
-These games may be deployed on RandomPlayables.com, potentially as subdomains (e.g., gamename.randomplayables.com).
-
-When responding:
-1. Understand the user's game idea. Ask clarifying questions if needed.
-2. Suggest a clear game structure and mechanics using React components and TypeScript.
-3.  **For sketches**: Provide the complete code for the main \`App.tsx\` file.
-4.  **For main games**: List each file (e.g., \`package.json\`, \`vite.config.ts\`, \`index.html\`, \`src/main.tsx\`, \`src/App.tsx\`, etc.) and provide its full content.
-5. Explain any setup steps if a project structure is provided (e.g., \`npm install && npm run dev\`).
+...
 6. If the game is a sketch, ensure the main component is named \`App\`.
 `;
 
-
-// Function to fetch Type A context data for GameLab
 async function fetchGamelabContextData() {
   const response = await fetch("/api/gamelab/context-data");
   if (!response.ok) {
@@ -169,15 +124,24 @@ async function fetchGamelabContextData() {
   return response.json();
 }
 
-async function sendChatMessageToApi(message: string, chatHistory: ChatMessage[], editedSystemPrompt: string | null, useCodeReview: boolean) {
+async function sendChatMessageToApi(
+    message: string,
+    chatHistory: ChatMessage[],
+    editedSystemPrompt: string | null,
+    useCodeReview: boolean,
+    selectedCoderModelId?: string,
+    selectedReviewerModelId?: string // Added reviewer
+) {
   const response = await fetch("/api/gamelab/chat", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({ 
       message, 
-      chatHistory: chatHistory.map(m => ({role: m.role, content: m.content})),
+      chatHistory: chatHistory.map((m: ChatMessage) => ({role: m.role, content: m.content})),
       customSystemPrompt: editedSystemPrompt,
-      useCodeReview
+      useCodeReview,
+      selectedCoderModelId,
+      selectedReviewerModelId // Pass both
     })
   });
   return response.json();
@@ -187,7 +151,7 @@ export default function GameLabPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [currentCode, setCurrentCode] = useState<string>("");
-  const [currentLanguage, setCurrentLanguage] = useState<string>("tsx"); // Default to tsx as per system prompt focus
+  const [currentLanguage, setCurrentLanguage] = useState<string>("tsx");
   const [currentTab, setCurrentTab] = useState<'code' | 'sandbox'>('code');
   const [codeError, setCodeError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -201,6 +165,12 @@ export default function GameLabPage() {
   const router = useRouter(); 
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
+  const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
+  const [selectedCoderModel, setSelectedCoderModel] = useState<string>("");
+  const [selectedReviewerModel, setSelectedReviewerModel] = useState<string>(""); // New
+  const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   const suggestedPrompts = [
     "Create a number guessing game as a React/TSX sketch",
@@ -243,7 +213,7 @@ export default function GameLabPage() {
     initializeSystemPrompt();
   }, [initializeSystemPrompt]);
   
-   useEffect(() => {
+  useEffect(() => {
     const githubConnected = searchParams.get('github_connected');
     const shouldRestoreState = localStorage.getItem('gamelab_restore_on_callback') === 'true';
 
@@ -256,7 +226,7 @@ export default function GameLabPage() {
       if (pendingLanguage) setCurrentLanguage(pendingLanguage);
       if (pendingMessagesString) {
         try {
-          const parsedMessages = JSON.parse(pendingMessagesString);
+          const parsedMessages = JSON.parse(pendingMessagesString) as ChatMessage[]; // Cast for safety
           setMessages(parsedMessages.map((msg: ChatMessage) => ({ ...msg, timestamp: new Date(msg.timestamp) })));
         } catch (e) { console.error("Failed to parse messages from localStorage", e); }
       }
@@ -272,8 +242,33 @@ export default function GameLabPage() {
     }
   }, [searchParams, router, pathname]);
 
-  const { mutate, isPending } = useMutation<GameLabApiResponse, Error, {message: string, useCodeReview: boolean}>({
-    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, currentSystemPrompt, vars.useCodeReview),
+  useEffect(() => {
+    async function fetchModelsForUser() {
+      if (isUserLoaded) {
+        setIsLoadingModels(true);
+        try {
+          let userIsSubscribed = false;
+          if (isSignedIn && user?.id) {
+            const profileResponse = await fetch(`/api/check-subscription?userId=${user.id}`);
+            if (profileResponse.ok) {
+                const profileData = await profileResponse.json();
+                userIsSubscribed = profileData?.subscriptionActive || false;
+            }
+          }
+          setAvailableModels(getAvailableModelsForUser(userIsSubscribed));
+        } catch (error) {
+          console.error("Failed to fetch available models for GameLabPage:", error);
+          setAvailableModels(getAvailableModelsForUser(false));
+        } finally {
+          setIsLoadingModels(false);
+        }
+      }
+    }
+    fetchModelsForUser();
+  }, [isUserLoaded, isSignedIn, user]);
+
+  const { mutate, isPending } = useMutation<GameLabApiResponse, Error, {message: string, useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string}>({
+    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, currentSystemPrompt, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
     onSuccess: (data: GameLabApiResponse) => {
       const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
       setMessages(prev => [...prev, assistantMessage]);
@@ -286,7 +281,9 @@ export default function GameLabPage() {
       } else if (data.error) {
         setCodeError(data.error);
       } else {
-        setCodeError(null);
+        // If no code and no error, but a message exists, it might be a clarification or non-code response
+        // For GameLab, we usually expect code, but this handles other cases.
+        setCodeError(null); // Clear previous code errors if any
       }
     },
     onError: (error: Error) => {
@@ -295,7 +292,10 @@ export default function GameLabPage() {
     }
   });
   
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   useEffect(scrollToBottom, [messages]);
   
   const handleSubmit = (e: React.FormEvent) => {
@@ -303,7 +303,12 @@ export default function GameLabPage() {
     if (!inputMessage.trim() || isPending) return;
     const userMessage: ChatMessage = { role: 'user', content: inputMessage, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
-    mutate({message: inputMessage, useCodeReview: useCodeReview});
+    mutate({
+        message: inputMessage, 
+        useCodeReview: useCodeReview, 
+        selectedCoderModelId: selectedCoderModel || undefined,
+        selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined
+    });
     setInputMessage("");
   };
 
@@ -320,6 +325,7 @@ export default function GameLabPage() {
       const titleMatch = currentCode.match(/<title[^>]*>(.*?)<\/title>/i);
       if (titleMatch && titleMatch[1] && titleMatch[1].trim() !== '') {
         let title = titleMatch[1].trim();
+        // Avoid generic titles from templates
         if (!['Game', 'RandomPlayables Game', 'Untitled', 'Document', 'GameLab Sandbox', 'Game Preview'].includes(title)) {
           return title;
         }
@@ -327,9 +333,10 @@ export default function GameLabPage() {
       const h1Match = currentCode.match(/<h1[^>]*>(.*?)<\/h1>/i);
        if (h1Match && h1Match[1] && h1Match[1].trim() !== '') {
          let h1Title = h1Match[1].trim();
-         if (h1Title.toLowerCase().includes("game")) return h1Title;
+         if (h1Title.toLowerCase().includes("game")) return h1Title; // Prefer H1 if it mentions "game"
        }
     }
+    // Try to get from last assistant message
     const lastAssistantMessage = messages.filter(msg => msg.role === 'assistant').pop();
     if (lastAssistantMessage) {
       const gamePatterns = [
@@ -342,11 +349,13 @@ export default function GameLabPage() {
         const match = lastAssistantMessage.content.match(pattern);
         if (match && match[1]) {
           let title = match[1].trim().replace(/^["']|["']$/g, '').replace(/\s+/g, ' ');
+          // Basic title case
           title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
           if (title.length > 3 && title.length < 50 && !title.toLowerCase().includes("example")) return title;
         }
       }
     }
+    // Try to get from last user message
     const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
     if (lastUserMessage) {
       const userPatterns = [
@@ -358,11 +367,13 @@ export default function GameLabPage() {
         if (match && match[1]) {
           let title = match[1].trim().replace(/^["']|["']$/g, '');
           title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
-          if (title.length > 3 && title.length < 50 && !title.toLowerCase().includes("example")) return title;
+           if (title.length > 3 && title.length < 50 && !title.toLowerCase().includes("example")) return title;
         }
       }
     }
+    // Fallback if no title found from code or messages
     if (currentCode) {
+      // More generic patterns from code if specific title tags failed
       const codePatterns = [
         { pattern: /guessing|guess/i, title: 'Number Guessing Game' }, { pattern: /memory|match/i, title: 'Memory Game' },
         { pattern: /puzzle|solve/i, title: 'Puzzle Game' }, { pattern: /click|button/i, title: 'Click Game' },
@@ -380,9 +391,11 @@ export default function GameLabPage() {
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return `GameLab Sketch ${timeString}`;
   };
+
   const extractGameDescription = (): string => { 
     const lastAssistantMessage = messages.filter(msg => msg.role === 'assistant').pop();
     if (lastAssistantMessage) {
+        // Try to find a descriptive sentence
         const sentences = lastAssistantMessage.content.split(/(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s/);
         for (let sentence of sentences) {
             sentence = sentence.trim();
@@ -392,12 +405,14 @@ export default function GameLabPage() {
                 return sentence.endsWith('.') || sentence.endsWith('!') || sentence.endsWith('?') ? sentence : sentence + '.';
             }
         }
+        // Fallback to a snippet of the AI's response if no specific sentence found
         if (lastAssistantMessage.content.length > 20) {
             return lastAssistantMessage.content.substring(0, 150) + "...";
         }
     }
     return `A game sketch created with RandomPlayables GameLab. Language: ${currentLanguage}.`;
   };
+
   const downloadCode = () => { 
     if (!currentCode) return;
     let extension = "txt";
@@ -413,6 +428,7 @@ export default function GameLabPage() {
     else if (detectedLanguage === "json") extension = "json";
     else if (detectedLanguage === "python" || detectedLanguage === "py") extension = "py";
     
+    // Basic check for multi-file markers (simple placeholder, adjust if needed)
     const fileSeparatorRegex = /^\/\*\s*FILE:\s*([a-zA-Z0-9_.-]+)\s*\*\/\s*$/gm;
     let lastIndex = 0;
     const files = [];
@@ -426,9 +442,11 @@ export default function GameLabPage() {
     }
     if (files.length > 0) { 
         files[files.length - 1].content = currentCode.substring(lastIndex).trim();
+        // For multi-file, maybe suggest downloading as zip, or provide raw text
         fileContent = "/* GAMELAB MULTI-FILE EXPORT (raw) */\n\n" + currentCode;
-        extension = "txt"; 
+        extension = "txt"; // Default to .txt for raw multi-file dump
     } else if (currentCode.startsWith("```") && currentCode.match(/```\w+\s+\/\/\s*([a-zA-Z0-9_.-]+)/)) {
+        // If it looks like a markdown block with a file name comment
         fileContent = "/* GAMELAB EXPORT (from code block) */\n\n" + currentCode;
         extension = "txt";
     }
@@ -450,6 +468,7 @@ export default function GameLabPage() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
   const downloadTranscript = () => { 
     const transcript = messages.map(msg => 
       `${msg.role.toUpperCase()} [${msg.timestamp.toLocaleTimeString()}]: ${msg.content}`
@@ -464,11 +483,12 @@ export default function GameLabPage() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
   const clearChat = () => { 
     if (window.confirm("Are you sure you want to clear the chat? This will delete all messages and code.")) {
       setMessages([]);
       setCurrentCode("");
-      setCurrentLanguage("tsx"); // Default to tsx
+      setCurrentLanguage("tsx");
       setCodeError(null);
     }
   };
@@ -512,18 +532,80 @@ export default function GameLabPage() {
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isPending && inputMessage.trim()) handleSubmit(e); }}}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!isPending && inputMessage.trim()) handleSubmit(e);
+                  }
+                }}
                 placeholder="Describe your game idea..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
                 disabled={isPending}
                 rows={3}
               />
+              <div className="mt-2">
+                <label htmlFor="modelSelectorCoderGameLab" className="block text-xs font-medium text-gray-600">
+                  {useCodeReview ? "Coder Model" : "AI Model"} (Optional)
+                </label>
+                <select
+                  id="modelSelectorCoderGameLab"
+                  value={selectedCoderModel}
+                  onChange={(e) => setSelectedCoderModel(e.target.value)}
+                  disabled={isLoadingModels || isPending}
+                  className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
+                >
+                  <option value="">-- Use Default --</option>
+                  {isLoadingModels ? (
+                    <option disabled>Loading models...</option>
+                  ) : availableModels.length === 0 ? (
+                     <option disabled>No models available.</option>
+                  ) : (
+                    availableModels.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {useCodeReview && (
+                <div className="mt-2">
+                  <label htmlFor="modelSelectorReviewerGameLab" className="block text-xs font-medium text-gray-600">
+                    Reviewer Model (Optional)
+                  </label>
+                  <select
+                    id="modelSelectorReviewerGameLab"
+                    value={selectedReviewerModel}
+                    onChange={(e) => setSelectedReviewerModel(e.target.value)}
+                    disabled={isLoadingModels || isPending}
+                    className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
+                  >
+                    <option value="">-- Use Default Peer --</option>
+                     {isLoadingModels ? (
+                       <option disabled>Loading models...</option>
+                     ) : availableModels.length === 0 ? (
+                       <option disabled>No models available.</option>
+                     ) : (
+                       availableModels.map(model => (
+                         <option key={model.id + "-reviewer"} value={model.id}>
+                           {model.name}
+                         </option>
+                       ))
+                     )}
+                  </select>
+                </div>
+              )}
               <div className="flex items-center mt-1">
                 <input
                   type="checkbox"
                   id="useCodeReviewGameLab"
                   checked={useCodeReview}
-                  onChange={(e) => setUseCodeReview(e.target.checked)}
+                  onChange={(e) => {
+                      setUseCodeReview(e.target.checked);
+                      setSelectedCoderModel(""); // Reset model on toggle
+                      setSelectedReviewerModel("");
+                  }}
                   className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                 />
                 <label htmlFor="useCodeReviewGameLab" className="ml-2 text-sm text-gray-700">
