@@ -3,7 +3,8 @@ import {
   DEFAULT_MODELS,
   getAvailableModelsForUser,
   getCodeReviewPeer,
-  ModelDefinition,
+  isModelFree, 
+  ModelDefinition, // Make sure ModelDefinition is exported from modelConfig.ts
 } from "./modelConfig";
 
 // Helper function to get monthly limit based on tier
@@ -31,7 +32,7 @@ async function getUserSubscriptionAndUsage(userId: string) {
   });
 
   const monthlyLimit = getMonthlyLimitForTier(subscriptionTier);
-  const currentUsageCount = usageRecord?.usageCount || 0;
+  let currentUsageCount = usageRecord?.usageCount || 0;
 
   let needsReset = false;
   if (usageRecord) {
@@ -40,13 +41,22 @@ async function getUserSubscriptionAndUsage(userId: string) {
     if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
       needsReset = true;
     }
+  } else {
+    needsReset = true;
   }
 
   const finalUsageCountForCanUseApi = needsReset ? 0 : currentUsageCount;
   const remainingRequests = Math.max(0, monthlyLimit - finalUsageCountForCanUseApi);
   const canUseApi = remainingRequests > 0;
 
-  return { isSubscribed, canUseApi, remainingRequests, monthlyLimit, needsReset, currentUsageCountBeforeReset: currentUsageCount };
+  return { 
+    isSubscribed, 
+    canUseApi, 
+    remainingRequests, 
+    monthlyLimit, 
+    needsReset, 
+    currentUsageCountBeforeReset: currentUsageCount 
+  };
 }
 
 export interface ResolvedModelsResult {
@@ -62,18 +72,19 @@ export async function resolveModelsForChat(
   userId: string,
   isUserSubscribed: boolean,
   useCodeReview: boolean,
-  selectedCoderModelId?: string | null, // For chatbot1
-  selectedReviewerModelId?: string | null // For chatbot2 if useCodeReview is true
+  selectedCoderModelId?: string | null,
+  selectedReviewerModelId?: string | null
 ): Promise<ResolvedModelsResult> {
-  const { canUseApi, remainingRequests } = await getUserSubscriptionAndUsage(userId);
+  // Corrected destructuring and error handling
+  const usageDetails = await getUserSubscriptionAndUsage(userId);
 
-  if (!canUseApi) {
+  if (!usageDetails.canUseApi) {
     return {
-      chatbot1Model: "",
+      chatbot1Model: "", 
       canUseApi: false,
-      remainingRequests: 0,
-      limitReached: true,
-      error: "Monthly API request limit reached. Please upgrade your plan.",
+      remainingRequests: 0, 
+      limitReached: true,   
+      error: "Monthly API request limit reached. Please upgrade your plan or wait for the next cycle.",
     };
   }
 
@@ -82,15 +93,14 @@ export async function resolveModelsForChat(
 
   const availableToUser = getAvailableModelsForUser(isUserSubscribed);
 
-  // Helper to validate a selected model
   const validateModel = (selectedId: string | null | undefined): string | null => {
     if (!selectedId) return null;
     const isModelAllowed = availableToUser.some(m => m.id === selectedId);
     if (!isModelAllowed) {
       console.warn(`User ${userId} selected unauthorized model '${selectedId}'. It will be ignored.`);
-      return null; // Invalid selection, treat as not selected
+      return null;
     }
-    return selectedId; // Valid
+    return selectedId;
   };
 
   if (useCodeReview) {
@@ -100,20 +110,17 @@ export async function resolveModelsForChat(
     if (validCoderModel && validReviewerModel) {
       chatbot1Model = validCoderModel;
       chatbot2Model = validReviewerModel;
-    } else if (validCoderModel) { // Only coder model is selected and valid
+    } else if (validCoderModel) {
       chatbot1Model = validCoderModel;
       chatbot2Model = getCodeReviewPeer(validCoderModel, isUserSubscribed);
-    } else if (validReviewerModel) { // Only reviewer model is selected and valid (less common UI path)
-      // If only reviewer is picked, we might need a "getPeerForReviewer" or use default coder
+    } else if (validReviewerModel) {
       chatbot2Model = validReviewerModel;
       chatbot1Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.codeReview.chatbot1 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot1;
-      // Or, pick a peer for the coder based on the reviewer (more complex)
-      // For simplicity, if reviewer is picked but coder isn't, we could use the default coder.
-    } else { // Neither (or invalid) models selected, use defaults
+    } else {
       chatbot1Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.codeReview.chatbot1 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot1;
       chatbot2Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.codeReview.chatbot2 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot2;
     }
-  } else { // Not using code review
+  } else {
     const validCoderModel = validateModel(selectedCoderModelId);
     if (validCoderModel) {
       chatbot1Model = validCoderModel;
@@ -121,47 +128,89 @@ export async function resolveModelsForChat(
       chatbot1Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.noCodeReview : DEFAULT_MODELS.nonSubscribed.noCodeReview;
     }
   }
-  return { chatbot1Model, chatbot2Model, canUseApi, remainingRequests };
+  return { 
+    chatbot1Model, 
+    chatbot2Model, 
+    canUseApi: true, // Changed from usageDetails.canUseApi as we already checked it
+    remainingRequests: usageDetails.remainingRequests 
+  };
 }
 
-export async function incrementApiUsage(userId: string): Promise<void> {
+export interface IncrementApiUsageParams {
+  userId: string;
+  isSubscribed: boolean;
+  useCodeReview: boolean;
+  coderModelId?: string | null;
+  reviewerModelId?: string | null;
+}
+
+export async function incrementApiUsage(params: IncrementApiUsageParams): Promise<void> {
+  const { userId, isSubscribed, useCodeReview, coderModelId, reviewerModelId } = params;
+
+  let requestsToCharge = 0;
+
+  if (!isSubscribed) {
+    requestsToCharge = 1;
+  } else {
+    if (!useCodeReview) {
+      if (coderModelId && !isModelFree(coderModelId)) {
+        requestsToCharge = 1;
+      } else {
+        requestsToCharge = 0;
+      }
+    } else {
+      if (coderModelId && !isModelFree(coderModelId)) {
+        requestsToCharge += 2; 
+      }
+      if (reviewerModelId && !isModelFree(reviewerModelId)) {
+        requestsToCharge += 1; 
+      }
+    }
+  }
+
+  if (requestsToCharge === 0) {
+    return;
+  }
+
   try {
     const now = new Date();
     let usage = await prisma.apiUsage.findUnique({ where: { userId } });
 
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { subscriptionTier: true }
+    });
+    const currentMonthlyLimit = getMonthlyLimitForTier(profile?.subscriptionTier);
+
     if (!usage) {
-      const profile = await prisma.profile.findUnique({
-        where: { userId },
-        select: { subscriptionTier: true }
-      });
-      const monthlyLimit = getMonthlyLimitForTier(profile?.subscriptionTier);
       await prisma.apiUsage.create({
-        data: { userId, usageCount: 1, monthlyLimit, lastResetDate: now }
+        data: {
+          userId,
+          usageCount: requestsToCharge,
+          monthlyLimit: currentMonthlyLimit,
+          lastResetDate: now
+        }
       });
     } else {
       const lastReset = new Date(usage.lastResetDate);
-      let newUsageCount = usage.usageCount + 1;
+      let newUsageCount = usage.usageCount + requestsToCharge;
       let newLastResetDate = usage.lastResetDate;
 
       if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
-        newUsageCount = 1; 
+        newUsageCount = requestsToCharge; 
         newLastResetDate = now;
       }
       
-      if (newUsageCount > usage.monthlyLimit && !(now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear())) {
-         console.warn(`API usage increment for ${userId} would exceed limit (${newUsageCount}/${usage.monthlyLimit}). Clamping. Ensure canUseApi was checked.`);
-         newUsageCount = usage.monthlyLimit;
-      }
-
       await prisma.apiUsage.update({
         where: { userId },
         data: {
           usageCount: newUsageCount,
+          monthlyLimit: currentMonthlyLimit, 
           lastResetDate: newLastResetDate
         }
       });
     }
   } catch (error) {
-    console.error("Error incrementing API usage for user:", userId, error);
+    console.error(`Error incrementing API usage for user ${userId}:`, error);
   }
 }

@@ -13,14 +13,11 @@ export interface ModelDefinition {
   export const PREMIUM_MODELS_SUBSCRIBED: ModelDefinition[] = [
     { id: "openai/o4-mini-high", name: "OpenAI GPT-4o Mini High", tier: "premium", provider: "openai" },
     { id: "google/gemini-2.5-flash-preview-05-20", name: "Google Gemini 2.5 Flash Preview", tier: "premium", provider: "google" },
-    // Subscribed users can also use free models, so they are added here.
-    // If you want subscribed users to ONLY see premium models in their selection (unless they pick "free" tier explicitly),
-    // then do not spread FREE_MODELS here and adjust getAvailableModels logic.
-    // For now, following citation [cite: 10] which lists free models for subscribed users.
+    // Subscribed users can also use free models
     ...FREE_MODELS,
   ];
   
-  // Default model selections [cite: 12]
+  // Default model selections
   export const DEFAULT_MODELS = {
     nonSubscribed: {
       noCodeReview: "meta-llama/llama-3.3-8b-instruct:free",
@@ -38,10 +35,19 @@ export interface ModelDefinition {
     },
   };
   
-  // Helper to get model list for a user based on subscription status for UI population [cite: 9, 10]
+  // Helper to get model list for a user based on subscription status for UI population
   export function getAvailableModelsForUser(isSubscribed: boolean): ModelDefinition[] {
     if (isSubscribed) {
-      return PREMIUM_MODELS_SUBSCRIBED;
+      // Return a unique list of models, prioritizing premium if duplicates exist by ID
+      const allSubscribedModels = [...PREMIUM_MODELS_SUBSCRIBED];
+      const uniqueModelIds = new Set<string>();
+      return allSubscribedModels.filter(model => {
+        if (!uniqueModelIds.has(model.id)) {
+          uniqueModelIds.add(model.id);
+          return true;
+        }
+        return false;
+      });
     }
     return FREE_MODELS;
   }
@@ -52,18 +58,14 @@ export interface ModelDefinition {
     const selectedModel = allModelsForUser.find(m => m.id === selectedModelId);
   
     if (!selectedModel) {
-      // Fallback if the selected model isn't in the expected list (shouldn't happen with proper UI)
       return isSubscribed ? DEFAULT_MODELS.subscribed.codeReview.chatbot2 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot2;
     }
   
-    // Try to find a different model of the same tier first
     const potentialPeersSameTier = allModelsForUser.filter(m => m.id !== selectedModelId && m.tier === selectedModel.tier);
     if (potentialPeersSameTier.length > 0) {
       return potentialPeersSameTier[0].id;
     }
   
-    // If subscribed and selected a premium model but no other premium model is available (unlikely with current lists)
-    // or if selected a free model (as a subscribed user), try to find another free model.
     if (selectedModel.tier === 'premium' || isSubscribed) {
       const freePeers = FREE_MODELS.filter(m => m.id !== selectedModelId);
       if (freePeers.length > 0) {
@@ -71,10 +73,32 @@ export interface ModelDefinition {
       }
     }
   
-    // Fallback to default reviewer models
     if (isSubscribed) {
       return selectedModelId === DEFAULT_MODELS.subscribed.codeReview.chatbot1 ? DEFAULT_MODELS.subscribed.codeReview.chatbot2 : DEFAULT_MODELS.subscribed.codeReview.chatbot1;
-    } else { // Not subscribed
+    } else { 
       return selectedModelId === DEFAULT_MODELS.nonSubscribed.codeReview.chatbot1 ? DEFAULT_MODELS.nonSubscribed.codeReview.chatbot2 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot1;
     }
   }
+
+/**
+ * Checks if a given model ID is considered free.
+ * @param modelId The ID of the model to check.
+ * @returns True if the model is free, false otherwise.
+ */
+export function isModelFree(modelId: string | null | undefined): boolean {
+  if (!modelId) {
+    return true; // Assuming a missing model ID means no charge for that step
+  }
+  // Create a unique list of all models to check against.
+  const premiumIds = new Set(PREMIUM_MODELS_SUBSCRIBED.map(m => m.id));
+  const allModels: ModelDefinition[] = [
+      ...PREMIUM_MODELS_SUBSCRIBED, // Includes FREE_MODELS already if PREMIUM_MODELS_SUBSCRIBED is defined as shown
+      ...FREE_MODELS.filter(fm => !premiumIds.has(fm.id)) // Add any FREE_MODELS not already included
+  ];
+  
+  // Ensure PREMIUM_MODELS_SUBSCRIBED itself is unique if FREE_MODELS were spread into it
+  const uniqueAllModels = Array.from(new Set(allModels.map(m => m.id))).map(id => allModels.find(m => m.id === id)!);
+
+  const model = uniqueAllModels.find(m => m.id === modelId);
+  return model?.tier === 'free';
+}

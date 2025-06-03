@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { resolveModelsForChat, incrementApiUsage } from "@/lib/modelSelection";
+import { resolveModelsForChat, incrementApiUsage, IncrementApiUsageParams } from "@/lib/modelSelection"; // Updated import
 import { getTemplateStructure, fetchGameCodeExamplesForQuery } from "./gamelabHelper";
 import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
 
 const reactTsxExample = `// Example of a simple App.tsx component...`; // Keep existing
 const FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE = `You are an AI game development assistant...`; // Keep existing
+
+
+// Helper function (can be moved to a shared lib/plans.ts or lib/modelConfig.ts if used elsewhere)
+function getMonthlyLimitForTier(tier?: string | null): number {
+  switch (tier) {
+    case "premium":
+      return 500;
+    case "premium_plus":
+      return 1500;
+    default:
+      return 100; // Basic/free tier
+  }
+}
 
 function extractGameLabCodeFromResponse(aiResponseContent: string | null, defaultLanguage: string = "tsx"): { code: string; language: string; message_text: string } {
   if (!aiResponseContent) return { code: "", language: defaultLanguage, message_text: "No content from AI." };
@@ -55,13 +68,13 @@ export async function POST(request: NextRequest) {
         chatHistory, 
         customSystemPrompt, 
         useCodeReview, 
-        selectedCoderModelId, // New
-        selectedReviewerModelId // New
+        selectedCoderModelId, 
+        selectedReviewerModelId 
     } = await request.json();
 
     const profile = await prisma.profile.findUnique({
         where: { userId: clerkUser.id },
-        select: { subscriptionActive: true },
+        select: { subscriptionActive: true, subscriptionTier: true }, // Fetch tier for accurate limit display
     });
     const isSubscribed = profile?.subscriptionActive || false;
 
@@ -101,9 +114,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         error: modelResolution.error || "Monthly API request limit reached.",
         limitReached: true
-      }, { status: 403 });
+      }, { status: modelResolution.limitReached ? 403 : 400 }); // Use 403 for limit reached
     }
-    if (modelResolution.error) {
+    if (modelResolution.error) { // General errors from modelResolution
         return NextResponse.json({ error: modelResolution.error }, { status: 400 });
     }
 
@@ -112,20 +125,20 @@ export async function POST(request: NextRequest) {
         console.error("GameLab API: Code review models not resolved properly for user", clerkUser.id);
         return NextResponse.json({ error: "Failed to resolve models for code review." }, { status: 500 });
       }
-      const chatbot1Model = modelResolution.chatbot1Model;
-      const chatbot2Model = modelResolution.chatbot2Model;
+      const chatbot1ModelToUse = modelResolution.chatbot1Model;
+      const chatbot2ModelToUse = modelResolution.chatbot2Model;
       
       const createReviewerPrompt = (initialGenContent: string | null): string => { const { code: iCode, language: iLang } = extractGameLabCodeFromResponse(initialGenContent); return `You are an expert code reviewer... Original User Prompt... System Prompt... Code (Lang: ${iLang}):\n---\n\`\`\`${iLang}\n${iCode || "No code."}\n\`\`\`\n---\nYour review:`; };
       const createRevisionPrompt = (initialGenContent: string | null, reviewContent: string | null): string => { const { code: iCode, language: iLang } = extractGameLabCodeFromResponse(initialGenContent); return `You generated code... Original User Prompt... System Prompt... Your Initial Code (Lang: ${iLang}):\n---\n\`\`\`${iLang}\n${iCode || "No code."}\n\`\`\`\n---\nReview:\n---\n${reviewContent || "No review."}\n---\nRevised Code (only block in ${iLang}):`; };
 
       const reviewCycleOutputs: AiReviewCycleRawOutputs = await performAiReviewCycle(
-        chatbot1Model, systemMessage, initialUserMessages, chatbot2Model, createReviewerPrompt, createRevisionPrompt
+        chatbot1ModelToUse, systemMessage, initialUserMessages, chatbot2ModelToUse, createReviewerPrompt, createRevisionPrompt
       );
       const { code: initialCode, language: initialLanguage, message_text: initialMessageText } = extractGameLabCodeFromResponse(reviewCycleOutputs.chatbot1InitialResponse.content);
       const { code: revisedCode, language: revisedLanguage, message_text: revisedMessageText } = extractGameLabCodeFromResponse(reviewCycleOutputs.chatbot1RevisionResponse.content, initialLanguage);
 
       if (!initialCode.trim() && !revisedCode.trim()) {
-         finalApiResponse = { message: `Chatbot1 did not produce code...`, code: "", language: initialLanguage };
+         finalApiResponse = { message: `Chatbot1 (Model: ${chatbot1ModelToUse}) did not produce code. Initial: "${initialMessageText}". Revision also failed.`, code: "", language: initialLanguage };
       } else {
         finalApiResponse = {
           message: `Code generated with review. Initial: "${initialMessageText}". Review: "${reviewCycleOutputs.chatbot2ReviewResponse.content || "No review"}". Final: "${revisedMessageText}"`,
@@ -143,11 +156,26 @@ export async function POST(request: NextRequest) {
       const { code, language, message_text } = extractGameLabCodeFromResponse(response.choices[0].message.content);
       finalApiResponse = { message: message_text, code, language };
     }
+    
+    // *** NEW: Call incrementApiUsage with detailed parameters ***
+    const incrementParams: IncrementApiUsageParams = {
+        userId: clerkUser.id,
+        isSubscribed: isSubscribed,
+        useCodeReview: useCodeReview,
+        coderModelId: modelResolution.chatbot1Model,
+        reviewerModelId: useCodeReview ? modelResolution.chatbot2Model : null
+    };
+    await incrementApiUsage(incrementParams);
 
-    finalApiResponse.remainingRequests = modelResolution.remainingRequests;
-    await incrementApiUsage(clerkUser.id);
+    // Fetch updated usage for accurate remainingRequests
     const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
-    finalApiResponse.remainingRequests = Math.max(0, (usageData?.monthlyLimit || 0) - (usageData?.usageCount || 0));
+    if (usageData) {
+        finalApiResponse.remainingRequests = Math.max(0, (usageData.monthlyLimit) - (usageData.usageCount));
+    } else {
+        // Fallback if usage record somehow isn't created by incrementApiUsage
+        const limitForUser = getMonthlyLimitForTier(profile?.subscriptionTier);
+        finalApiResponse.remainingRequests = limitForUser; // Assumes 0 usage if no record
+    }
 
     return NextResponse.json(finalApiResponse);
 

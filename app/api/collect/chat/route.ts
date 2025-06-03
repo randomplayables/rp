@@ -3,7 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { resolveModelsForChat, incrementApiUsage } from "@/lib/modelSelection";
+import { resolveModelsForChat, incrementApiUsage, IncrementApiUsageParams } from "@/lib/modelSelection"; // Updated import
 import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
 
@@ -39,6 +39,19 @@ async function fetchActiveGamesList() {
   return games;
 }
 
+// Helper to get monthly limit, assuming it might be needed for initial remainingRequests display
+// Or rely on the one in modelSelection.ts if only used there.
+function getMonthlyLimitForTier(tier?: string | null): number {
+    switch (tier) {
+      case "premium":
+        return 500;
+      case "premium_plus":
+        return 1500;
+      default:
+        return 100; 
+    }
+  }
+
 export async function POST(request: NextRequest) {
   try {
     const clerkUser = await currentUser();
@@ -51,13 +64,13 @@ export async function POST(request: NextRequest) {
         chatHistory, 
         customSystemPrompt, 
         useCodeReview, 
-        selectedCoderModelId, // New
-        selectedReviewerModelId // New
+        selectedCoderModelId, 
+        selectedReviewerModelId 
     } = await request.json();
 
     const profile = await prisma.profile.findUnique({
         where: { userId: clerkUser.id },
-        select: { subscriptionActive: true },
+        select: { subscriptionActive: true, subscriptionTier: true }, // Fetch tier for accurate limit display
     });
     const isSubscribed = profile?.subscriptionActive || false;
 
@@ -87,16 +100,16 @@ export async function POST(request: NextRequest) {
         isSubscribed, 
         useCodeReview, 
         selectedCoderModelId, 
-        selectedReviewerModelId // Pass both selected models
+        selectedReviewerModelId
     );
 
     if (!modelResolution.canUseApi || modelResolution.limitReached) {
       return NextResponse.json({
         error: modelResolution.error || "Monthly API request limit reached.",
         limitReached: true
-      }, { status: 403 });
+      }, { status: modelResolution.limitReached ? 403 : 400 }); // Use 403 for limit reached
     }
-     if (modelResolution.error) {
+     if (modelResolution.error) { // General errors from modelResolution
         return NextResponse.json({ error: modelResolution.error }, { status: 400 });
     }
 
@@ -105,8 +118,8 @@ export async function POST(request: NextRequest) {
         console.error("Collect API: Code review models not resolved properly for user", clerkUser.id);
         return NextResponse.json({ error: "Failed to resolve models for code review." }, { status: 500 });
       }
-      const chatbot1Model = modelResolution.chatbot1Model;
-      const chatbot2Model = modelResolution.chatbot2Model;
+      const chatbot1ModelToUse = modelResolution.chatbot1Model;
+      const chatbot2ModelToUse = modelResolution.chatbot2Model;
 
       const createReviewerPrompt = (initialSurveyDesign: string | null): string => `
         You are an expert survey design reviewer...
@@ -116,11 +129,11 @@ export async function POST(request: NextRequest) {
         Original User Prompt:\n---\n${userQuery}\n---\nOriginal System Prompt You Followed:\n---\n${finalSystemPrompt}\n---\nYour Initial Survey Design:\n---\n${initialSurveyDesign || "No initial survey design was provided."}\n---\nChatbot2's Review of Your Design:\n---\n${reviewFromChatbot2 || "No review feedback provided."}\n---\nYour Revised Survey Design:`;
 
       const reviewCycleOutputs: AiReviewCycleRawOutputs = await performAiReviewCycle(
-        chatbot1Model, systemMessage, initialUserMessages, chatbot2Model, createReviewerPrompt, createRevisionPrompt
+        chatbot1ModelToUse, systemMessage, initialUserMessages, chatbot2ModelToUse, createReviewerPrompt, createRevisionPrompt
       );
       finalApiResponse = { 
         message: reviewCycleOutputs.chatbot1RevisionResponse.content || reviewCycleOutputs.chatbot1InitialResponse.content || "Could not generate a revised response.",
-        remainingRequests: modelResolution.remainingRequests 
+        // remainingRequests will be updated after incrementing usage
       };
     } else {
       if (!modelResolution.chatbot1Model) {
@@ -132,14 +145,29 @@ export async function POST(request: NextRequest) {
       const response = await callOpenAIChat(modelToUse, messagesToAI);
       finalApiResponse = { 
         message: response.choices[0].message.content || "Could not generate a response.",
-        remainingRequests: modelResolution.remainingRequests
+        // remainingRequests will be updated after incrementing usage
       };
     }
-
-    await incrementApiUsage(clerkUser.id);
+    
+    // *** NEW: Call incrementApiUsage with detailed parameters ***
+    const incrementParams: IncrementApiUsageParams = {
+        userId: clerkUser.id,
+        isSubscribed: isSubscribed,
+        useCodeReview: useCodeReview,
+        coderModelId: modelResolution.chatbot1Model, 
+        reviewerModelId: useCodeReview ? modelResolution.chatbot2Model : null
+    };
+    await incrementApiUsage(incrementParams);
+    
     // Fetch updated usage for accurate remainingRequests
     const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
-    finalApiResponse.remainingRequests = Math.max(0, (usageData?.monthlyLimit || 0) - (usageData?.usageCount || 0));
+    if (usageData) {
+        finalApiResponse.remainingRequests = Math.max(0, (usageData.monthlyLimit) - (usageData.usageCount));
+    } else {
+        // Fallback if usage record somehow isn't created by incrementApiUsage (should be rare)
+        const limitForUser = getMonthlyLimitForTier(profile?.subscriptionTier);
+        finalApiResponse.remainingRequests = limitForUser; // Assumes 0 usage if no record
+    }
     
     return NextResponse.json(finalApiResponse);
 
