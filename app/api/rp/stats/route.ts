@@ -1,4 +1,3 @@
-// app/api/rp/stats/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { UserContributionModel, PayoutRecordModel, PayoutConfigModel } from "@/models/RandomPayables";
@@ -10,37 +9,45 @@ export async function GET(request: NextRequest) {
   try {
     await connectToDatabase();
     
-    // Get total contributors
     const totalContributors = await UserContributionModel.countDocuments();
     
-    // Get top contributors
-    const topContributors = await UserContributionModel.find()
-      .sort({ 'metrics.totalPoints': -1 })
+    // Fetch raw contributor data including all necessary fields
+    const rawTopContributors = await UserContributionModel.find()
+      .sort({ winProbability: -1 }) // Sort by actual win probability
       .limit(10)
-      .select('username metrics.totalPoints winCount')
+      // Select username, the whole metrics object, winProbability, and winCount
+      .select('username metrics winProbability winCount') 
       .lean();
+
+    // Map to the structure expected by the frontend Stats interface
+    const topContributors = rawTopContributors.map(c => ({
+        username: c.username,
+        metrics: { // For "Other Cat. Points"
+            totalPoints: c.metrics.totalPoints 
+        },
+        winCount: c.winCount,
+        winProbability: c.winProbability, // Directly from the model
+        githubRepoPoints: c.metrics.githubRepoPoints // From metrics
+    }));
     
-    // Get total payouts made
-    const totalPayoutAmount = await PayoutRecordModel.aggregate([
+    const totalPayoutAmountResult = await PayoutRecordModel.aggregate([
+      { $match: { status: 'completed' } }, // Only sum completed payouts
       { $group: { _id: null, total: { $sum: "$amount" } } }
     ]);
     
-    // Get latest payouts
-    const recentPayouts = await PayoutRecordModel.find()
+    const recentPayouts = await PayoutRecordModel.find({ status: 'completed' })
       .sort({ timestamp: -1 })
       .limit(10)
       .select('username amount timestamp')
       .lean();
     
-    // Get config
     const config = await PayoutConfigModel.findOne().lean();
     
-    // Compile stats
     const stats = {
       totalContributors,
-      totalPaidOut: totalPayoutAmount.length > 0 ? totalPayoutAmount[0].total : 0,
+      totalPaidOut: totalPayoutAmountResult.length > 0 ? totalPayoutAmountResult[0].total : 0,
       currentPoolSize: config?.totalPool || 0,
-      topContributors,
+      topContributors, // Use the mapped version
       recentPayouts
     };
     

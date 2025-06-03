@@ -13,7 +13,7 @@ interface Stats {
   currentPoolSize: number;
   topContributors: Array<{
     username: string;
-    metrics: { totalPoints: number };
+    metrics: { totalPoints: number }; // This is "Other Category Points"
     winCount: number;
     winProbability?: number;
     githubRepoPoints?: number;
@@ -37,7 +37,6 @@ export default function AdminPanel() {
 
   const isUserAdmin = isAdmin(user?.id, user?.username);
 
-  // Define inputClass here, within the component scope
   const inputClass = "mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm";
 
   useEffect(() => {
@@ -78,15 +77,14 @@ export default function AdminPanel() {
 
   const handleConfigChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    // Infer input type from the 'step' attribute for numbers, or default to text logic
     const typeAttribute = e.target.getAttribute('type');
     const isNumberInput = typeAttribute === 'number';
-
 
     const keys = name.split('.');
 
     setConfig(prevConfig => {
       if (!prevConfig) return null;
+      // Deep clone to avoid direct state mutation
       const newConfig = JSON.parse(JSON.stringify(prevConfig)) as IPayoutConfigBase;
       
       const parsedValue = isNumberInput ? parseFloat(value) || 0 : value;
@@ -221,9 +219,9 @@ export default function AdminPanel() {
                       {stats.topContributors.map((c, idx) => (
                         <tr key={idx}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{c.username}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.winProbability ? (c.winProbability * 100).toFixed(4) + '%' : 'N/A'}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.metrics.totalPoints.toFixed(2)}</td>
-                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.githubRepoPoints ? c.githubRepoPoints.toFixed(2) : 'N/A'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.winProbability !== undefined ? (c.winProbability * 100).toFixed(4) + '%' : 'N/A'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.metrics.totalPoints !== undefined ? c.metrics.totalPoints.toFixed(2) : 'N/A'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.githubRepoPoints !== undefined ? c.githubRepoPoints.toFixed(2) : 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.winCount}</td>
                         </tr>
                       ))}
@@ -285,19 +283,19 @@ export default function AdminPanel() {
               <h3 className="text-md font-medium text-gray-700 pt-4 border-t">GitHub Repository Contributions (60% Bucket)</h3>
               <div>
                 <label htmlFor="githubRepoDetails.owner" className="block text-sm font-medium text-gray-700">Repo Owner</label>
-                <input type="text" name="githubRepoDetails.owner" value={config.githubRepoDetails.owner} onChange={handleConfigChange} className={inputClass} />
+                <input type="text" name="githubRepoDetails.owner" value={config.githubRepoDetails?.owner || ''} onChange={handleConfigChange} className={inputClass} />
               </div>
               <div>
                 <label htmlFor="githubRepoDetails.repo" className="block text-sm font-medium text-gray-700">Repo Name</label>
-                <input type="text" name="githubRepoDetails.repo" value={config.githubRepoDetails.repo} onChange={handleConfigChange} className={inputClass} />
+                <input type="text" name="githubRepoDetails.repo" value={config.githubRepoDetails?.repo || ''} onChange={handleConfigChange} className={inputClass} />
               </div>
               <div>
                 <label htmlFor="githubRepoDetails.pointsPerCommit" className="block text-sm font-medium text-gray-700">Points Per Commit</label>
-                <input type="number" name="githubRepoDetails.pointsPerCommit" value={config.githubRepoDetails.pointsPerCommit} onChange={handleConfigChange} className={inputClass} />
+                <input type="number" name="githubRepoDetails.pointsPerCommit" value={config.githubRepoDetails?.pointsPerCommit || 0} onChange={handleConfigChange} className={inputClass} />
               </div>
               <div>
                 <label htmlFor="githubRepoDetails.pointsPerLineChanged" className="block text-sm font-medium text-gray-700">Points Per Line Changed</label>
-                <input type="number" step="0.01" name="githubRepoDetails.pointsPerLineChanged" value={config.githubRepoDetails.pointsPerLineChanged} onChange={handleConfigChange} className={inputClass} />
+                <input type="number" step="0.01" name="githubRepoDetails.pointsPerLineChanged" value={config.githubRepoDetails?.pointsPerLineChanged || 0} onChange={handleConfigChange} className={inputClass} />
               </div>
               
               <div className="pt-4 border-t">
