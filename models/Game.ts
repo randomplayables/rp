@@ -1,21 +1,25 @@
 import mongoose, { Document, Model } from "mongoose";
 import { IGame } from "@/types/Game";
 
-const IRLInstructionSchema = new mongoose.Schema({ /* … */ }, { _id: false });
+// Assuming IRLInstructionSchema is defined or simple enough to be inline
+const IRLInstructionSchema = new mongoose.Schema({
+  title: String,
+  url: String
+}, { _id: false });
 
 const GameSchema = new mongoose.Schema({
   id: { type: Number, unique: true, required: true },
   image: String,
   name: String,
+  description: String, // Added this line
   year: Number,
   link: String,
   irlInstructions: [IRLInstructionSchema],
-  codeUrl: String,  // New field for GitHub code repository
-  authorUsername: String,  // New field for author's username
+  codeUrl: String,
+  authorUsername: String,
 });
 
-// Notice the generics here: IGame & Document
 const GameModel: Model<IGame & Document> =
-  mongoose.models.Game || mongoose.model("Game", GameSchema);
+  mongoose.models.Game || mongoose.model<IGame & Document>("Game", GameSchema);
 
 export default GameModel;

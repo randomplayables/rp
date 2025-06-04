@@ -200,8 +200,8 @@ export async function POST(request: NextRequest) {
     const { 
         message: userQuery, 
         chatHistory, 
-        coderSystemPrompt, // Renamed
-        reviewerSystemPrompt, // New
+        coderSystemPrompt, 
+        reviewerSystemPrompt, 
         useCodeReview, 
         selectedCoderModelId, 
         selectedReviewerModelId 
@@ -214,10 +214,19 @@ export async function POST(request: NextRequest) {
     const isSubscribed = profile?.subscriptionActive || false;
 
     const templateStructure = getTemplateStructure();
-    const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery); // This is light, just names/IDs
+
+    console.log(`[GameLab Chat] INFO: Calling fetchGameCodeExamplesForQuery with query: "${userQuery}"`);
+    const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery);
+
     const gameCodeExamplesString = Object.keys(querySpecificGameCodeExamples).length > 0 
-        ? `Found examples related to: ${Object.keys(querySpecificGameCodeExamples).join(', ')}. The AI can access their full code if it deems them relevant.` 
-        : "No specific game code examples directly match the query keywords in the database.";
+        ? `Context from existing game code on the platform (structure, examples - NOT direct copy unless for template use): ${JSON.stringify(querySpecificGameCodeExamples, (key, value) => {
+            if (key === 'contentPreview' && typeof value === 'string' && value.length > 53) {
+                return value.substring(0, 100) + '... (preview truncated for prompt)'; 
+            }
+            return value;
+          }, 2)}`
+        : "No specific game code examples from the platform were found relevant or available for this query. Focus on general game development principles and the template structure provided.";
+    console.log(`[GameLab Chat] INFO: Game code examples string prepared for AI prompt (length: ${gameCodeExamplesString.length}). Preview: ${gameCodeExamplesString.substring(0, 200)}...`);
 
     let coderSystemPromptToUse: string;
     if (coderSystemPrompt && coderSystemPrompt.trim() !== "") {
@@ -234,11 +243,9 @@ export async function POST(request: NextRequest) {
     let reviewerSystemPromptToUse: string | null = null;
     if (useCodeReview) {
         let prompt: string;
-        
         if (reviewerSystemPrompt && reviewerSystemPrompt.trim() !== "") {
             prompt = reviewerSystemPrompt
               .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString);
-              
             if (prompt.includes('%%GAMELAB_TEMPLATE_STRUCTURES%%')) {
                 prompt = prompt.replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', JSON.stringify(templateStructure, null, 2));
             }
@@ -247,7 +254,6 @@ export async function POST(request: NextRequest) {
                 .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', JSON.stringify(templateStructure, null, 2))
                 .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString);
         }
-        
         reviewerSystemPromptToUse = prompt;
     }
 
@@ -286,7 +292,6 @@ export async function POST(request: NextRequest) {
       const chatbot1ModelToUse = modelResolution.chatbot1Model;
       const chatbot2ModelToUse = modelResolution.chatbot2Model;
       
-      // The user message to the reviewer includes the coder's system prompt for context
       const createReviewerPrompt = (initialGenContent: string | null): string => { 
         const { code: iCode, language: iLang } = extractGameLabCodeFromResponse(initialGenContent);
         return `
@@ -310,7 +315,6 @@ ${iCode || "Chatbot1 did not produce reviewable code."}
 Your review of the game code (focus on correctness, quality, game design, adherence to requirements, and completeness based on your reviewer system prompt):`;
       };
       
-      // The user message to the coder for revision includes its original system prompt for context
       const createRevisionPrompt = (initialGenContent: string | null, reviewContent: string | null): string => {
         const { code: iCode, language: iLang } = extractGameLabCodeFromResponse(initialGenContent);
         return `
@@ -372,6 +376,12 @@ Your Revised Code (only the code block, in the original language ${iLang}):`;
       const response = await callOpenAIChat(modelToUse, messagesToAI);
       const { code, language, message_text } = extractGameLabCodeFromResponse(response.choices[0].message.content);
       finalApiResponse = { message: message_text, code, language };
+    }
+    
+    if (Object.keys(querySpecificGameCodeExamples).length > 0) {
+        console.log(`[GameLab Chat] USAGE: AI was provided with context from existing games: ${Object.keys(querySpecificGameCodeExamples).join(', ')}. The AI's response (message/code) may have been influenced by this context for structure, inspiration, or patterns.`);
+    } else {
+        console.log(`[GameLab Chat] USAGE: AI was not provided with specific game code examples from the platform for this query.`);
     }
     
     const incrementParams: IncrementApiUsageParams = {

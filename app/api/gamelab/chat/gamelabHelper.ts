@@ -244,50 +244,73 @@ export function extractComponentsFromCode(codeContent: string): Array<{ name: st
 }
 
 export async function fetchGameCodeExamplesForQuery(query: string) {
+  console.log(`[GameLab Helper] INFO: Attempting to fetch game code examples for query: "${query}"`);
   try {
     await connectToMainDatabase();
-    
+    console.log("[GameLab Helper] INFO: Successfully connected to MongoDB.");
+
     const allGames = await GameModel.find({}).lean();
     let selectedGames = [];
-    
-    const mentionedGames = allGames.filter(game => 
+
+    const mentionedGames = allGames.filter(game =>
       game.name && query.toLowerCase().includes(game.name.toLowerCase())
     );
-    
+
     if (mentionedGames.length > 0) {
       selectedGames = mentionedGames;
+      console.log(`[GameLab Helper] INFO: Found ${mentionedGames.length} game(s) mentioned in query: ${mentionedGames.map(g => g.name).join(', ')}`);
     } else {
-      selectedGames = allGames.slice(0, 1);
+      selectedGames = allGames.slice(0, 1); // Default to one example if no specific game is mentioned
+      if (selectedGames.length > 0) {
+        console.log(`[GameLab Helper] INFO: No specific games mentioned in query. Selecting a default example game: ${selectedGames[0].name}`);
+      } else {
+        console.log("[GameLab Helper] WARNING: No games found in the database to select as an example.");
+        return {};
+      }
     }
-    
+
     const gameCodeContext: Record<string, any> = {};
-    
+
     for (const game of selectedGames) {
-      if (!game.id) continue;
+      if (!game.id) {
+        console.log(`[GameLab Helper] WARNING: Game "${game.name}" has no ID, skipping codebase fetch.`);
+        continue;
+      }
+      console.log(`[GameLab Helper] INFO: Accessing CodeBaseModel for game: "${game.name}" (ID: ${game.id})`);
       const codebase = await CodeBaseModel.findOne({ gameId: game.id }).lean();
-      
+
       if (codebase) {
+        console.log(`[GameLab Helper] SUCCESS: Found codebase for game "${game.name}". ContentType: "${codebase.contentType}".`);
+        let gameDataToStore: any = {
+            id: game.id,
+            name: game.name,
+            description: game.description,
+        };
+
         if (codebase.contentType === "repomix-xml") {
           const parsedCode = parseRepomixXml(codebase.codeContent);
-          gameCodeContext[game.name] = {
-            id: game.id,
-            name: game.name,
-            packageJson: parsedCode.packageJson,
-            componentExamples: parsedCode.components.slice(0, 2),
-          };
+          gameDataToStore.packageJson = parsedCode.packageJson ? 'Available' : 'Not Available';
+          gameDataToStore.componentExamples = parsedCode.components.slice(0, 2).map(c => ({ name: c.name, contentPreview: c.content.substring(0, 50) + '...' }));
+          console.log(`[GameLab Helper] USAGE: Parsed Repomix XML for "${game.name}". Extracted ${parsedCode.components.length} components (showing up to 2 previews).`);
         } else { 
           const components = extractComponentsFromCode(codebase.codeContent);
-          gameCodeContext[game.name] = {
-            id: game.id,
-            name: game.name,
-            componentExamples: components.slice(0, 2),
-          };
+          gameDataToStore.componentExamples = components.slice(0, 2).map(c => ({ name: c.name, contentPreview: c.content.substring(0, 50) + '...' }));
+          console.log(`[GameLab Helper] USAGE: Extracted components from source code for "${game.name}". Found ${components.length} components (showing up to 2 previews).`);
         }
+        gameCodeContext[game.name] = gameDataToStore;
+      } else {
+        console.log(`[GameLab Helper] WARNING: No codebase found in CodeBaseModel for game "${game.name}".`);
       }
+    }
+    
+    if (Object.keys(gameCodeContext).length > 0) {
+        console.log(`[GameLab Helper] SUCCESS: Prepared game code context for AI with keys: ${Object.keys(gameCodeContext).join(', ')}`);
+    } else {
+        console.log("[GameLab Helper] INFO: No game code examples could be prepared for the AI for this query.");
     }
     return gameCodeContext;
   } catch (error) {
-    console.error("GameLab Helper: Error fetching game code examples:", error);
+    console.error("[GameLab Helper] ERROR: Error fetching game code examples:", error);
     return {};
   }
 }
