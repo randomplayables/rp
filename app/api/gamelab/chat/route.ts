@@ -6,7 +6,6 @@ import { getTemplateStructure, fetchGameCodeExamplesForQuery } from "./gamelabHe
 import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
 
-const reactTsxExample = `// Example of a simple App.tsx component...`; // Keep existing
 const FALLBACK_GAMELAB_SYSTEM_PROMPT_TEMPLATE = `You are an AI game development assistant...`; // Keep existing
 
 

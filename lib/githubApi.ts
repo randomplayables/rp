@@ -15,22 +15,6 @@ interface RateLimit {
   reset: number;
 }
 
-// Check the remaining rate limit for debugging
-export async function checkRateLimit(): Promise<RateLimit | null> {
-  try {
-    const { data } = await octokit.rest.rateLimit.get();
-    console.log('GitHub API Rate Limit:', {
-      limit: data.rate.limit,
-      remaining: data.rate.remaining,
-      reset: new Date(data.rate.reset * 1000).toLocaleTimeString()
-    });
-    return data.rate;
-  } catch (error) {
-    console.error('Error checking rate limit:', error);
-    return null;
-  }
-}
-
 interface UserRepoActivity {
   commits: number;
   linesChanged: number;
@@ -109,8 +93,6 @@ export async function fetchUserRepoActivity(owner: string, repo: string, githubU
   }
 }
 
-
-// (Keep existing functions like fetchRepoContent, getRepoStructure, extractRepoInfo, getGameCode)
 // Define a generic type for fetched content
 type RepoContent = string | Array<{name: string; path: string; content: string}> | null;
 

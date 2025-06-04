@@ -21,6 +21,7 @@ export interface IPayoutConfigBase {
     bugReportWeight: number;
   };
   githubRepoDetails: {
+    toObject(): { owner: string; repo: string; pointsPerCommit: number; pointsPerLineChanged: number; } | undefined;
     owner: string;
     repo: string;
     pointsPerCommit: number;

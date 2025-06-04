@@ -161,15 +161,6 @@ async function handleCustomerSubscriptionDeleted(subscription: Stripe.Subscripti
     }
 }
 
-// Optional: A lean handler for your platform's own account updates, if needed.
-async function handlePlatformAccountUpdate(account: Stripe.Account) {
-    console.log(`🔔 (Platform Webhook) Platform's own Stripe Account Updated: ${account.id}`);
-    // Add any logic here if you need to react to changes in your platform's Stripe account.
-    // For instance, if your platform's ability to process payments or receive payouts changes.
-    // Most commonly, you'd monitor this directly in the Stripe dashboard.
-}
-
-
 export async function POST(request: NextRequest) {
     console.log("🔔 (Platform Webhook) /api/webhook ENDPOINT HIT - START OF REQUEST 🔔");
 
@@ -224,20 +215,6 @@ export async function POST(request: NextRequest) {
             case "customer.subscription.deleted":
                 console.log("🗑️ (Platform Webhook) Subscription deleted event received");
                 await handleCustomerSubscriptionDeleted(event.data.object as Stripe.Subscription);
-                break;
-            
-            case "account.updated":
-                // This case is for updates to your platform's own Stripe account,
-                // or if a connected account event was somehow routed here.
-                // The primary handler for connected user account.updated is now in /api/webhook/connect
-                const account = event.data.object as Stripe.Account;
-                console.log(`🔔 (Platform Webhook) Received account.updated. Account ID: ${account.id}.`);
-                // Optionally, check if account.id is your platform's ID vs a connected account ID
-                // if (account.id === YOUR_PLATFORM_STRIPE_ACCOUNT_ID) { // You'd need to store/know your platform's Stripe acct_ ID
-                //   await handlePlatformAccountUpdate(account);
-                // } else {
-                //   console.warn(`(Platform Webhook) Received account.updated for an unexpected account ID: ${account.id}. This should ideally be handled by /api/webhook/connect.`);
-                // }
                 break;
             
             default:

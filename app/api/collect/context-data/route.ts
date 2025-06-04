@@ -23,8 +23,3 @@ export async function GET() {
     );
   }
 }
-
-// Export the reusable function if you plan to use it in other backend files
-// For now, it's defined and used locally. If app/api/collect/chat/route.ts
-// needs it for its fallback, we can move this to a shared lib later.
-export { fetchCollectContextGames };
