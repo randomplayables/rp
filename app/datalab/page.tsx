@@ -457,7 +457,7 @@ export default function DataLabPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
+          <form onSubmit={handleSubmit} className="p-4 border-t bg-white overflow-auto">
             <div className="flex flex-col space-y-2">
               <textarea
                 value={inputMessage}

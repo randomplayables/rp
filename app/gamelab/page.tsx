@@ -583,7 +583,7 @@ export default function GameLabPage() {
             {isPending && <div className="flex justify-start"><div className="bg-white border border-gray-200 p-3 rounded-lg shadow-sm"><Spinner /></div></div>}
             <div ref={messagesEndRef} />
           </div>
-          <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
+          <form onSubmit={handleSubmit} className="p-4 border-t bg-white overflow-auto">
             <div className="flex flex-col space-y-2">
               <textarea
                 value={inputMessage}
