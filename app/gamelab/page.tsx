@@ -185,8 +185,8 @@ async function sendChatMessageToApi(
   const response = await fetch("/api/gamelab/chat", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ 
-      message, 
+    body: JSON.stringify({
+      message,
       chatHistory: chatHistory.map((m: ChatMessage) => ({role: m.role, content: m.content})),
       coderSystemPrompt, // Updated
       reviewerSystemPrompt, // New
@@ -214,14 +214,14 @@ export default function GameLabPage() {
   const [baseReviewerTemplateWithContext, setBaseReviewerTemplateWithContext] = useState<string | null>(null); // New
   const [isLoadingSystemPrompts, setIsLoadingSystemPrompts] = useState(true); // Combined
   const [useCodeReview, setUseCodeReview] = useState<boolean>(false);
-  
-  const router = useRouter(); 
+
+  const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
   const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
   const [selectedCoderModel, setSelectedCoderModel] = useState<string>("");
-  const [selectedReviewerModel, setSelectedReviewerModel] = useState<string>(""); 
+  const [selectedReviewerModel, setSelectedReviewerModel] = useState<string>("");
   const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
@@ -239,7 +239,7 @@ export default function GameLabPage() {
       const contextData = await fetchGamelabContextData();
       let populatedCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_TEMPLATE;
       let populatedReviewerPrompt = BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT_TEMPLATE;
-      
+
       const templateStructuresString = JSON.stringify(contextData.templateStructure || {}, null, 2);
       const querySpecificExamplesString = '(Code examples related to your query will be injected here by the AI if relevant)';
 
@@ -250,7 +250,7 @@ export default function GameLabPage() {
         if (index === 0) populatedCoderPrompt = prompt;
         else populatedReviewerPrompt = prompt;
       });
-      
+
       setCurrentCoderSystemPrompt(populatedCoderPrompt);
       setBaseCoderTemplateWithContext(populatedCoderPrompt);
       setCurrentReviewerSystemPrompt(populatedReviewerPrompt);
@@ -274,7 +274,7 @@ export default function GameLabPage() {
   useEffect(() => {
     initializeSystemPrompts();
   }, [initializeSystemPrompts]);
-  
+
   useEffect(() => {
     const githubConnected = searchParams.get('github_connected');
     const shouldRestoreState = localStorage.getItem('gamelab_restore_on_callback') === 'true';
@@ -297,7 +297,7 @@ export default function GameLabPage() {
       localStorage.removeItem('gamelab_pending_language');
       localStorage.removeItem('gamelab_pending_messages');
       localStorage.removeItem('gamelab_restore_on_callback');
-      
+
       const newParams = new URLSearchParams(searchParams.toString());
       newParams.delete('github_connected');
       router.replace(`${pathname}?${newParams.toString()}`, { scroll: false });
@@ -334,16 +334,16 @@ export default function GameLabPage() {
     onSuccess: (data: GameLabApiResponse) => {
       const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
       setMessages(prev => [...prev, assistantMessage]);
-      
+
       if (data.code) {
         setCurrentCode(data.code);
-        setCurrentLanguage(data.language || "tsx"); 
-        setCurrentTab('code'); 
+        setCurrentLanguage(data.language || "tsx");
+        setCurrentTab('code');
         setCodeError(null);
       } else if (data.error) {
         setCodeError(data.error);
       } else {
-        setCodeError(null); 
+        setCodeError(null);
       }
     },
     onError: (error: Error) => {
@@ -351,21 +351,21 @@ export default function GameLabPage() {
       setCodeError("Failed to communicate with the AI. Please try again.");
     }
   });
-  
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(scrollToBottom, [messages]);
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim() || isPending) return;
     const userMessage: ChatMessage = { role: 'user', content: inputMessage, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
     mutate({
-        message: inputMessage, 
-        useCodeReview: useCodeReview, 
+        message: inputMessage,
+        useCodeReview: useCodeReview,
         selectedCoderModelId: selectedCoderModel || undefined,
         selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined
     });
@@ -387,8 +387,8 @@ export default function GameLabPage() {
       initializeSystemPrompts();
     }
   };
-  
-  const extractGameTitle = (): string => { 
+
+  const extractGameTitle = (): string => {
     if (currentCode) {
       const titleMatch = currentCode.match(/<title[^>]*>(.*?)<\/title>/i);
       if (titleMatch && titleMatch[1] && titleMatch[1].trim() !== '') {
@@ -454,13 +454,13 @@ export default function GameLabPage() {
     return `GameLab Sketch ${timeString}`;
   };
 
-  const extractGameDescription = (): string => { 
+  const extractGameDescription = (): string => {
     const lastAssistantMessage = messages.filter(msg => msg.role === 'assistant').pop();
     if (lastAssistantMessage) {
         const sentences = lastAssistantMessage.content.split(/(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s/);
         for (let sentence of sentences) {
             sentence = sentence.trim();
-            if (sentence.length > 20 && sentence.length < 200 && 
+            if (sentence.length > 20 && sentence.length < 200 &&
                 (sentence.toLowerCase().includes('game') || sentence.toLowerCase().includes('sketch') || sentence.toLowerCase().includes('application')) &&
                 (sentence.toLowerCase().includes('this is') || sentence.toLowerCase().includes('creates') || sentence.toLowerCase().includes('allows') || sentence.toLowerCase().includes('features') || sentence.toLowerCase().includes('you can'))) {
                 return sentence.endsWith('.') || sentence.endsWith('!') || sentence.endsWith('?') ? sentence : sentence + '.';
@@ -471,83 +471,6 @@ export default function GameLabPage() {
         }
     }
     return `A game sketch created with RandomPlayables GameLab. Language: ${currentLanguage}.`;
-  };
-
-  const downloadCode = () => { 
-    if (!currentCode) return;
-    let extension = "txt";
-    let fileContent = currentCode;
-    const detectedLanguage = currentLanguage.toLowerCase();
-
-    if (detectedLanguage === "javascript" || detectedLanguage === "js") extension = "js";
-    else if (detectedLanguage === "typescript" || detectedLanguage === "ts") extension = "ts";
-    else if (detectedLanguage === "jsx") extension = "jsx";
-    else if (detectedLanguage === "tsx") extension = "tsx";
-    else if (detectedLanguage === "html" || currentCode.includes("<!DOCTYPE html>") || currentCode.includes("<html")) extension = "html";
-    else if (detectedLanguage === "css") extension = "css";
-    else if (detectedLanguage === "json") extension = "json";
-    else if (detectedLanguage === "python" || detectedLanguage === "py") extension = "py";
-    
-    const fileSeparatorRegex = /^\/\*\s*FILE:\s*([a-zA-Z0-9_.-]+)\s*\*\/\s*$/gm;
-    let lastIndex = 0;
-    const files = [];
-    let matchFs;
-    while ((matchFs = fileSeparatorRegex.exec(currentCode)) !== null) {
-        if (files.length > 0) {
-            files[files.length - 1].content = currentCode.substring(lastIndex, matchFs.index).trim();
-        }
-        files.push({ name: matchFs[1], content: ""});
-        lastIndex = matchFs.index + matchFs[0].length;
-    }
-    if (files.length > 0) { 
-        files[files.length - 1].content = currentCode.substring(lastIndex).trim();
-        fileContent = "/* GAMELAB MULTI-FILE EXPORT (raw) */\n\n" + currentCode;
-        extension = "txt"; 
-    } else if (currentCode.startsWith("```") && currentCode.match(/```\w+\s+\/\/\s*([a-zA-Z0-9_.-]+)/)) {
-        fileContent = "/* GAMELAB EXPORT (from code block) */\n\n" + currentCode;
-        extension = "txt";
-    }
-
-    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    
-    let filename = `gamelab-code-${new Date().toISOString()}.${extension}`;
-    const gameTitle = extractGameTitle().replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    if (gameTitle && gameTitle !== "gamelab_creation" && gameTitle.length > 3) {
-        filename = `${gameTitle}.${extension}`;
-    }
-
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadTranscript = () => { 
-    const transcript = messages.map(msg => 
-      `${msg.role.toUpperCase()} [${msg.timestamp.toLocaleTimeString()}]: ${msg.content}`
-    ).join('\n\n');
-    const blob = new Blob([transcript], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gamelab-transcript-${new Date().toISOString()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const clearChat = () => { 
-    if (window.confirm("Are you sure you want to clear the chat? This will delete all messages and code.")) {
-      setMessages([]);
-      setCurrentCode("");
-      setCurrentLanguage("tsx");
-      setCodeError(null);
-    }
   };
 
   return (
@@ -659,7 +582,7 @@ export default function GameLabPage() {
                   checked={useCodeReview}
                   onChange={(e) => {
                       setUseCodeReview(e.target.checked);
-                      setSelectedCoderModel(""); 
+                      setSelectedCoderModel("");
                       setSelectedReviewerModel("");
                   }}
                   className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
@@ -737,19 +660,29 @@ export default function GameLabPage() {
             </div>
           </form>
         </div>
-        
+
         <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white flex flex-col h-[calc(100vh-4rem)] max-h-[800px]">
           <div className="flex justify-between items-center mb-4 flex-shrink-0">
             <h2 className="text-2xl font-bold text-emerald-700">Game Lab Workspace</h2>
-            <div className="space-x-2">
-              <button onClick={clearChat} className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600">Clear</button>
-              {currentCode && <SaveSketchButton code={currentCode} language={currentLanguage} />}
-              <GitHubUploadButton gameTitle={extractGameTitle()} gameCode={currentCode} gameDescription={extractGameDescription()} currentLanguage={currentLanguage} messages={messages} />
-              <button onClick={downloadTranscript} className="px-3 py-1 text-sm bg-emerald-500 text-white rounded hover:bg-emerald-600">Transcript</button>
-              {currentCode && <button onClick={downloadCode} className="px-3 py-1 text-sm bg-emerald-500 text-white rounded hover:bg-emerald-600">Code</button>}
+            {/* MODIFIED BUTTON AREA */}
+            <div className="flex items-center space-x-2">
+              {currentCode && (
+                <SaveSketchButton
+                  code={currentCode}
+                  language={currentLanguage}
+                />
+              )}
+              <GitHubUploadButton
+                gameTitle={extractGameTitle()}
+                gameCode={currentCode}
+                gameDescription={extractGameDescription()}
+                currentLanguage={currentLanguage}
+                messages={messages}
+              />
             </div>
+            {/* END OF MODIFIED BUTTON AREA */}
           </div>
-          
+
           <div className="mb-4 border-b border-gray-200 flex-shrink-0">
             <ul className="flex flex-wrap -mb-px">
               <li className="mr-2">
@@ -764,15 +697,15 @@ export default function GameLabPage() {
               </li>
             </ul>
           </div>
-          
-          <div className="rounded-lg flex flex-col flex-grow min-h-0"> 
+
+          <div className="rounded-lg flex flex-col flex-grow min-h-0">
             {currentTab === 'code' ? (
               currentCode ? <CodeBlock code={currentCode} language={currentLanguage} /> : <div className="flex-1 p-4 bg-gray-50 flex items-center justify-center"><p className="text-gray-500">Your game code will appear here.</p></div>
             ) : (
               <GameSandbox code={currentCode} language={currentLanguage} />
             )}
           </div>
-          
+
           {codeError && <div className="mt-4 p-4 bg-red-100 border border-red-300 rounded-lg text-red-700 flex-shrink-0">{codeError}</div>}
         </div>
       </div>
