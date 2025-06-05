@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import GitHubIntegrationModel from "@/models/GitHubIntegration";
-import { Octokit } from "octokit";
+import { Octokit } from "@octokit/rest";
 
 export async function POST(request: NextRequest) {
   try {

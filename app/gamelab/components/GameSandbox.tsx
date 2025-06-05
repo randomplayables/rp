@@ -17,342 +17,254 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   const [activeSandboxGame, setActiveSandboxGame] = useState<any | null>(null);
   const [gameSessionId, setGameSessionId] = useState<string | null>(null);
 
-  // Create HTML template for the game
-  // Modified to accept currentSessionId as a parameter
-  const createGameHTML = (gameCode: string, lang: string, currentSessionId: string | null) => {
-    console.log("GameSandbox: Creating game HTML. Session ID for injection:", currentSessionId);
+  const createGameHTML = useCallback((gameCode: string, lang: string, currentSessionId: string | null) => {
     const sessionIdScript = `const GAMELAB_SESSION_ID = "${currentSessionId || 'pending'}";`;
     
     const communicationCode = `
-      // Add communication with parent window
       window.sendDataToGameLab = function(data) {
         console.log('Game (in iframe) sending data to GameLab:', data);
-        window.parent.postMessage({
-          type: 'GAMELAB_DATA',
-          payload: data
-        }, '*');
+        window.parent.postMessage({ type: 'GAMELAB_DATA', payload: data }, '*');
       };
-      
-      // Add error handling
+
       window.onerror = function(message, source, lineno, colno, error) {
-        console.error('GameLab error (in iframe):', message, error);
-        window.parent.postMessage({
-          type: 'GAMELAB_ERROR',
-          payload: { message, source, lineno, colno, stack: error?.stack }
-        }, '*');
-        return true; // Prevent default error handling
+        let M = message;
+        let S = source;
+        let L = lineno;
+        let C = colno;
+        let ST = error && typeof error.stack === 'string' ? error.stack : (typeof error === 'string' ? error : undefined);
+
+        if (error) {
+          if (typeof error === 'object' && error !== null) {
+            M = String(error.message || M);
+          } else if (typeof error === 'string') {
+            M = error;
+          }
+        }
+        
+        const errorPayload = {
+          message: String(M || "Unknown error from iframe"),
+          source: String(S || "Unknown source"),
+          lineno: L ? Number(L) : undefined,
+          colno: C ? Number(C) : undefined,
+          stack: ST
+        };
+        console.error('GameLab error (in iframe caught by window.onerror):', errorPayload);
+        window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: errorPayload }, '*');
+        return true;
       };
     `;
     
-    const containsHTML = gameCode.includes('<!DOCTYPE html>') || 
-                          gameCode.includes('<html') || 
-                          gameCode.includes('<body>');
+    const containsHTML = gameCode.includes('<!DOCTYPE html>') || gameCode.includes('<html') || gameCode.includes('<body>');
     
     if (containsHTML) {
       const headMatch = gameCode.match(/<head>([\s\S]*?)<\/head>/i);
       if (headMatch) {
-        return gameCode.replace(
-          /<head>([\s\S]*?)<\/head>/i,
-          `<head>$1<script>${sessionIdScript}${communicationCode}<\/script></head>`
-        );
+        return gameCode.replace(/<head>([\s\S]*?)<\/head>/i, `<head>$1<script>${sessionIdScript}${communicationCode}<\/script></head>`);
       } else {
-        return gameCode.replace(
-          /<html[^>]*>/i,
-          `$&<head><script>${sessionIdScript}${communicationCode}<\/script></head>`
-        );
+        return gameCode.replace(/<html[^>]*>/i, `$&<head><script>${sessionIdScript}${communicationCode}<\/script></head>`);
       }
     } else if (lang === 'jsx' || lang === 'tsx' || lang === 'react') {
       return `
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GameLab Sandbox</title>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin="anonymous"><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin="anonymous"><\/script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"><\/script>
   <script>${sessionIdScript}${communicationCode}<\/script>
-  <style>
-    body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
-    #game-container, #root { width: 100%; height: 100%; }
-    #error-display { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(255,0,0,0.8); color: white; padding: 10px; font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow: auto; display: none; z-index: 9999;}
-  </style>
+  <style>body,html{margin:0;padding:0;overflow:hidden;width:100%;height:100%}#game-container,#root{width:100%;height:100%}#error-display{position:absolute;bottom:0;left:0;right:0;background:rgba(255,0,0,0.8);color:white;padding:10px;font-family:monospace;white-space:pre-wrap;max-height:200px;overflow:auto;display:none;z-index:9999}<\/style>
 </head>
 <body>
-  <div id="root"></div>
-  <div id="game-container"></div>
-  <div id="error-display"></div>
+  <div id="root"></div><div id="game-container"></div><div id="error-display"></div>
   <script type="text/babel">
-    window.addEventListener('error', (event) => {
-      const errorDisplay = document.getElementById('error-display');
-      if(errorDisplay) {
-        errorDisplay.style.display = 'block';
-        errorDisplay.innerText = event.message + '\\n' + (event.error?.stack || '');
-      }
-    });
+    // Place all AI-generated code here at the top level, including imports.
+    ${gameCode}
+
+    // Now, wrap only the execution/rendering logic in a try...catch block.
     try {
-      ${gameCode}
-      if (typeof App !== 'undefined' && document.getElementById('root')) {
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+      const ComponentToRender = window.App || (typeof App !== 'undefined' ? App : null);
+
+      if (ComponentToRender && document.getElementById('root')) {
+        ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ComponentToRender));
+      } else {
+        const errorMsg = 'GameLab Sandbox Critical Error: Main App component (or window.App) was not found or #root element is missing. React application could not be started.';
+        console.error(errorMsg, 'typeof App:', (typeof App), 'typeof window.App:', (typeof window.App));
+        const errorDisplay = document.getElementById('error-display');
+        if(errorDisplay) { errorDisplay.style.display = 'block'; errorDisplay.innerText = errorMsg; }
+        window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: { message: errorMsg, source: 'GameSandboxLoader', lineno: 0, colno: 0, stack: \`App typeof: \${(typeof App)}, window.App typeof: \${(typeof window.App)}\` } }, '*');
       }
     } catch (err) {
-      console.error('Error executing React code:', err);
+      console.error('Error executing React/Babel code:', err.message, err.stack, err);
       const errorDisplay = document.getElementById('error-display');
-      if(errorDisplay) {
-        errorDisplay.style.display = 'block';
-        errorDisplay.innerText = err.message + '\\n' + err.stack;
-      }
+      if(errorDisplay) { errorDisplay.style.display = 'block'; errorDisplay.innerText = 'Render Error: ' + err.message + '\\n' + err.stack; }
+      window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: { message: 'Render Error: ' + String(err.message), source: 'BabelExecutionCatch', lineno: err.lineno, colno: err.colno, stack: String(err.stack) } }, '*');
     }
   <\/script>
-</body>
-</html>`;
+</body></html>`;
     } else {
       return `
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GameLab Sandbox</title>
   <script>${sessionIdScript}${communicationCode}<\/script>
-  <style>
-    body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }
-    #game-container { width: 100%; height: 100%; }
-    #error-display { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(255,0,0,0.8); color: white; padding: 10px; font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow: auto; display: none; z-index: 9999;}
-  </style>
+  <style>body,html{margin:0;padding:0;overflow:hidden;width:100%;height:100%}#game-container{width:100%;height:100%}#error-display{position:absolute;bottom:0;left:0;right:0;background:rgba(255,0,0,0.8);color:white;padding:10px;font-family:monospace;white-space:pre-wrap;max-height:200px;overflow:auto;display:none;z-index:9999}<\/style>
 </head>
 <body>
-  <div id="game-container"></div>
-  <div id="error-display"></div>
+  <div id="game-container"></div><div id="error-display"></div>
   <script>
-    window.addEventListener('error', (event) => {
-      const errorDisplay = document.getElementById('error-display');
-      if(errorDisplay) {
-        errorDisplay.style.display = 'block';
-        errorDisplay.innerText = event.message + '\\n' + (event.error?.stack || '');
-      }
-    });
     try {
       ${gameCode}
     } catch (err) {
-      console.error('Error executing JavaScript code:', err);
+      console.error('Error executing JavaScript code:', err.message, err.stack, err);
       const errorDisplay = document.getElementById('error-display');
-      if(errorDisplay) {
-        errorDisplay.style.display = 'block';
-        errorDisplay.innerText = err.message + '\\n' + err.stack;
-      }
+      if(errorDisplay) { errorDisplay.style.display = 'block'; errorDisplay.innerText = err.message + '\\n' + err.stack; }
+      window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: { message: 'JS Execution Error: ' + String(err.message), source: 'UserScriptCatch', lineno: err.lineno, colno: err.colno, stack: String(err.stack) } }, '*');
     }
   <\/script>
-</body>
-</html>`;
+</body></html>`;
     }
-  };
+  }, []); 
 
-  // Effect to initialize sandbox when code or language changes
   useEffect(() => {
     if (!code) {
-      setGamePreview(null);
-      setActiveSandboxGame(null);
-      setGameSessionId(null);
-      setIsLoading(false);
+      setGamePreview(null); setActiveSandboxGame(null); setGameSessionId(null); setIsLoading(false);
       return;
     }
-
-    console.log("GameSandbox: Code or language changed, re-initializing sandbox.");
     const initSandbox = async () => {
-      setIsLoading(true);
-      setError(null);
-      setActiveSandboxGame(null);
-      setGameSessionId(null);
-      setGamePreview(null);
-      setTestData([]); // Clear previous test data
-
+      setIsLoading(true); setError(null); setActiveSandboxGame(null); setGameSessionId(null); setGamePreview(null); setTestData([]);
       try {
-        // Step 1: Create the sandbox game entry
-        console.log("GameSandbox: Creating sandbox game entry...");
         const gameResponse = await fetch('/api/gamelab/sandbox', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'create_game',
-            data: {
-              name: `Test Game ${new Date().toLocaleTimeString()}`,
-              description: 'Created in GameLab Sandbox',
-              link: '/gamelab/sandbox', 
-              year: new Date().getFullYear()
-            }
-          })
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create_game', data: { name: `Test Game ${new Date().toLocaleTimeString()}`, description: 'Created in GameLab Sandbox', link: '/gamelab/sandbox', year: new Date().getFullYear() }})
         });
         const gameData = await gameResponse.json();
-
-        if (!gameData.success || !gameData.game) {
-          setError('Failed to create sandbox game entry.');
-          console.error("GameSandbox: Failed to create_game", gameData);
-          setIsLoading(false);
-          return;
-        }
-        console.log('GameSandbox: Sandbox game created:', gameData.game);
+        if (!gameData.success || !gameData.game) { setError('Failed to create sandbox game entry.'); console.error("GameSandbox: Failed to create_game", gameData); setIsLoading(false); return; }
         setActiveSandboxGame(gameData.game);
 
-        // Step 2: Create the game session for the newly created game
-        console.log("GameSandbox: Creating game session for game ID:", gameData.game.id);
         const sessionResponse = await fetch('/api/gamelab/sandbox', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'create_session',
-            data: { gameId: gameData.game.id } 
-          })
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create_session', data: { gameId: gameData.game.id } })
         });
         const sessionData = await sessionResponse.json();
-
-        if (!sessionData.success || !sessionData.session) {
-          setError('Failed to create sandbox session.');
-          console.error("GameSandbox: Failed to create_session", sessionData);
-          setIsLoading(false);
-          return;
-        }
-        console.log('GameSandbox: Game session created:', sessionData.session);
+        if (!sessionData.success || !sessionData.session) { setError('Failed to create sandbox session.'); console.error("GameSandbox: Failed to create_session", sessionData); setIsLoading(false); return; }
         setGameSessionId(sessionData.session.sessionId);
-
-        // Step 3: Generate and set the HTML for the iframe
-        console.log("GameSandbox: Generating HTML for iframe with session ID:", sessionData.session.sessionId);
+        
         const htmlTemplate = createGameHTML(code, language, sessionData.session.sessionId);
         setGamePreview(htmlTemplate);
-
       } catch (err) {
         console.error('GameSandbox: Error during sandbox initialization:', err);
-        setError(`Sandbox initialization error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setError(`Sandbox init error: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setIsLoading(false);
       }
     };
-
     initSandbox();
-  }, [code, language]);
+  }, [code, language, createGameHTML]);
 
-
-  // Save game data (can be triggered by the game or UI buttons)
   const saveGameData = useCallback(async (roundDataFromGame: any) => {
-    console.log("GameSandbox: saveGameData called with:", roundDataFromGame);
-    console.log("GameSandbox: Current activeSandboxGame:", activeSandboxGame);
-    console.log("GameSandbox: Current gameSessionId:", gameSessionId);
-
     if (!activeSandboxGame || !gameSessionId) {
-      const errorMsg = 'Cannot save data: No active game or session ID is available. The sandbox might still be initializing or failed to initialize.';
-      setError(errorMsg);
-      console.error('GameSandbox: Attempted to save data without active game or sessionID', { activeSandboxGame, gameSessionId });
+      const errorMsg = 'Cannot save data: No active game or session ID.';
+      setError(errorMsg); console.error('GameSandbox: Save data attempt failed', { activeSandboxGame, gameSessionId });
       return;
     }
-    
     try {
-      console.log("GameSandbox: Sending data to backend:", { action: 'save_game_data', data: { sessionId: gameSessionId, gameId: activeSandboxGame.id, roundNumber: 1, roundData: roundDataFromGame } });
       const response = await fetch('/api/gamelab/sandbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_game_data',
-          data: {
-            sessionId: gameSessionId,
-            gameId: activeSandboxGame.id,
-            roundNumber: 1, // Assuming round 1 for now, this could be dynamic
-            roundData: roundDataFromGame
-          }
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_game_data', data: { sessionId: gameSessionId, gameId: activeSandboxGame.id, roundNumber: 1, roundData: roundDataFromGame }})
       });
-      
       const data = await response.json();
-      
-      if (data.success) {
-        console.log('GameSandbox: Saved game data successfully:', data.gameData);
-        setTestData(prev => [...prev, data.gameData]);
-      } else {
-        console.error('GameSandbox: Failed to save game data to backend:', data.error);
-        setError(`Failed to save game data: ${data.error || 'Unknown backend error'}`);
-      }
+      if (data.success) { setTestData(prev => [...prev, data.gameData]); }
+      else { setError(`Failed to save data: ${data.error || 'Unknown'}`); }
     } catch (err) {
-      console.error('GameSandbox: Error in saveGameData fetch:', err);
-      setError(`Save error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(`Save error: ${err instanceof Error ? err.message : 'Unknown'}`);
     }
   }, [activeSandboxGame, gameSessionId]);
-  
-  // Handle messages from the iframe
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (!event.data || typeof event.data !== 'object') return;
-
-      console.log("GameSandbox: Message received from iframe", event.data);
+      if (!event.data || !event.data.type || !iframeRef.current || event.source !== iframeRef.current.contentWindow) {
+        return;
+      }
       
       if (event.data.type === 'GAMELAB_DATA') {
-        console.log('GameSandbox: Received GAMELAB_DATA from game:', event.data.payload);
         saveGameData(event.data.payload);
-      }
-      else if (event.data.type === 'GAMELAB_ERROR') {
-        console.error('GameSandbox: Received GAMELAB_ERROR from game:', event.data.payload);
-        const { message, lineno, colno } = event.data.payload;
-        setError(`Game error: ${message}${lineno ? ` (Line: ${lineno}, Col: ${colno})` : ''}`);
+      } else if (event.data.type === 'GAMELAB_ERROR') {
+        let actualPayloadObject = event.data.payload;
+
+        if (typeof actualPayloadObject === 'string') {
+          try {
+            actualPayloadObject = JSON.parse(actualPayloadObject);
+          } catch (e) {
+            console.error('GameSandbox: Failed to parse GAMELAB_ERROR string payload:', actualPayloadObject, e);
+            actualPayloadObject = { 
+              message: `Malformed error payload (was string): ${actualPayloadObject}`, 
+              source: "GameSandboxHandler",
+              stack: `Error parsing payload string: ${e instanceof Error ? e.message : String(e)}`
+            };
+          }
+        }
+        
+        const payload = actualPayloadObject || {};
+        let displayMessage = String(payload.message || "Script error.");
+        if ((displayMessage === "Script error." || displayMessage === "Unknown error from iframe" || displayMessage.includes("Error: GameLab Sandbox Critical Error")) && payload.stack) {
+            const firstLineOfStack = String(payload.stack).split('\n')[0];
+            if (firstLineOfStack) displayMessage = firstLineOfStack;
+        }
+
+        const lineInfo = payload.lineno ? ` (Line: ${payload.lineno}${payload.colno ? `, Col: ${payload.colno}` : ''})` : '';
+        let sourceInfo = '';
+        if (payload.source && payload.source !== "Unknown source" && 
+            !String(payload.source).includes("unpkg.com") && 
+            !String(payload.source).includes("babel.min.js") && 
+            !["GameSandboxLoader", "BabelExecutionCatch", "UserScriptCatch", "GameSandboxHandler"].includes(String(payload.source))) {
+          sourceInfo = ` in ${payload.source}`;
+        }
+        
+        setError(`Game error: ${displayMessage}${lineInfo}${sourceInfo}`);
+        
+        if (payload.stack) {
+            console.error("Full error stack from iframe (if available):\n", payload.stack);
+        } else {
+            console.log("No stack trace available in error payload from iframe.");
+        }
       }
     };
     
     window.addEventListener('message', handleMessage);
     return () => {
-      console.log("GameSandbox: Removing message listener");
       window.removeEventListener('message', handleMessage);
-    }
-  }, [saveGameData]); // saveGameData is memoized with useCallback
+    };
+  }, [saveGameData]);
   
-  // Reset the sandbox
   const resetSandbox = async () => {
-    if (!activeSandboxGame) {
-      console.warn("GameSandbox: Reset called but no active sandbox game.");
-      return;
-    }
-    
-    console.log("GameSandbox: Resetting sandbox...");
-    setIsLoading(true);
-    setTestData([]); // Clear test data
-    setError(null); // Clear errors
-
+    if (!activeSandboxGame) { return; }
+    setIsLoading(true); setTestData([]); setError(null);
     try {
-        // Re-create a game session for the current active game
-        console.log("GameSandbox: Re-creating game session for game ID:", activeSandboxGame.id);
-        const sessionResponse = await fetch('/api/gamelab/sandbox', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'create_session',
-                data: { gameId: activeSandboxGame.id }
-            })
-        });
-        const sessionData = await sessionResponse.json();
-
-        if (sessionData.success && sessionData.session) {
-            console.log('GameSandbox: New session created for reset:', sessionData.session);
-            setGameSessionId(sessionData.session.sessionId);
-            
-            // Regenerate HTML with the new session ID and reload iframe
-            const htmlTemplate = createGameHTML(code, language, sessionData.session.sessionId);
-            setGamePreview(htmlTemplate); // This will cause the iframe to reload via srcDoc change
-             if (iframeRef.current) {
-                 // Forcing a reload if srcDoc method isn't consistent
-                 iframeRef.current.src = 'about:blank';
-                 setTimeout(() => {
-                     if (iframeRef.current) {
-                        iframeRef.current.srcdoc = htmlTemplate;
-                     }
-                 }, 50);
-             }
-
-        } else {
-            setError('Failed to create new session for reset.');
-            console.error("GameSandbox: Failed to create_session on reset", sessionData);
+      const sessionResponse = await fetch('/api/gamelab/sandbox', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_session', data: { gameId: activeSandboxGame.id } })
+      });
+      // ** FIX: Use sessionResponse, not response **
+      const sessionData = await sessionResponse.json();
+      if (sessionData.success && sessionData.session) {
+        setGameSessionId(sessionData.session.sessionId);
+        const htmlTemplate = createGameHTML(code, language, sessionData.session.sessionId);
+        setGamePreview(htmlTemplate);
+        if (iframeRef.current) {
+          iframeRef.current.src = 'about:blank';
+          setTimeout(() => { if (iframeRef.current) { iframeRef.current.srcdoc = htmlTemplate; }}, 50);
         }
+      } else {
+        setError('Failed to create new session for reset.');
+      }
     } catch (err) {
-        console.error('GameSandbox: Error during sandbox reset:', err);
-        setError(`Reset error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(`Reset error: ${err instanceof Error ? err.message : 'Unknown'}`);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
   
@@ -360,56 +272,35 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
     <div className="game-sandbox w-full h-full flex flex-col">
       <div className="sandbox-controls mb-3 flex justify-between items-center">
         <h3 className="text-lg font-semibold">Game Preview</h3>
-        <div className="flex space-x-2">
-          <button
-            onClick={resetSandbox}
-            disabled={isLoading || !activeSandboxGame}
-            className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50"
-          >
-            Reset Game
-          </button>
-        </div>
+        <button onClick={resetSandbox} disabled={isLoading || !activeSandboxGame} className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50">
+          Reset Game
+        </button>
       </div>
       
       {error && (
         <div className="mb-2 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
           <p className="font-semibold">Error:</p>
-          <pre className="whitespace-pre-wrap">{error}</pre>
+          <pre className="whitespace-pre-wrap break-all">{error}</pre>
         </div>
       )}
       
       <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden min-h-[400px] flex flex-col">
-        {isLoading && !gamePreview ? ( // Show loading spinner only if preview is not yet ready
+        {isLoading && !gamePreview ? (
           <div className="flex-1 p-4 bg-gray-50 rounded-lg flex items-center justify-center">
-            <Spinner />
-            <span className="ml-2">Loading sandbox...</span>
+            <Spinner /><span className="ml-2">Loading sandbox...</span>
           </div>
         ) : gamePreview ? (
-          <iframe
-            ref={iframeRef}
-            srcDoc={gamePreview}
-            title="Game Preview"
-            className="w-full flex-grow border-none"
-            sandbox="allow-scripts allow-same-origin" // allow-same-origin might be needed for some complex games, but be cautious
-            onLoad={() => {
-              console.log("GameSandbox: Iframe loaded.");
-            }}
-          />
+          <iframe ref={iframeRef} srcDoc={gamePreview} title="Game Preview" className="w-full flex-grow border-none" sandbox="allow-scripts allow-same-origin" />
         ) : !isLoading && !code ? (
-             <div className="flex-1 p-4 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">Enter code and chat with the AI to generate a game.</p>
-            </div>
+             <div className="flex-1 p-4 bg-gray-50 rounded-lg flex items-center justify-center"><p className="text-gray-500">Enter code and chat with the AI to generate a game.</p></div>
         ) : !isLoading && !error ? (
-            <div className="flex-1 p-4 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">Sandbox is ready. Waiting for game code to generate preview.</p>
-            </div>
-        ) : null /* Error is displayed above */
-        }
+            <div className="flex-1 p-4 bg-gray-50 rounded-lg flex items-center justify-center"><p className="text-gray-500">Sandbox is ready. Game will load shortly.</p></div>
+        ) : null}
         
         {testData.length > 0 && (
           <div className="p-3 bg-gray-800 text-white text-sm max-h-[150px] overflow-y-auto">
             <p className="font-semibold mb-1">Test Data Log (from GameLabSandbox.gamedatas):</p>
-            <pre className="text-xs">{JSON.stringify(testData, null, 2)}</pre>
+            <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(testData, null, 2)}</pre>
           </div>
         )}
       </div>
