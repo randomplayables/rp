@@ -112,31 +112,22 @@ window.App = App;
 `;
 
 const BASE_GAMELAB_CODER_SYSTEM_PROMPT_TEMPLATE = `
-You are an AI game development assistant for RandomPlayables. Your primary goal is to generate self-contained, runnable game code for an in-browser sandbox that uses Babel Standalone.
+You are an AI game development assistant for RandomPlayables. Your primary goal is to generate a complete, portable, and runnable React/TSX game component.
 
 Key Instructions:
-1.  **Output Format:** Primarily, you should generate code for a single React/TSX component.
-2.  **React/TSX Sandbox Rules:**
-    * **CRITICAL RULE:** Your entire script runs inside a \`<script type="text/babel">\` tag. You **MUST NOT** include \`import\` or \`export\` statements, as they are not supported and will fail.
-    * \`React\` and \`ReactDOM\` are already loaded and available as global variables.
-    * To use hooks like \`useState\`, destructure them from the global \`React\` object: \`const { useState, useEffect } = React;\`.
-    * The main component MUST be named \`App\`.
-    * At the end of your script, you MUST assign your component to the window object so the sandbox can render it: \`window.App = App;\`.
-    * Use functional components with hooks and include inline CSS via a \`<style>\` tag.
-    * **Sandbox Interaction:** Use \`window.sendDataToGameLab({ your_data_here })\` and check for its existence robustly: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
-3.  **HTML/JS/CSS Games (If specifically requested):**
-    * Provide a complete, single HTML file with embedded JavaScript and CSS.
-4.  **General:**
-    * Write clean, self-contained, and readable code.
-    * Interpret user requests for game ideas, mechanics, or themes, and translate them into a functional sketch following all rules above.
+1.  **Generate Full Component:** Create a self-contained TSX file. You **MUST** include necessary imports (e.g., \`import React, { useState } from 'react';\`) and **MUST** export the main component as a default export (\`export default App;\`).
+2.  **Main Component:** The main component MUST be a React Functional Component named \`App\`.
+3.  **Attribute Values:** **CRITICAL RULE:** All HTML attributes must be string literals. For example, use \`type="text"\`, \`className="my-class"\`. NEVER use variable names for static attributes like \`type={number}\`; this will cause an error.
+4.  **Styling:** Include CSS styles inside a \`<style>\` tag within the component's returned JSX for easy portability.
+5.  **Sandbox Interaction:** The generated code will be adapted for a sandbox. If you need to send data out, a global function \`window.sendDataToGameLab(data)\` will be available. Check for its existence before using it: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
+6.  **No Sandbox-Specific Code:** Do not add code that is specific to the sandbox environment (like \`window.App = App;\`). The build process handles that. Just write a standard, portable React component.
 
-Available Game Code Examples (for context, structure, or inspiration if relevant to the query):
+Available Game Code Examples (for context):
 %%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%
 
-Available GameLab Template Structures (primarily for React/TSX sketches):
+Available GameLab Template Structures:
 %%GAMELAB_TEMPLATE_STRUCTURES%%
 
-Focus on generating the code block directly. If explanations are needed, keep them brief and separate from the main code block.
 Return ONLY the code required.
 EXAMPLE OF A CORRECTLY FORMATTED REACT + TYPESCRIPT SKETCH:
 \`\`\`tsx
@@ -147,7 +138,7 @@ ${reactTsxExample}
 const BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT_TEMPLATE = `
 You are an AI expert reviewing game code for a browser sandbox environment.
 Focus your review on:
-1.  **Sandbox Compatibility:** Does the code correctly AVOID using \`import\` and \`export\` statements? Does it correctly access React hooks (e.g., \`const { useState } = React;\`)? Is the main \`App\` component correctly assigned to \`window.App\`?
+1.  **Sandbox Compatibility:** The code will be sanitized (imports/exports removed) before hitting the sandbox. Review the source code for correctness assuming React is available. Does it correctly access React hooks (e.g., \`useState\`)? Is the main \`App\` component correctly defined?
 2.  **Correctness & Functionality:** Does the code run? Does it function as described?
 3.  **Code Quality:** Is the code well-structured and readable?
 4.  **Adherence to Requirements:** Is the main component named \`App\`? Is \`window.sendDataToGameLab\` checked with \`typeof window.sendDataToGameLab === 'function'\` before use?
@@ -193,9 +184,8 @@ export default function GameLabPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   
-  // Store both versions of the code
-  const [originalCode, setOriginalCode] = useState<string>(""); // For editor and uploads
-  const [sandboxCode, setSandboxCode] = useState<string>("");   // For GameSandbox preview
+  const [originalCode, setOriginalCode] = useState<string>(""); 
+  const [sandboxCode, setSandboxCode] = useState<string>("");   
   
   const [currentLanguage, setCurrentLanguage] = useState<string>("tsx");
   const [currentTab, setCurrentTab] = useState<'code' | 'sandbox'>('code');
@@ -281,8 +271,6 @@ export default function GameLabPage() {
 
       if (pendingCode) {
           setOriginalCode(pendingCode);
-          // Note: Sanitization for sandbox would happen on next AI response, 
-          // or we could sanitize here if needed immediately. For now, we restore original.
           setSandboxCode(""); 
       }
       if (pendingLanguage) setCurrentLanguage(pendingLanguage);
@@ -335,14 +323,19 @@ export default function GameLabPage() {
       const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
       setMessages(prev => [...prev, assistantMessage]);
 
-      if (data.code || data.originalCode) {
+      // UPDATED LOGIC
+      if (data.originalCode || data.code) {
+        // Prefer originalCode for the editor, which should now have imports
         setOriginalCode(data.originalCode || data.code || "");
+        // Use the specifically sanitized 'code' field for the sandbox
         setSandboxCode(data.code || "");
         setCurrentLanguage(data.language || "tsx");
-        setCurrentTab('code');
+        setCurrentTab('code'); // Default to showing the new code in the editor
         setCodeError(null);
       } else if (data.error) {
         setCodeError(data.error);
+        setOriginalCode(""); // Clear old code on error
+        setSandboxCode("");
       } else {
         setCodeError(null);
       }
@@ -421,7 +414,6 @@ export default function GameLabPage() {
             <div ref={messagesEndRef} />
           </div>
           <form onSubmit={handleSubmit} className="p-4 border-t bg-white overflow-auto">
-             {/* This whole form section with textarea, model selectors, and system prompts remains unchanged */}
              <div className="flex flex-col space-y-2">
               <textarea
                 value={inputMessage} onChange={(e) => setInputMessage(e.target.value)}
