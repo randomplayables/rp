@@ -10,6 +10,12 @@ import GitHubUploadButton from './components/GitHubUploadButton';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useUser } from "@clerk/nextjs";
 import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
+import { 
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT, 
+  BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS
+} from "./prompts";
+
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -19,133 +25,13 @@ interface ChatMessage {
 
 interface GameLabApiResponse {
   message: string;
-  originalCode?: string; // Portable code with imports/exports
-  code?: string;         // Sanitized code for the sandbox
+  originalCode?: string;
+  code?: string;
   language?: string;
   error?: string;
   limitReached?: boolean;
   remainingRequests?: number;
 }
-
-const reactTsxExample = `
-// NOTE: 'import' statements are NOT allowed.
-// 'React' is already globally available in the sandbox.
-
-// Define a simple CSS style string.
-const appStyles = \`
-  .container {
-    font-family: Arial, sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 80vh;
-    background-color: #f0f8ff;
-    padding: 20px;
-    border-radius: 10px;
-  }
-  .title {
-    color: #333;
-  }
-  .button {
-    background-color: #10B981; /* emerald-500 */
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 16px;
-  }
-  .button:hover {
-    background-color: #059669; /* emerald-600 */
-  }
-  .gameArea {
-    width: 300px;
-    height: 200px;
-    border: 1px solid #ccc;
-    margin-top: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-\`;
-
-// Main App component
-const App = () => {
-  const { useState, useEffect } = React; // Destructure hooks from the global React object
-
-  const [score, setScore] = useState(0);
-
-  useEffect(() => {
-    if (typeof window.sendDataToGameLab === 'function') {
-      window.sendDataToGameLab({ event: 'game_started', time: new Date().toISOString() });
-    }
-  }, []);
-
-  const handlePlayerAction = () => {
-    const newScore = score + 10;
-    setScore(newScore);
-    if (typeof window.sendDataToGameLab === 'function') {
-      window.sendDataToGameLab({ event: 'player_action', newScore, time: new Date().toISOString() });
-    }
-  };
-
-  return (
-    <>
-      <style>{appStyles}</style>
-      <div className="container">
-        <h1 className="title">My Awesome React Game</h1>
-        <p>Score: {score}</p>
-        <button onClick={handlePlayerAction} className="button">
-          Perform Action
-        </button>
-        <div className="gameArea">
-          <p>Game Content Here</p>
-        </div>
-      </div>
-    </>
-  );
-};
-
-// Make the App component available to the sandbox for rendering.
-window.App = App;
-`;
-
-const BASE_GAMELAB_CODER_SYSTEM_PROMPT_TEMPLATE = `
-You are an AI game development assistant for RandomPlayables. Your primary goal is to generate a complete, portable, and runnable React/TSX game component.
-
-Key Instructions:
-1.  **Generate Full Component:** Create a self-contained TSX file. You **MUST** include necessary imports (e.g., \`import React, { useState } from 'react';\`) and **MUST** export the main component as a default export (\`export default App;\`).
-2.  **Main Component:** The main component MUST be a React Functional Component named \`App\`.
-3.  **Attribute Values:** **CRITICAL RULE:** All HTML attributes must be string literals. For example, use \`type="text"\`, \`className="my-class"\`. NEVER use variable names for static attributes like \`type={number}\`; this will cause an error.
-4.  **Styling:** Include CSS styles inside a \`<style>\` tag within the component's returned JSX for easy portability.
-5.  **Sandbox Interaction:** The generated code will be adapted for a sandbox. If you need to send data out, a global function \`window.sendDataToGameLab(data)\` will be available. Check for its existence before using it: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
-6.  **No Sandbox-Specific Code:** Do not add code that is specific to the sandbox environment (like \`window.App = App;\`). The build process handles that. Just write a standard, portable React component.
-
-Available Game Code Examples (for context):
-%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%
-
-Available GameLab Template Structures:
-%%GAMELAB_TEMPLATE_STRUCTURES%%
-
-Return ONLY the code required.
-EXAMPLE OF A CORRECTLY FORMATTED REACT + TYPESCRIPT SKETCH:
-\`\`\`tsx
-${reactTsxExample}
-\`\`\`
-`;
-
-const BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT_TEMPLATE = `
-You are an AI expert reviewing game code for a browser sandbox environment.
-Focus your review on:
-1.  **Sandbox Compatibility:** The code will be sanitized (imports/exports removed) before hitting the sandbox. Review the source code for correctness assuming React is available. Does it correctly access React hooks (e.g., \`useState\`)? Is the main \`App\` component correctly defined?
-2.  **Correctness & Functionality:** Does the code run? Does it function as described?
-3.  **Code Quality:** Is the code well-structured and readable?
-4.  **Adherence to Requirements:** Is the main component named \`App\`? Is \`window.sendDataToGameLab\` checked with \`typeof window.sendDataToGameLab === 'function'\` before use?
-5.  **Completeness:** Is the code a complete, runnable example?
-Provide specific, constructive feedback. Return only your review.
-`;
-
 
 async function fetchGamelabContextData() {
   const response = await fetch("/api/gamelab/context-data");
@@ -158,6 +44,7 @@ async function fetchGamelabContextData() {
 async function sendChatMessageToApi(
     message: string,
     chatHistory: ChatMessage[],
+    language: string,
     coderSystemPrompt: string | null,
     reviewerSystemPrompt: string | null,
     useCodeReview: boolean,
@@ -170,6 +57,7 @@ async function sendChatMessageToApi(
     body: JSON.stringify({
       message,
       chatHistory: chatHistory.map((m: ChatMessage) => ({role: m.role, content: m.content})),
+      language,
       coderSystemPrompt,
       reviewerSystemPrompt,
       useCodeReview,
@@ -183,14 +71,14 @@ async function sendChatMessageToApi(
 export default function GameLabPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
-  
   const [originalCode, setOriginalCode] = useState<string>(""); 
   const [sandboxCode, setSandboxCode] = useState<string>("");   
-  
   const [currentLanguage, setCurrentLanguage] = useState<string>("tsx");
   const [currentTab, setCurrentTab] = useState<'code' | 'sandbox'>('code');
   const [codeError, setCodeError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [language, setLanguage] = useState('tsx'); 
 
   const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
   const [currentCoderSystemPrompt, setCurrentCoderSystemPrompt] = useState<string | null>(null);
@@ -210,31 +98,40 @@ export default function GameLabPage() {
   const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
-  const suggestedPrompts = [
-    "Create a number guessing game as a React/TSX sketch",
-    "I want a simple grid-based puzzle game in React/TSX for the sandbox",
-    "Help me design a memory matching game (React/TSX sketch)",
-    "Make a game about coin flipping statistics (React/TSX sketch)",
-    "Build a very basic ecosystem simulation (React/TSX sketch)"
-  ];
+  const suggestedPrompts = {
+    tsx: [
+      "Create a number guessing game as a React/TSX sketch",
+      "I want a simple grid-based puzzle game in React/TSX for the sandbox",
+      "Help me design a memory matching game (React/TSX sketch)",
+      "Make a game about coin flipping statistics (React/TSX sketch)",
+      "Build a very basic ecosystem simulation (React/TSX sketch)"
+    ],
+    javascript: [
+        "Create a simple clicker game with Vanilla JS",
+        "Make a Vanilla JS game where a circle avoids the mouse cursor",
+        "Build a basic 'Whack-a-Mole' game using plain JavaScript and CSS",
+        "Code a simple memory card game in Vanilla JS",
+        "Generate a basic particle animation with Vanilla JS and HTML Canvas"
+    ]
+  };
 
   const initializeSystemPrompts = useCallback(async () => {
     setIsLoadingSystemPrompts(true);
     try {
       const contextData = await fetchGamelabContextData();
-      let populatedCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_TEMPLATE;
-      let populatedReviewerPrompt = BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT_TEMPLATE;
+      let populatedCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT;
+      let populatedReviewerPrompt = BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT;
 
       const templateStructuresString = JSON.stringify(contextData.templateStructure || {}, null, 2);
       const querySpecificExamplesString = '(Code examples related to your query will be injected here by the AI if relevant)';
 
-      [populatedCoderPrompt, populatedReviewerPrompt].forEach((_, index) => {
-        let prompt = index === 0 ? populatedCoderPrompt : populatedReviewerPrompt;
-        prompt = prompt.replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString);
-        prompt = prompt.replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', querySpecificExamplesString);
-        if (index === 0) populatedCoderPrompt = prompt;
-        else populatedReviewerPrompt = prompt;
-      });
+      populatedCoderPrompt = populatedCoderPrompt
+        .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
+        .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', querySpecificExamplesString);
+      
+      populatedReviewerPrompt = populatedReviewerPrompt
+        .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
+        .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', querySpecificExamplesString);
 
       setCurrentCoderSystemPrompt(populatedCoderPrompt);
       setBaseCoderTemplateWithContext(populatedCoderPrompt);
@@ -247,14 +144,23 @@ export default function GameLabPage() {
         .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', 'Error loading templates.')
         .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', '(Query-specific code examples)');
       
-      setCurrentCoderSystemPrompt(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_TEMPLATE));
-      setBaseCoderTemplateWithContext(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_TEMPLATE));
-      setCurrentReviewerSystemPrompt(errorPrompt(BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT_TEMPLATE));
-      setBaseReviewerTemplateWithContext(errorPrompt(BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT_TEMPLATE));
+      setCurrentCoderSystemPrompt(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT));
+      setBaseCoderTemplateWithContext(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT));
+      setCurrentReviewerSystemPrompt(errorPrompt(BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT));
+      setBaseReviewerTemplateWithContext(errorPrompt(BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT));
     } finally {
       setIsLoadingSystemPrompts(false);
     }
   }, []);
+  
+  useEffect(() => {
+    if (language === 'javascript') {
+      setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
+    } else {
+      setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
+    }
+  }, [language, baseCoderTemplateWithContext]);
+
 
   useEffect(() => {
     initializeSystemPrompts();
@@ -317,24 +223,21 @@ export default function GameLabPage() {
     fetchModelsForUser();
   }, [isUserLoaded, isSignedIn, user]);
 
-  const { mutate, isPending } = useMutation<GameLabApiResponse, Error, {message: string, useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string}>({
-    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, currentCoderSystemPrompt, currentReviewerSystemPrompt, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
+  const { mutate, isPending } = useMutation<GameLabApiResponse, Error, {message: string, language: string, useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string}>({
+    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, vars.language, currentCoderSystemPrompt, currentReviewerSystemPrompt, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
     onSuccess: (data: GameLabApiResponse) => {
       const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
       setMessages(prev => [...prev, assistantMessage]);
 
-      // UPDATED LOGIC
       if (data.originalCode || data.code) {
-        // Prefer originalCode for the editor, which should now have imports
         setOriginalCode(data.originalCode || data.code || "");
-        // Use the specifically sanitized 'code' field for the sandbox
         setSandboxCode(data.code || "");
         setCurrentLanguage(data.language || "tsx");
-        setCurrentTab('code'); // Default to showing the new code in the editor
+        setCurrentTab('code');
         setCodeError(null);
       } else if (data.error) {
         setCodeError(data.error);
-        setOriginalCode(""); // Clear old code on error
+        setOriginalCode("");
         setSandboxCode("");
       } else {
         setCodeError(null);
@@ -354,11 +257,23 @@ export default function GameLabPage() {
     if (!inputMessage.trim() || isPending) return;
     const userMessage: ChatMessage = { role: 'user', content: inputMessage, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
-    mutate({ message: inputMessage, useCodeReview: useCodeReview, selectedCoderModelId: selectedCoderModel || undefined, selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined });
+    mutate({ 
+        message: inputMessage, 
+        language: language,
+        useCodeReview: useCodeReview, 
+        selectedCoderModelId: selectedCoderModel || undefined, 
+        selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined 
+    });
     setInputMessage("");
   };
 
-  const handleResetCoderSystemPrompt = () => { if (baseCoderTemplateWithContext) { setCurrentCoderSystemPrompt(baseCoderTemplateWithContext); } else { initializeSystemPrompts(); } };
+  const handleResetCoderSystemPrompt = () => {
+    if (language === 'javascript') {
+      setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
+    } else {
+      setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
+    }
+  };
   const handleResetReviewerSystemPrompt = () => { if (baseReviewerTemplateWithContext) { setCurrentReviewerSystemPrompt(baseReviewerTemplateWithContext); } else { initializeSystemPrompts(); } };
 
   const extractGameTitle = (): string => {
@@ -391,10 +306,10 @@ export default function GameLabPage() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-gray-500 text-center mt-8">
-                <p>Describe the game you want to create.</p>
+                <p>Select a language below, then describe the game you want to create.</p>
                 <div className="mt-4">
                   <p className="text-xs font-semibold mb-2">Try these:</p>
-                  {suggestedPrompts.map((prompt, idx) => (
+                  {suggestedPrompts[language as keyof typeof suggestedPrompts].map((prompt, idx) => (
                     <button key={idx} onClick={() => setInputMessage(prompt)} className="block w-full text-left text-xs bg-white p-2 mb-1 rounded border hover:bg-gray-100">
                       {prompt}
                     </button>
@@ -422,6 +337,27 @@ export default function GameLabPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
                 disabled={isPending} rows={3}
               />
+              <div className="mt-2">
+                  <label className="block text-xs font-medium text-gray-600">Language</label>
+                  <div className="mt-1 flex w-full rounded-md shadow-sm">
+                      <button
+                          type="button"
+                          onClick={() => setLanguage('tsx')}
+                          disabled={isPending}
+                          className={`relative inline-flex items-center justify-center w-1/2 rounded-l-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'tsx' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                      >
+                          React/TSX
+                      </button>
+                      <button
+                          type="button"
+                          onClick={() => setLanguage('javascript')}
+                          disabled={isPending}
+                          className={`relative -ml-px inline-flex items-center justify-center w-1/2 rounded-r-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'javascript' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                      >
+                          Vanilla JS
+                      </button>
+                  </div>
+              </div>
               <div className="mt-2">
                 <label htmlFor="modelSelectorCoderGameLab" className="block text-xs font-medium text-gray-600">{useCodeReview ? "Coder Model" : "AI Model"} (Optional)</label>
                 <select id="modelSelectorCoderGameLab" value={selectedCoderModel} onChange={(e) => setSelectedCoderModel(e.target.value)} disabled={isLoadingModels || isPending}
@@ -468,7 +404,7 @@ export default function GameLabPage() {
                           className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Coder system prompt..."
                         />
                         <div className="flex justify-end mt-1">
-                            <button type="button" onClick={handleResetCoderSystemPrompt} disabled={isLoadingSystemPrompts || !baseCoderTemplateWithContext}
+                            <button type="button" onClick={handleResetCoderSystemPrompt} disabled={isLoadingSystemPrompts}
                               className="text-xs px-2 py-0.5 bg-gray-200 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
                             >Reset Coder</button>
                         </div>
