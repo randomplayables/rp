@@ -19,7 +19,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
 
   const createGameHTML = useCallback((gameCode: string, lang: string, currentSessionId: string | null) => {
     const sessionIdScript = `const GAMELAB_SESSION_ID = "${currentSessionId || 'pending'}";`;
-    
+
     const communicationCode = `
       window.sendDataToGameLab = function(data) {
         console.log('Game (in iframe) sending data to GameLab:', data);
@@ -40,7 +40,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
             M = error;
           }
         }
-        
+
         const errorPayload = {
           message: String(M || "Unknown error from iframe"),
           source: String(S || "Unknown source"),
@@ -53,9 +53,9 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         return true;
       };
     `;
-    
+
     const containsHTML = gameCode.includes('<!DOCTYPE html>') || gameCode.includes('<html') || gameCode.includes('<body>');
-    
+
     if (containsHTML) {
       const headMatch = gameCode.match(/<head>([\s\S]*?)<\/head>/i);
       if (headMatch) {
@@ -64,7 +64,8 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         return gameCode.replace(/<html[^>]*>/i, `$&<head><script>${sessionIdScript}${communicationCode}<\/script></head>`);
       }
     } else if (lang === 'jsx' || lang === 'tsx' || lang === 'react') {
-      return `
+        // This now handles pre-compiled JavaScript. Babel is no longer needed.
+        return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -72,34 +73,35 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <title>GameLab Sandbox</title>
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin="anonymous"><\/script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin="anonymous"><\/script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"><\/script>
   <script>${sessionIdScript}${communicationCode}<\/script>
   <style>body,html{margin:0;padding:0;overflow:hidden;width:100%;height:100%}#game-container,#root{width:100%;height:100%}#error-display{position:absolute;bottom:0;left:0;right:0;background:rgba(255,0,0,0.8);color:white;padding:10px;font-family:monospace;white-space:pre-wrap;max-height:200px;overflow:auto;display:none;z-index:9999}<\/style>
 </head>
 <body>
   <div id="root"></div><div id="game-container"></div><div id="error-display"></div>
-  <script type="text/babel">
-    // Place all AI-generated code here at the top level, including imports.
-    ${gameCode}
-
-    // Now, wrap only the execution/rendering logic in a try...catch block.
+  <script>
     try {
-      const ComponentToRender = window.App || (typeof App !== 'undefined' ? App : null);
+      // The 'gameCode' is now pre-compiled JavaScript from the server.
+      ${gameCode}
+
+      // The compiled code should define an 'App' variable.
+      const ComponentToRender = typeof App !== 'undefined' ? App : null;
 
       if (ComponentToRender && document.getElementById('root')) {
         ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ComponentToRender));
+      } else if (!gameCode.trim()) {
+        // Do nothing if the code is empty, it's just not ready yet.
       } else {
-        const errorMsg = 'GameLab Sandbox Critical Error: Main App component (or window.App) was not found or #root element is missing. React application could not be started.';
-        console.error(errorMsg, 'typeof App:', (typeof App), 'typeof window.App:', (typeof window.App));
+        const errorMsg = 'GameLab Sandbox Critical Error: Main "App" component was not found after transpilation. The compiled code did not define an "App" component that could be rendered.';
+        console.error(errorMsg);
         const errorDisplay = document.getElementById('error-display');
         if(errorDisplay) { errorDisplay.style.display = 'block'; errorDisplay.innerText = errorMsg; }
-        window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: { message: errorMsg, source: 'GameSandboxLoader', lineno: 0, colno: 0, stack: \`App typeof: \${(typeof App)}, window.App typeof: \${(typeof window.App)}\` } }, '*');
+        window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: { message: errorMsg, source: 'GameSandboxLoader' } }, '*');
       }
     } catch (err) {
-      console.error('Error executing React/Babel code:', err.message, err.stack, err);
+      console.error('Error executing compiled React code:', err.message, err.stack, err);
       const errorDisplay = document.getElementById('error-display');
       if(errorDisplay) { errorDisplay.style.display = 'block'; errorDisplay.innerText = 'Render Error: ' + err.message + '\\n' + err.stack; }
-      window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: { message: 'Render Error: ' + String(err.message), source: 'BabelExecutionCatch', lineno: err.lineno, colno: err.colno, stack: String(err.stack) } }, '*');
+      window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: { message: 'Render Error: ' + String(err.message), source: 'ExecutionCatch', lineno: err.lineno, colno: err.colno, stack: String(err.stack) } }, '*');
     }
   <\/script>
 </body></html>`;
@@ -127,7 +129,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <\/script>
 </body></html>`;
     }
-  }, []); 
+  }, []);
 
   useEffect(() => {
     if (!code) {
@@ -152,7 +154,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         const sessionData = await sessionResponse.json();
         if (!sessionData.success || !sessionData.session) { setError('Failed to create sandbox session.'); console.error("GameSandbox: Failed to create_session", sessionData); setIsLoading(false); return; }
         setGameSessionId(sessionData.session.sessionId);
-        
+
         const htmlTemplate = createGameHTML(code, language, sessionData.session.sessionId);
         setGamePreview(htmlTemplate);
       } catch (err) {
@@ -189,7 +191,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
       if (!event.data || !event.data.type || !iframeRef.current || event.source !== iframeRef.current.contentWindow) {
         return;
       }
-      
+
       if (event.data.type === 'GAMELAB_DATA') {
         saveGameData(event.data.payload);
       } else if (event.data.type === 'GAMELAB_ERROR') {
@@ -200,14 +202,14 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
             actualPayloadObject = JSON.parse(actualPayloadObject);
           } catch (e) {
             console.error('GameSandbox: Failed to parse GAMELAB_ERROR string payload:', actualPayloadObject, e);
-            actualPayloadObject = { 
-              message: `Malformed error payload (was string): ${actualPayloadObject}`, 
+            actualPayloadObject = {
+              message: `Malformed error payload (was string): ${actualPayloadObject}`,
               source: "GameSandboxHandler",
               stack: `Error parsing payload string: ${e instanceof Error ? e.message : String(e)}`
             };
           }
         }
-        
+
         const payload = actualPayloadObject || {};
         let displayMessage = String(payload.message || "Script error.");
         if ((displayMessage === "Script error." || displayMessage === "Unknown error from iframe" || displayMessage.includes("Error: GameLab Sandbox Critical Error")) && payload.stack) {
@@ -217,15 +219,15 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
 
         const lineInfo = payload.lineno ? ` (Line: ${payload.lineno}${payload.colno ? `, Col: ${payload.colno}` : ''})` : '';
         let sourceInfo = '';
-        if (payload.source && payload.source !== "Unknown source" && 
-            !String(payload.source).includes("unpkg.com") && 
-            !String(payload.source).includes("babel.min.js") && 
-            !["GameSandboxLoader", "BabelExecutionCatch", "UserScriptCatch", "GameSandboxHandler"].includes(String(payload.source))) {
+        if (payload.source && payload.source !== "Unknown source" &&
+            !String(payload.source).includes("unpkg.com") &&
+            !String(payload.source).includes("babel.min.js") &&
+            !["GameSandboxLoader", "BabelExecutionCatch", "UserScriptCatch", "GameSandboxHandler", "ExecutionCatch"].includes(String(payload.source))) {
           sourceInfo = ` in ${payload.source}`;
         }
-        
+
         setError(`Game error: ${displayMessage}${lineInfo}${sourceInfo}`);
-        
+
         if (payload.stack) {
             console.error("Full error stack from iframe (if available):\n", payload.stack);
         } else {
@@ -233,13 +235,13 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         }
       }
     };
-    
+
     window.addEventListener('message', handleMessage);
     return () => {
       window.removeEventListener('message', handleMessage);
     };
   }, [saveGameData]);
-  
+
   const resetSandbox = async () => {
     if (!activeSandboxGame) { return; }
     setIsLoading(true); setTestData([]); setError(null);
@@ -248,7 +250,6 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create_session', data: { gameId: activeSandboxGame.id } })
       });
-      // ** FIX: Use sessionResponse, not response **
       const sessionData = await sessionResponse.json();
       if (sessionData.success && sessionData.session) {
         setGameSessionId(sessionData.session.sessionId);
@@ -267,7 +268,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
       setIsLoading(false);
     }
   };
-  
+
   return (
     <div className="game-sandbox w-full h-full flex flex-col">
       <div className="sandbox-controls mb-3 flex justify-between items-center">
@@ -276,14 +277,14 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
           Reset Game
         </button>
       </div>
-      
+
       {error && (
         <div className="mb-2 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
           <p className="font-semibold">Error:</p>
           <pre className="whitespace-pre-wrap break-all">{error}</pre>
         </div>
       )}
-      
+
       <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden min-h-[400px] flex flex-col">
         {isLoading && !gamePreview ? (
           <div className="flex-1 p-4 bg-gray-50 rounded-lg flex items-center justify-center">
@@ -296,7 +297,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         ) : !isLoading && !error ? (
             <div className="flex-1 p-4 bg-gray-50 rounded-lg flex items-center justify-center"><p className="text-gray-500">Sandbox is ready. Game will load shortly.</p></div>
         ) : null}
-        
+
         {testData.length > 0 && (
           <div className="p-3 bg-gray-800 text-white text-sm max-h-[150px] overflow-y-auto">
             <p className="font-semibold mb-1">Test Data Log (from GameLabSandbox.gamedatas):</p>

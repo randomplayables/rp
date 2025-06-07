@@ -10,8 +10,8 @@ import GitHubUploadButton from './components/GitHubUploadButton';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useUser } from "@clerk/nextjs";
 import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
-import { 
-  BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT, 
+import {
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT,
   BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS
 } from "./prompts";
@@ -31,6 +31,10 @@ interface GameLabApiResponse {
   error?: string;
   limitReached?: boolean;
   remainingRequests?: number;
+}
+
+interface TranspileApiResponse {
+    compiledCode: string;
 }
 
 async function fetchGamelabContextData() {
@@ -68,17 +72,30 @@ async function sendChatMessageToApi(
   return response.json();
 }
 
+async function transpileCodeOnServer(code: string): Promise<TranspileApiResponse> {
+    const response = await fetch('/api/gamelab/transpile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+    });
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Transpilation failed on the server.');
+    }
+    return response.json();
+}
+
 export default function GameLabPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
-  const [originalCode, setOriginalCode] = useState<string>(""); 
-  const [sandboxCode, setSandboxCode] = useState<string>("");   
+  const [originalCode, setOriginalCode] = useState<string>("");
+  const [sandboxCode, setSandboxCode] = useState<string>("");
   const [currentLanguage, setCurrentLanguage] = useState<string>("tsx");
   const [currentTab, setCurrentTab] = useState<'code' | 'sandbox'>('code');
   const [codeError, setCodeError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const [language, setLanguage] = useState('tsx'); 
+  const [language, setLanguage] = useState('tsx');
 
   const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
   const [currentCoderSystemPrompt, setCurrentCoderSystemPrompt] = useState<string | null>(null);
@@ -115,6 +132,56 @@ export default function GameLabPage() {
     ]
   };
 
+    const transpileMutation = useMutation<TranspileApiResponse, Error, { code: string }>({
+        mutationFn: ({ code }) => transpileCodeOnServer(code),
+        onSuccess: (data) => {
+            setSandboxCode(data.compiledCode);
+            setCodeError(null);
+            setCurrentTab('sandbox'); // Switch to sandbox to show the working result
+        },
+        onError: (error: Error) => {
+            setCodeError(`Transpilation Error: ${error.message}`);
+            setSandboxCode(''); // Clear the sandbox on error
+        }
+    });
+
+    const chatMutation = useMutation<GameLabApiResponse, Error, {message: string, language: string, useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string}>({
+        mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, vars.language, currentCoderSystemPrompt, currentReviewerSystemPrompt, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
+        onSuccess: (data: GameLabApiResponse) => {
+          const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
+          setMessages(prev => [...prev, assistantMessage]);
+
+          const codeToProcess = data.originalCode || data.code;
+          const lang = data.language || 'javascript';
+
+          if (codeToProcess) {
+            setOriginalCode(codeToProcess);
+            setCurrentLanguage(lang);
+            setCodeError(null);
+            setCurrentTab('code');
+
+            if (lang === 'tsx' || lang === 'react') {
+                // For TSX, call the server to transpile it
+                transpileMutation.mutate({ code: codeToProcess });
+            } else {
+                // For Vanilla JS or HTML, use the code directly
+                setSandboxCode(codeToProcess);
+            }
+          } else if (data.error) {
+            setCodeError(data.error);
+            setOriginalCode("");
+            setSandboxCode("");
+          } else {
+            setCodeError(null);
+          }
+        },
+        onError: (error: Error) => {
+          setMessages(prev => [...prev, {role: 'assistant', content: `Error: ${error.message}`, timestamp: new Date()}]);
+          setCodeError("Failed to communicate with the AI. Please try again.");
+        }
+    });
+    const isPending = chatMutation.isPending || transpileMutation.isPending;
+
   const initializeSystemPrompts = useCallback(async () => {
     setIsLoadingSystemPrompts(true);
     try {
@@ -128,7 +195,7 @@ export default function GameLabPage() {
       populatedCoderPrompt = populatedCoderPrompt
         .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
         .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', querySpecificExamplesString);
-      
+
       populatedReviewerPrompt = populatedReviewerPrompt
         .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
         .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', querySpecificExamplesString);
@@ -143,7 +210,7 @@ export default function GameLabPage() {
       const errorPrompt = (template: string) => template
         .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', 'Error loading templates.')
         .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', '(Query-specific code examples)');
-      
+
       setCurrentCoderSystemPrompt(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT));
       setBaseCoderTemplateWithContext(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT));
       setCurrentReviewerSystemPrompt(errorPrompt(BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT));
@@ -152,7 +219,7 @@ export default function GameLabPage() {
       setIsLoadingSystemPrompts(false);
     }
   }, []);
-  
+
   useEffect(() => {
     if (language === 'javascript') {
       setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
@@ -177,7 +244,11 @@ export default function GameLabPage() {
 
       if (pendingCode) {
           setOriginalCode(pendingCode);
-          setSandboxCode(""); 
+          if (pendingLanguage === 'tsx') {
+              transpileMutation.mutate({ code: pendingCode });
+          } else {
+              setSandboxCode(pendingCode);
+          }
       }
       if (pendingLanguage) setCurrentLanguage(pendingLanguage);
       if (pendingMessagesString) {
@@ -196,7 +267,7 @@ export default function GameLabPage() {
       newParams.delete('github_connected');
       router.replace(`${pathname}?${newParams.toString()}`, { scroll: false });
     }
-  }, [searchParams, router, pathname]);
+  }, [searchParams, router, pathname, transpileMutation]);
 
   useEffect(() => {
     async function fetchModelsForUser() {
@@ -223,32 +294,6 @@ export default function GameLabPage() {
     fetchModelsForUser();
   }, [isUserLoaded, isSignedIn, user]);
 
-  const { mutate, isPending } = useMutation<GameLabApiResponse, Error, {message: string, language: string, useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string}>({
-    mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, vars.language, currentCoderSystemPrompt, currentReviewerSystemPrompt, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
-    onSuccess: (data: GameLabApiResponse) => {
-      const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
-      setMessages(prev => [...prev, assistantMessage]);
-
-      if (data.originalCode || data.code) {
-        setOriginalCode(data.originalCode || data.code || "");
-        setSandboxCode(data.code || "");
-        setCurrentLanguage(data.language || "tsx");
-        setCurrentTab('code');
-        setCodeError(null);
-      } else if (data.error) {
-        setCodeError(data.error);
-        setOriginalCode("");
-        setSandboxCode("");
-      } else {
-        setCodeError(null);
-      }
-    },
-    onError: (error: Error) => {
-      setMessages(prev => [...prev, {role: 'assistant', content: `Error: ${error.message}`, timestamp: new Date()}]);
-      setCodeError("Failed to communicate with the AI. Please try again.");
-    }
-  });
-
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
   useEffect(scrollToBottom, [messages]);
 
@@ -257,12 +302,12 @@ export default function GameLabPage() {
     if (!inputMessage.trim() || isPending) return;
     const userMessage: ChatMessage = { role: 'user', content: inputMessage, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
-    mutate({ 
-        message: inputMessage, 
+    chatMutation.mutate({
+        message: inputMessage,
         language: language,
-        useCodeReview: useCodeReview, 
-        selectedCoderModelId: selectedCoderModel || undefined, 
-        selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined 
+        useCodeReview: useCodeReview,
+        selectedCoderModelId: selectedCoderModel || undefined,
+        selectedReviewerModelId: useCodeReview && selectedReviewerModel ? (selectedReviewerModel || undefined) : undefined
     });
     setInputMessage("");
   };
@@ -387,7 +432,7 @@ export default function GameLabPage() {
               <div className="flex justify-end">
                 <button type="submit" disabled={isPending} className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50">
                   {isPending ? <Spinner className="w-4 h-4 inline mr-1"/> : null}
-                  {isPending ? 'Sending...' : 'Send'}
+                  {isPending ? 'Processing...' : 'Send'}
                 </button>
               </div>
             </div>
