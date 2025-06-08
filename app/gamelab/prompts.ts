@@ -1,70 +1,65 @@
 const reactTsxExample = `
-import React, { useState, useEffect } from 'react';
+\`\`\`tsx:/src/App.tsx
+import React, { useState } from 'react';
+import './styles.css';
 
-const styles = \`
-  .container { 
-    font-family: Arial, sans-serif; 
-    display: flex; 
-    flex-direction: column; 
-    align-items: center; 
-    justify-content: center; 
-    min-height: 80vh; 
-    background-color: #f0f8ff; 
-    padding: 20px; 
-    border-radius: 10px; 
-  }
-  .title { color: #333; }
-  .button { 
-    background-color: #10B981; 
-    color: white; padding: 10px 15px; 
-    border: none; 
-    border-radius: 5px; 
-    cursor: pointer; 
-    font-size: 16px; 
-  }
-  .button:hover { background-color: #059669; }
-  .gameArea { 
-    width: 300px; 
-    height: 200px; 
-    border: 1px solid #ccc; 
-    margin-top: 20px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-  }
-\`;
+export default function App() {
+  const [count, setCount] = useState(0);
 
-const App: React.FC = () => {
-  const [score, setScore] = useState(0);
-
-  useEffect(() => {
-    if (typeof window.sendDataToGameLab === 'function') {
-      window.sendDataToGameLab({ event: 'game_started', time: new Date().toISOString() });
-    }
-  }, []);
-
-  const handlePlayerAction = () => {
-    const newScore = score + 10;
-    setScore(newScore);
-    if (typeof window.sendDataToGameLab === 'function') {
-      window.sendDataToGameLab({ event: 'player_action', newScore });
+  const handleButtonClick = () => {
+    const newCount = count + 1;
+    setCount(newCount);
+    // Send data to the parent window (GameLabPage)
+    if (window.parent) {
+      window.parent.postMessage({
+        type: 'GAMELAB_DATA',
+        payload: { event: 'increment', newCount, timestamp: new Date().toISOString() }
+      }, '*');
     }
   };
 
   return (
-    <>
-      <style>{styles}</style>
-      <div className="container">
-        <h1 className="title">My Awesome React Game</h1>
-        <p>Score: {score}</p>
-        <button onClick={handlePlayerAction} className="button">Perform Action</button>
-        <div className="gameArea"><p>Game Content Here</p></div>
-      </div>
-    </>
+    <div className="App">
+      <h1>Multi-File Example!</h1>
+      <h2>This component and its styles are in separate files.</h2>
+      <button onClick={handleButtonClick}>
+        Count is {count}
+      </button>
+    </div>
   );
-};
+}
+\`\`\`
 
-export default App;
+\`\`\`css:/src/styles.css
+body {
+  font-family: sans-serif;
+  text-rendering: optimizeLegibility;
+  font-smooth: always;
+}
+
+.App {
+  margin: 20px;
+  text-align: center;
+}
+
+h1 {
+  color: #10B981; /* emerald-500 */
+}
+
+button {
+  background-color: #10B981;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  font-size: 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 15px;
+}
+button:hover {
+  background-color: #059669;
+}
+\`\`\`
 `;
 
 const vanillaJsExample = `
@@ -128,20 +123,20 @@ if (container) {
 `;
 
 export const BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT = `
-You are an AI game development assistant for RandomPlayables. Your primary goal is to generate a complete, portable, and runnable React/TSX game component.
+You are an AI game development assistant for RandomPlayables. Your primary goal is to generate complete, runnable game files for a multi-file React/TSX Sandpack IDE.
 
 Key Instructions:
-1.  **Generate Full Component:** Create a self-contained TSX file. You **MUST** include necessary imports (e.g., \`import React, { useState } from 'react';\`) and **MUST** export the main component as a default export (\`export default App;\`).
-2.  **Main Component:** The main component MUST be a React Functional Component named \`App\`.
-3.  **Styling:** Include CSS styles inside a \`<style>\` tag within the component's returned JSX for easy portability.
-4.  **Sandbox Interaction:** If you need to send data out, a global function \`window.sendDataToGameLab(data)\` will be available. Check for its existence before using it: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
-5.  **No Sandbox-Specific Code:** Do not add code that is specific to the sandbox environment (like \`window.App = App;\`). The build process handles that. Just write a standard, portable React component.
+1.  **Multi-File Response:** You are an assistant for a multi-file IDE. You **MUST** respond with **only the files that need to be created or changed**.
+2.  **Fenced Code Blocks:** Each file must be in its own fenced code block.
+3.  **File Path Specifier:** The info string for each fenced code block must contain the language and the **full file path**, separated by a colon (e.g., \`tsx:/src/App.tsx\` or \`css:/src/styles.css\`).
+4.  **Main Component:** The main component must be in \`/src/App.tsx\` and be a standard React Functional Component named \`App\`.
+5.  **Full File Content:** You **MUST** provide the entire, complete code for each file you are changing. Do not use comments like "// ... keep existing code".
+6.  **Imports:** Assume a standard React setup. Import CSS with \`import './styles.css';\` in your TSX file if you provide a CSS file.
+7.  **Sandbox Interaction:** If you need to send data out, a global function \`window.sendDataToGameLab(data)\` will be available. Check for its existence before using it: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
 
-Return ONLY the code required, wrapped in a single \`\`\`tsx ... \`\`\` block.
-EXAMPLE OF A CORRECTLY FORMATTED REACT + TYPESCRIPT SKETCH:
-\`\`\`tsx
+Return ONLY the file code blocks required.
+EXAMPLE OF A CORRECTLY FORMATTED MULTI-FILE REACT + TYPESCRIPT RESPONSE:
 ${reactTsxExample}
-\`\`\`
 `;
 
 export const BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS = `
@@ -162,12 +157,18 @@ ${vanillaJsExample}
 `;
 
 export const BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT = `
-You are an AI expert reviewing game code for a browser sandbox environment.
+You are an AI expert reviewing game code for a browser sandbox environment. Your task is to review code generated by another AI.
+
 Focus your review on:
-1.  **Sandbox Compatibility:** The code will be sanitized (imports/exports removed) before hitting the sandbox. Review the source code for correctness assuming React is available. Does it correctly access React hooks (e.g., \`useState\`)? Is the main \`App\` component correctly defined?
-2.  **Correctness & Functionality:** Does the code run? Does it function as described?
-3.  **Code Quality:** Is the code well-structured and readable?
-4.  **Adherence to Requirements:** Is the main component named \`App\`? Is \`window.sendDataToGameLab\` checked with \`typeof window.sendDataToGameLab === 'function'\` before use?
+1.  **Correctness & Functionality:** Does the code run? Does it function as described?
+2.  **Code Quality:** Is the code well-structured and readable?
+3.  **Sandbox Compatibility:**
+    * **For React/TSX:** The code will be used in a Sandpack environment. It must be valid React/TSX. The main component should be named \`App\`.
+    * **For Vanilla JS:** The code must be pure JavaScript and correctly use DOM APIs.
+4.  **Adherence to Requirements:**
+    * **CRITICAL for React/TSX:** Verify the AI has responded using the **multi-file fenced code block format**. Each block must be marked with its language and full file path (e.g., \`\`\`tsx:/src/App.tsx\`\`\`). This is the most important check.
+    * Is \`window.sendDataToGameLab\` checked with \`typeof window.sendDataToGameLab === 'function'\` before use?
 5.  **Completeness:** Is the code a complete, runnable example?
+
 Provide specific, constructive feedback. Return only your review.
 `;

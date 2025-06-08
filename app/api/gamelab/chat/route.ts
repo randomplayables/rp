@@ -39,35 +39,58 @@ function getMonthlyLimitForTier(tier?: string | null): number {
     switch (tier) { case "premium": return 500; case "premium_plus": return 1500; default: return 100; }
 }
 
-function extractGameLabCodeFromResponse(aiResponseContent: string | null, defaultLanguage: string = "tsx"): { code: string; language: string; message_text: string } {
-  if (!aiResponseContent) return { code: "", language: defaultLanguage, message_text: "No content from AI." };
-  let code = ""; let language = defaultLanguage; let message_text = aiResponseContent;
-  const codeBlockRegex = /```([a-zA-Z0-9+#-_]+)?\n([\s\S]*?)```/g;
-  const codeBlocks: Array<[string, string, string]> = [];
-  let match;
-  while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) codeBlocks.push([match[0], match[1] || '', match[2]]);
-  if (codeBlocks.length > 0) {
-      const tsxBlock = codeBlocks.find(block => ['tsx', 'typescript', 'jsx', 'react'].includes(block[1].toLowerCase()));
-      const jsBlock = codeBlocks.find(block => block[1].toLowerCase() === 'javascript');
-      const htmlBlock = codeBlocks.find(block => block[1].toLowerCase() === 'html');
-      
-      let mainCodeBlock: [string, string, string] | undefined = tsxBlock || jsBlock || htmlBlock || codeBlocks[0];
-      
-      language = mainCodeBlock[1].toLowerCase() || defaultLanguage;
-
-      if (['typescript', 'react'].includes(language)) language = 'tsx';
-      if (language === 'html' && mainCodeBlock[2].includes('<script type="text/babel">')) language = 'tsx';
-      
-      code = mainCodeBlock[2].trim();
-      message_text = aiResponseContent.replace(mainCodeBlock[0], `\n[Code for ${language} generated]\n`).trim() || "Game code generated.";
-  } else {
-      if ((aiResponseContent.includes("const App") || aiResponseContent.includes("function App"))) {
-          code = aiResponseContent; language = "tsx"; message_text = "Generated React/TypeScript component.";
-      } else if (aiResponseContent.includes("<!DOCTYPE html>")) {
-          code = aiResponseContent; language = "html"; message_text = "Generated HTML content.";
-      } else { code = ""; message_text = aiResponseContent; }
-  }
-  return { code, language, message_text };
+function extractGameLabCodeFromResponse(
+    aiResponseContent: string | null,
+    languageHint: string
+  ): { files?: Record<string, string>; code?: string; language: string; message_text: string } {
+    if (!aiResponseContent) {
+      return { language: languageHint, message_text: "No content from AI." };
+    }
+  
+    let message_text = aiResponseContent;
+  
+    // TSX: Multi-file logic
+    if (languageHint === 'tsx') {
+      const files: Record<string, string> = {};
+      const codeBlockRegex = /```\w*:(\/[\S]+)\n([\s\S]*?)```/g;
+      let match;
+  
+      while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) {
+        const filePath = match[1].trim();
+        const codeContent = match[2].trim();
+        files[filePath] = codeContent;
+        message_text = message_text.replace(match[0], "").trim();
+      }
+  
+      if (Object.keys(files).length > 0) {
+        return {
+          files,
+          language: 'tsx',
+          message_text: message_text || "Multi-file code generated successfully."
+        };
+      }
+    }
+  
+    // JS (and fallback for TSX if no multi-file format found): Single-file logic
+    const singleFileRegex = /```(javascript|js|tsx|jsx|react)?\n([\s\S]*?)```/;
+    const match = aiResponseContent.match(singleFileRegex);
+  
+    if (match && match[2]) {
+      const code = match[2].trim();
+      message_text = aiResponseContent.replace(match[0], "").trim();
+      return {
+        code,
+        language: languageHint,
+        message_text: message_text || "Code generated."
+      };
+    }
+  
+    // If no specific code block is found, but it looks like code, return it all
+    if (languageHint === 'javascript' && !aiResponseContent.includes("```")) {
+      return { code: aiResponseContent, language: 'javascript', message_text: "Generated JavaScript code." };
+    }
+  
+    return { language: languageHint, message_text: aiResponseContent };
 }
 
 export async function POST(request: NextRequest) {
@@ -89,14 +112,12 @@ export async function POST(request: NextRequest) {
     const profile = await prisma.profile.findUnique({ where: { userId: clerkUser.id }, select: { subscriptionActive: true, subscriptionTier: true } });
     const isSubscribed = !!profile?.subscriptionActive;
     
-    // --- RESTORED CONTEXT FETCHING ---
     const templateStructure = getTemplateStructure();
     const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery);
     const gameCodeExamplesString = Object.keys(querySpecificGameCodeExamples).length > 0 
         ? `Context from existing game code: ${JSON.stringify(querySpecificGameCodeExamples, null, 2)}`
         : "No specific game code examples found.";
     const templateStructuresString = JSON.stringify(templateStructure, null, 2);
-    // --- END RESTORED CONTEXT FETCHING ---
 
     let baseCoderPrompt;
     if (language === 'javascript') {
@@ -107,23 +128,17 @@ export async function POST(request: NextRequest) {
     
     let coderSystemPromptToUse = (coderSystemPrompt && coderSystemPrompt.trim() !== "") ? coderSystemPrompt : baseCoderPrompt;
 
-    // --- RESTORED PROMPT INJECTION ---
     coderSystemPromptToUse = coderSystemPromptToUse
         .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
         .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString);
-    // --- END RESTORED PROMPT INJECTION ---
 
-    let finalApiResponse: { message: string; originalCode?: string; code?: string; language?: string; remainingRequests?: number; error?: string; limitReached?: boolean };
+    let finalAiResponseContent: string | null = null;
     const initialUserMessages: ChatCompletionMessageParam[] = [...(chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })) as ChatCompletionMessageParam[]), { role: "user", content: userQuery }];
     const coderSystemMessage: ChatCompletionSystemMessageParam = { role: "system", content: coderSystemPromptToUse };
     
     const modelResolution = await resolveModelsForChat(clerkUser.id, isSubscribed, useCodeReview, selectedCoderModelId, selectedReviewerModelId);
     if (!modelResolution.canUseApi) return NextResponse.json({ error: modelResolution.error || "Monthly API limit reached.", limitReached: true }, { status: 403 });
     if (modelResolution.error) return NextResponse.json({ error: modelResolution.error }, { status: 400 });
-
-    let portableCode = '';
-    let finalLanguage = language || 'tsx';
-    let responseMessage = '';
 
     if (useCodeReview) {
       if (!modelResolution.chatbot1Model || !modelResolution.chatbot2Model) {
@@ -133,34 +148,49 @@ export async function POST(request: NextRequest) {
       const reviewerSystemPromptToUse = baseReviewerPrompt;
       const reviewerSystemMessage: ChatCompletionSystemMessageParam = { role: "system", content: reviewerSystemPromptToUse };
       
-      const createReviewerPrompt = (initialGen: string | null) => `Review the following code based on your instructions. Initial code:\n\n\`\`\`${language}\n${initialGen || 'No code generated.'}\n\`\`\``;
-      const createRevisionPrompt = (initialGen: string | null, review: string | null) => `Revise your initial code based on the following review. Initial code:\n\n\`\`\`${language}\n${initialGen || 'No code.'}\n\`\`\`\n\nReview:\n${review || 'No review.'}\n\nReturn only the revised, complete code.`;
+      const createReviewerPrompt = (initialGen: string | null) => `Review the following code based on your instructions. Initial code:\n\n${initialGen || 'No code generated.'}`;
+      const createRevisionPrompt = (initialGen: string | null, review: string | null) => `Revise your initial code based on the following review. Initial code:\n\n${initialGen || 'No code.'}\n\nReview:\n${review || 'No review.'}\n\nReturn only the revised, complete code.`;
 
       const reviewCycleOutputs = await performAiReviewCycle(modelResolution.chatbot1Model, coderSystemMessage, initialUserMessages, modelResolution.chatbot2Model, reviewerSystemMessage, createReviewerPrompt, createRevisionPrompt);
-      const { code, language: detectedLang, message_text } = extractGameLabCodeFromResponse(reviewCycleOutputs.chatbot1RevisionResponse.content, finalLanguage);
-      portableCode = code;
-      finalLanguage = detectedLang;
-      responseMessage = `Code generated with AI review. Reviewer feedback: "${reviewCycleOutputs.chatbot2ReviewResponse.content || 'N/A'}". Final response: ${message_text}`;
+      finalAiResponseContent = reviewCycleOutputs.chatbot1RevisionResponse.content;
 
     } else {
       if (!modelResolution.chatbot1Model) return NextResponse.json({ error: "Failed to resolve model." }, { status: 500 });
       const modelToUse = modelResolution.chatbot1Model;
       const messagesToAI: ChatCompletionMessageParam[] = [coderSystemMessage, ...initialUserMessages];
       const response = await callOpenAIChat(modelToUse, messagesToAI);
-      const { code, language: detectedLang, message_text } = extractGameLabCodeFromResponse(response.choices[0].message.content, finalLanguage);
-      portableCode = code;
-      finalLanguage = detectedLang;
-      responseMessage = message_text;
+      finalAiResponseContent = response.choices[0].message.content;
     }
     
-    const sandboxCode = sanitizeCodeForBrowser(portableCode, finalLanguage);
+    const extractionResult = extractGameLabCodeFromResponse(finalAiResponseContent, language);
     
-    finalApiResponse = {
-        message: responseMessage,
-        originalCode: portableCode,
-        code: sandboxCode,
-        language: finalLanguage,
-    };
+    let finalApiResponse: {
+        message: string;
+        files?: Record<string, string>;
+        originalCode?: string;
+        code?: string;
+        language?: string;
+        remainingRequests?: number;
+        error?: string;
+        limitReached?: boolean;
+      };
+
+    if (language === 'tsx' && extractionResult.files && Object.keys(extractionResult.files).length > 0) {
+        finalApiResponse = {
+          message: extractionResult.message_text,
+          files: extractionResult.files,
+          language: 'tsx',
+        };
+    } else {
+        const originalCode = extractionResult.code || '';
+        const sandboxCode = language === 'javascript' ? originalCode : sanitizeCodeForBrowser(originalCode, extractionResult.language);
+        finalApiResponse = {
+          message: extractionResult.message_text,
+          originalCode: originalCode,
+          code: sandboxCode,
+          language: extractionResult.language,
+        };
+    }
 
     const incrementParams: IncrementApiUsageParams = { userId: clerkUser.id, isSubscribed, useCodeReview, coderModelId: modelResolution.chatbot1Model, reviewerModelId: useCodeReview ? modelResolution.chatbot2Model : null };
     await incrementApiUsage(incrementParams);

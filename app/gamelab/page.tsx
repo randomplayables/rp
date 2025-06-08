@@ -26,6 +26,7 @@ interface ChatMessage {
 
 interface GameLabApiResponse {
   message: string;
+  files?: Record<string, string>;
   originalCode?: string;
   code?: string;
   language?: string;
@@ -33,6 +34,71 @@ interface GameLabApiResponse {
   limitReached?: boolean;
   remainingRequests?: number;
 }
+
+const defaultFiles: SandpackFiles = {
+    "/index.html": {
+      code: `<!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>React Game</title>
+    </head>
+    <body>
+      <div id="root"></div>
+    </body>
+  </html>`,
+    },
+    "/src/index.tsx": {
+      code: `import React from "react";
+  import ReactDOM from "react-dom/client";
+  import App from "./App";
+  import "./styles.css";
+  
+  const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );`,
+    },
+    "/src/App.tsx": {
+      code: `import React from 'react';
+
+export default function App(): JSX.Element {
+  return <h1>Hello world</h1>
+}`,
+      active: true,
+    },
+    "/src/styles.css": {
+      code: `body {
+    font-family: sans-serif;
+    -webkit-font-smoothing: auto;
+    -moz-font-smoothing: auto;
+    -moz-osx-font-smoothing: grayscale;
+    font-smoothing: auto;
+    text-rendering: optimizeLegibility;
+    font-smooth: always;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  
+  h1 {
+    color: #10B981;
+  }
+  `,
+    },
+    "/package.json": {
+      code: JSON.stringify({
+        dependencies: {
+          react: "^18.0.0",
+          "react-dom": "^18.0.0",
+          "react-scripts": "^5.0.0",
+        },
+      }),
+      hidden: true,
+    },
+  };
 
 async function fetchGamelabContextData() {
   const response = await fetch("/api/gamelab/context-data");
@@ -71,7 +137,7 @@ async function sendChatMessageToApi(
 
 function GamelabWorkspace() {
     const { sandpack } = useSandpack();
-    const { files, updateFile } = sandpack;
+    const { files, updateFile, setActiveFile } = sandpack;
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputMessage, setInputMessage] = useState("");
     const [language, setLanguage] = useState('tsx');
@@ -110,29 +176,39 @@ function GamelabWorkspace() {
 
     const chatMutation = useMutation<GameLabApiResponse, Error, {message: string, language: string, useCodeReview: boolean, selectedCoderModelId?: string, selectedReviewerModelId?: string}>({
         mutationFn: (vars) => sendChatMessageToApi(vars.message, messages, vars.language, currentCoderSystemPrompt, currentReviewerSystemPrompt, vars.useCodeReview, vars.selectedCoderModelId, vars.selectedReviewerModelId),
-        onSuccess: (data: GameLabApiResponse) => { // 
-          const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
-          setMessages(prev => [...prev, assistantMessage]);
-          
-          if (data.error) {
-              setCodeError(data.error);
-              return;
-          }
-          
-          setCodeError(null);
-
-          const responseLang = data.language || 'javascript';
-          const responseOriginalCode = data.originalCode || '';
-          const responseSandboxCode = data.code || '';
-
-          if (responseLang === 'tsx' || responseLang === 'react') { // 
-            updateFile('/src/App.tsx', responseOriginalCode);
-          } else if (responseLang === 'javascript') { // 
-            setOriginalCode(responseOriginalCode);
-            setSandboxCode(responseSandboxCode);
-            setCurrentTab('code');
-          }
-        },
+        onSuccess: (data: GameLabApiResponse) => { 
+            const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
+            setMessages(prev => [...prev, assistantMessage]);
+            
+            if (data.error) {
+                setCodeError(data.error);
+                return;
+            }
+            
+            setCodeError(null);
+      
+            if (data.language === 'tsx') {
+                if (data.files && Object.keys(data.files).length > 0) {
+                    console.log("Received multi-file TSX response, updating IDE...");
+                    Object.entries(data.files).forEach(([filePath, code]) => {
+                        console.log(`Updating file: ${filePath}`);
+                        updateFile(filePath, code);
+                    });
+                    if (data.files['/src/App.tsx']) {
+                        setActiveFile('/src/App.tsx');
+                    }
+                } else if (data.originalCode) {
+                     console.log("Received single-file TSX response, updating IDE with fallback...");
+                     updateFile('/src/App.tsx', data.originalCode);
+                     setActiveFile('/src/App.tsx');
+                }
+            } else if (data.language === 'javascript') {
+              console.log("Received single-file JavaScript response, updating Sandbox...");
+              setOriginalCode(data.originalCode || '');
+              setSandboxCode(data.code || '');
+              setCurrentTab('code');
+            }
+          },
         onError: (error: Error) => {
           setMessages(prev => [...prev, {role: 'assistant', content: `Error: ${error.message}`, timestamp: new Date()}]);
         }
@@ -321,7 +397,11 @@ function GamelabWorkspace() {
                   )}
                   {messages.map((msg, idx) => (
                     <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] p-3 rounded-lg shadow-sm ${msg.role === 'user' ? 'bg-emerald-500 text-white' : 'bg-white border border-gray-200'}`}>
+                      <div className={`max-w-[80%] p-3 rounded-lg shadow-sm ${
+                          msg.role === 'user' 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'bg-white border border-gray-200 text-gray-900'
+                        }`}>
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                         <p className="text-xs mt-1 opacity-70">{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
@@ -444,11 +524,11 @@ function GamelabWorkspace() {
                     </div>
                 </div>
 
-                {language === 'tsx' ? ( // 
+                {language === 'tsx' ? (
                     <div className="rounded-lg flex flex-col flex-grow min-h-0">
-                        <GameIDE files={files} />
+                        <GameIDE />
                     </div>
-                ) : ( // 
+                ) : (
                     <div className="flex flex-col flex-grow min-h-0">
                         <div className="mb-4 border-b border-gray-200 flex-shrink-0">
                             <ul className="flex flex-wrap -mb-px">
@@ -469,7 +549,7 @@ function GamelabWorkspace() {
                             </ul>
                         </div>
                         <div className="rounded-lg flex flex-col flex-grow min-h-0">
-                            {currentTab === 'code' ? ( // 
+                            {currentTab === 'code' ? (
                                 originalCode 
                                 ? <CodeBlock code={originalCode} language="javascript" /> 
                                 : <div className="flex-1 p-4 bg-gray-50 flex items-center justify-center"><p className="text-gray-500">Your game code will appear here.</p></div>
@@ -489,7 +569,7 @@ function GamelabWorkspace() {
 export default function GameLabPage() {
     return (
         <div className="min-h-screen flex items-center justify-center p-4">
-            <SandpackProvider template="react-ts" theme="dark">
+            <SandpackProvider template="react-ts" theme="dark" files={defaultFiles}>
                 <GamelabWorkspace />
             </SandpackProvider>
         </div>
