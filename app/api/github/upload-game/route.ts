@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       name: repoName,
       description: gameDescription || `${gameTitle} - Created with RandomPlayables GameLab`,
       private: isPrivate,
-      auto_init: false,
+      auto_init: true, // Change this to true to ensure a default branch is created
     });
 
     const repo = repoResponse.data;
