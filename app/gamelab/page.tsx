@@ -14,7 +14,7 @@ import {
   BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS
 } from "./prompts";
-import { SandpackProvider, useSandpack, SandpackFiles } from "@codesandbox/sandpack-react";
+import { SandpackProvider, useSandpack, SandpackFiles, SandpackCodeEditor, SandpackPreview } from "@codesandbox/sandpack-react";
 import { CodeBlock } from './components/CodeBlock';
 import GameSandbox from "./components/GameSandbox";
 
@@ -71,7 +71,18 @@ export default function App(): JSX.Element {
       active: true,
     },
     "/src/styles.css": {
-      code: `body {
+      code: `html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #333;
+}
+
+body {
     font-family: sans-serif;
     -webkit-font-smoothing: auto;
     -moz-font-smoothing: auto;
@@ -375,9 +386,9 @@ function GamelabWorkspace() {
     };
 
     return (
-        <div className="w-full max-w-7xl flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
-            <div className="w-full md:w-1/3 lg:w-1/3 flex flex-col h-[calc(100vh-4rem)] max-h-[800px] bg-gray-50">
-                <div className="p-4 bg-emerald-500 text-white">
+        <div className="w-full max-w-7xl h-full flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
+            <div className="w-full md:w-1/3 lg:w-1/3 flex flex-col bg-gray-50">
+                <div className="p-4 bg-emerald-500 text-white flex-shrink-0">
                   <h1 className="text-2xl font-bold">AI Game Lab</h1>
                   <p className="text-sm">Chat to create games for RandomPlayables</p>
                 </div>
@@ -410,111 +421,111 @@ function GamelabWorkspace() {
                   {isPending && <div className="flex justify-start"><div className="bg-white border border-gray-200 p-3 rounded-lg shadow-sm"><Spinner /></div></div>}
                   <div ref={messagesEndRef} />
                 </div>
-                <form onSubmit={handleSubmit} className="p-4 border-t bg-white overflow-auto">
-                    <div className="flex flex-col space-y-2">
-                        <textarea
-                            value={inputMessage} onChange={(e) => setInputMessage(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isPending && inputMessage.trim()) handleSubmit(e); } }}
-                            placeholder="Describe your game idea..."
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px] text-gray-900"
-                            disabled={isPending} rows={3}
-                        />
-                        <div className="mt-2">
-                            <label className="block text-xs font-medium text-gray-600">Language</label>
-                            <div className="mt-1 flex w-full rounded-md shadow-sm">
-                                <button
-                                    type="button"
-                                    onClick={() => setLanguage('tsx')}
-                                    disabled={isPending}
-                                    className={`relative inline-flex items-center justify-center w-1/2 rounded-l-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'tsx' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                >
-                                    React/TSX
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setLanguage('javascript')}
-                                    disabled={isPending}
-                                    className={`relative -ml-px inline-flex items-center justify-center w-1/2 rounded-r-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'javascript' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                >
-                                    Vanilla JS
-                                </button>
-                            </div>
-                        </div>
-                        <div className="mt-2">
-                            <label htmlFor="modelSelectorCoderGameLab" className="block text-xs font-medium text-gray-600">{useCodeReview ? "Coder Model" : "AI Model"} (Optional)</label>
-                            <select id="modelSelectorCoderGameLab" value={selectedCoderModel} onChange={(e) => setSelectedCoderModel(e.target.value)} disabled={isLoadingModels || isPending}
-                            className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs text-gray-900"
-                            >
-                            <option value="">-- Use Default --</option>
-                            {isLoadingModels ? <option disabled>Loading models...</option> : availableModels.length === 0 ? <option disabled>No models available.</option> : availableModels.map(model => (<option key={model.id} value={model.id}>{model.name}</option>))}
-                            </select>
-                        </div>
-                        {useCodeReview && (
-                            <div className="mt-2">
-                            <label htmlFor="modelSelectorReviewerGameLab" className="block text-xs font-medium text-gray-600">Reviewer Model (Optional)</label>
-                            <select id="modelSelectorReviewerGameLab" value={selectedReviewerModel} onChange={(e) => setSelectedReviewerModel(e.target.value)} disabled={isLoadingModels || isPending}
-                                className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs text-gray-900"
-                            >
-                                <option value="">-- Use Default Peer --</option>
-                                {isLoadingModels ? <option disabled>Loading models...</option> : availableModels.length === 0 ? <option disabled>No models available.</option> : availableModels.map(model => (<option key={model.id + "-reviewer"} value={model.id}>{model.name}</option>))}
-                            </select>
-                            </div>
-                        )}
-                        <div className="flex items-center mt-1">
-                            <input type="checkbox" id="useCodeReviewGameLab" checked={useCodeReview} onChange={(e) => { setUseCodeReview(e.target.checked); setSelectedCoderModel(""); setSelectedReviewerModel("");}}
-                            className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                            />
-                            <label htmlFor="useCodeReviewGameLab" className="ml-2 text-sm text-gray-700">Enable AI Code Review (experimental)</label>
-                        </div>
-                        <div className="flex justify-end">
-                            <button type="submit" disabled={isPending} className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50">
-                            {isPending ? <Spinner className="w-4 h-4 inline mr-1"/> : null}
-                            {isPending ? 'Processing...' : 'Send'}
-                            </button>
-                        </div>
-                    </div>
-                    <div className="mt-3 border-t pt-3 space-y-1">
-                    <button type="button" onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)} className="text-xs text-gray-500 hover:text-emerald-600">
-                        {showSystemPromptEditor ? "Hide System Prompts" : "Show System Prompts"}
-                    </button>
-                    {showSystemPromptEditor && (
-                        <div className="mt-2 space-y-3">
-                        {isLoadingSystemPrompts ? <div className="flex items-center text-xs text-gray-500"><Spinner className="w-3 h-3 mr-1" /> Loading...</div> : (<>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">{useCodeReview ? "Coder System Prompt:" : "System Prompt:"}</label>
-                                <textarea value={currentCoderSystemPrompt || ""} onChange={(e) => setCurrentCoderSystemPrompt(e.target.value)}
-                                className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900" placeholder="Coder system prompt..."
-                                />
-                                <div className="flex justify-end mt-1">
-                                    <button type="button" onClick={handleResetCoderSystemPrompt} disabled={isLoadingSystemPrompts}
-                                    className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
-                                    >Reset Coder</button>
-                                </div>
-                            </div>
-                            {useCodeReview && (
+                <div className="p-4 border-t bg-white overflow-auto flex-shrink-0">
+                  <form onSubmit={handleSubmit} className="space-y-2">
+                      <textarea
+                          value={inputMessage} onChange={(e) => setInputMessage(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isPending && inputMessage.trim()) handleSubmit(e); } }}
+                          placeholder="Describe your game idea..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px] text-gray-900"
+                          disabled={isPending} rows={3}
+                      />
+                      <div>
+                          <label className="block text-xs font-medium text-gray-600">Language</label>
+                          <div className="mt-1 flex w-full rounded-md shadow-sm">
+                              <button
+                                  type="button"
+                                  onClick={() => setLanguage('tsx')}
+                                  disabled={isPending}
+                                  className={`relative inline-flex items-center justify-center w-1/2 rounded-l-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'tsx' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                              >
+                                  React/TSX
+                              </button>
+                              <button
+                                  type="button"
+                                  onClick={() => setLanguage('javascript')}
+                                  disabled={isPending}
+                                  className={`relative -ml-px inline-flex items-center justify-center w-1/2 rounded-r-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'javascript' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                              >
+                                  Vanilla JS
+                              </button>
+                          </div>
+                      </div>
+                      <div>
+                          <label htmlFor="modelSelectorCoderGameLab" className="block text-xs font-medium text-gray-600">{useCodeReview ? "Coder Model" : "AI Model"} (Optional)</label>
+                          <select id="modelSelectorCoderGameLab" value={selectedCoderModel} onChange={(e) => setSelectedCoderModel(e.target.value)} disabled={isLoadingModels || isPending}
+                          className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs text-gray-900"
+                          >
+                          <option value="">-- Use Default --</option>
+                          {isLoadingModels ? <option disabled>Loading models...</option> : availableModels.length === 0 ? <option disabled>No models available.</option> : availableModels.map(model => (<option key={model.id} value={model.id}>{model.name}</option>))}
+                          </select>
+                      </div>
+                      {useCodeReview && (
+                          <div>
+                          <label htmlFor="modelSelectorReviewerGameLab" className="block text-xs font-medium text-gray-600">Reviewer Model (Optional)</label>
+                          <select id="modelSelectorReviewerGameLab" value={selectedReviewerModel} onChange={(e) => setSelectedReviewerModel(e.target.value)} disabled={isLoadingModels || isPending}
+                              className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs text-gray-900"
+                          >
+                              <option value="">-- Use Default Peer --</option>
+                              {isLoadingModels ? <option disabled>Loading models...</option> : availableModels.length === 0 ? <option disabled>No models available.</option> : availableModels.map(model => (<option key={model.id + "-reviewer"} value={model.id}>{model.name}</option>))}
+                          </select>
+                          </div>
+                      )}
+                      <div className="flex items-center">
+                          <input type="checkbox" id="useCodeReviewGameLab" checked={useCodeReview} onChange={(e) => { setUseCodeReview(e.target.checked); setSelectedCoderModel(""); setSelectedReviewerModel("");}}
+                          className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                          />
+                          <label htmlFor="useCodeReviewGameLab" className="ml-2 text-sm text-gray-700">Enable AI Code Review (experimental)</label>
+                      </div>
+                      <div className="flex justify-end">
+                          <button type="submit" disabled={isPending} className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50">
+                          {isPending ? <Spinner className="w-4 h-4 inline mr-1"/> : null}
+                          {isPending ? 'Processing...' : 'Send'}
+                          </button>
+                      </div>
+                      <div className="mt-1 border-t pt-2">
+                        <button type="button" onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)} className="text-xs text-gray-500 hover:text-emerald-600">
+                            {showSystemPromptEditor ? "Hide System Prompts" : "Show System Prompts"}
+                        </button>
+                        {showSystemPromptEditor && (
+                            <div className="mt-2 space-y-2">
+                            {isLoadingSystemPrompts ? <div className="flex items-center text-xs text-gray-500"><Spinner className="w-3 h-3 mr-1" /> Loading...</div> : (<>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Reviewer System Prompt:</label>
-                                    <textarea value={currentReviewerSystemPrompt || ""} onChange={(e) => setCurrentReviewerSystemPrompt(e.target.value)}
-                                    className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900" placeholder="Reviewer system prompt..."
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">{useCodeReview ? "Coder System Prompt:" : "System Prompt:"}</label>
+                                    <textarea value={currentCoderSystemPrompt || ""} onChange={(e) => setCurrentCoderSystemPrompt(e.target.value)}
+                                    className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900" placeholder="Coder system prompt..."
                                     />
                                     <div className="flex justify-end mt-1">
-                                        <button type="button" onClick={handleResetReviewerSystemPrompt} disabled={isLoadingSystemPrompts || !baseReviewerTemplateWithContext}
+                                        <button type="button" onClick={handleResetCoderSystemPrompt} disabled={isLoadingSystemPrompts}
                                         className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
-                                        >Reset Reviewer</button>
+                                        >Reset Coder</button>
                                     </div>
                                 </div>
-                            )}</>
+                                {useCodeReview && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Reviewer System Prompt:</label>
+                                        <textarea value={currentReviewerSystemPrompt || ""} onChange={(e) => setCurrentReviewerSystemPrompt(e.target.value)}
+                                        className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900" placeholder="Reviewer system prompt..."
+                                        />
+                                        <div className="flex justify-end mt-1">
+                                            <button type="button" onClick={handleResetReviewerSystemPrompt} disabled={isLoadingSystemPrompts || !baseReviewerTemplateWithContext}
+                                            className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
+                                            >Reset Reviewer</button>
+                                        </div>
+                                    </div>
+                                )}</>
+                            )}
+                            </div>
                         )}
-                        </div>
-                    )}
-                    </div>
-                </form>
+                      </div>
+                  </form>
+                </div>
             </div>
             
-            <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white flex flex-col h-[calc(100vh-4rem)] max-h-[800px]">
+            <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white flex flex-col">
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h2 className="text-2xl font-bold text-emerald-700">
-                      {language === 'tsx' ? 'Game Lab IDE' : 'Game Lab Sandbox'}
+                      Game Lab
                     </h2>
                     <div className="flex items-center space-x-2">
                         {language === 'tsx' 
@@ -524,41 +535,46 @@ function GamelabWorkspace() {
                     </div>
                 </div>
 
-                {language === 'tsx' ? (
-                    <div className="rounded-lg flex flex-col flex-grow min-h-0">
-                        <GameIDE />
+                <div className="flex flex-col flex-grow min-h-0">
+                    <div className="mb-4 border-b border-gray-200 flex-shrink-0">
+                        <ul className="flex flex-wrap -mb-px">
+                            <li className="mr-2">
+                                <button 
+                                    className={`inline-block p-4 ${currentTab === 'code' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                                    onClick={() => setCurrentTab('code')}>
+                                    Code Editor
+                                </button>
+                            </li>
+                            <li className="mr-2">
+                                <button 
+                                    className={`inline-block p-4 ${currentTab === 'sandbox' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                                    onClick={() => setCurrentTab('sandbox')}>
+                                    Game Preview
+                                </button>
+                            </li>
+                        </ul>
                     </div>
-                ) : (
-                    <div className="flex flex-col flex-grow min-h-0">
-                        <div className="mb-4 border-b border-gray-200 flex-shrink-0">
-                            <ul className="flex flex-wrap -mb-px">
-                                <li className="mr-2">
-                                    <button 
-                                        className={`inline-block p-4 ${currentTab === 'code' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                                        onClick={() => setCurrentTab('code')}>
-                                        Code Editor
-                                    </button>
-                                </li>
-                                <li className="mr-2">
-                                    <button 
-                                        className={`inline-block p-4 ${currentTab === 'sandbox' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                                        onClick={() => setCurrentTab('sandbox')}>
-                                        Game Preview
-                                    </button>
-                                </li>
-                            </ul>
-                        </div>
-                        <div className="rounded-lg flex flex-col flex-grow min-h-0">
-                            {currentTab === 'code' ? (
+                    <div className="rounded-lg flex flex-col flex-grow min-h-0 relative">
+                        {language === 'tsx' ? (
+                            <>
+                                <div style={{ display: currentTab === 'code' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+                                    <SandpackCodeEditor showTabs closableTabs />
+                                </div>
+                                <div style={{ display: currentTab === 'sandbox' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+                                    <SandpackPreview />
+                                </div>
+                            </>
+                        ) : (
+                            currentTab === 'code' ? (
                                 originalCode 
                                 ? <CodeBlock code={originalCode} language="javascript" /> 
                                 : <div className="flex-1 p-4 bg-gray-50 flex items-center justify-center"><p className="text-gray-500">Your game code will appear here.</p></div>
                             ) : (
                                 <GameSandbox code={sandboxCode} language="javascript" />
-                            )}
-                        </div>
+                            )
+                        )}
                     </div>
-                )}
+                </div>
                 
                 {codeError && <div className="mt-4 p-4 bg-red-100 text-red-700 rounded-lg text-sm flex-shrink-0">{codeError}</div>}
             </div>
@@ -568,7 +584,7 @@ function GamelabWorkspace() {
 
 export default function GameLabPage() {
     return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="h-screen p-4 flex flex-col">
             <SandpackProvider template="react-ts" theme="dark" files={defaultFiles}>
                 <GamelabWorkspace />
             </SandpackProvider>
