@@ -69,6 +69,11 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
     }
     return readOnlyFiles;
   }
+
+  // Determine the correct Sandpack template. If it's a React/TSX sketch,
+  // it will have a /src/App.tsx file. Otherwise, we assume it's a static
+  // Vanilla JS sketch.
+  const sandpackTemplate = sketch.files && sketch.files['/src/App.tsx'] ? 'react-ts' : 'static';
   
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -122,10 +127,9 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
             
             <div className="flex-1 relative">
                 <SandpackProvider
-                    template="react-ts"
+                    template={sandpackTemplate}
                     theme="light"
-                    files={getReadOnlyFiles()} // Use the read-only files
-                    // The invalid 'options' prop has been removed
+                    files={getReadOnlyFiles()}
                 >
                     <SandpackLayout>
                         <SandpackPreview 
