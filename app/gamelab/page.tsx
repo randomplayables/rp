@@ -560,8 +560,8 @@ function GamelabWorkspace() {
                                 <div style={{ display: currentTab === 'code' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
                                     <SandpackCodeEditor showTabs closableTabs />
                                 </div>
-                                <div style={{ display: currentTab === 'sandbox' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
-                                    <SandpackPreview />
+                                <div style={{ display: currentTab === 'sandbox' ? 'block' : 'none', minHeight: '80vh' }}>
+                                    <SandpackPreview style={{height: '100%'}} />
                                 </div>
                             </>
                         ) : (
