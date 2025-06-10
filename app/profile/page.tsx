@@ -79,6 +79,9 @@ export default function Profile() {
     const queryClient = useQueryClient() 
     const router = useRouter() 
     const [isDisconnectingStripe, setIsDisconnectingStripe] = useState(false);
+    const [isCreatingManageLink, setIsCreatingManageLink] = useState(false);
+    const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+    const [disconnectConfirmText, setDisconnectConfirmText] = useState("");
 
     const { data: profileData, isLoading: isLoadingProfile, isError: isProfileError, error: profileError, refetch: refetchProfileDetails } = useQuery({
         queryKey: ["profileDetails"],
@@ -125,6 +128,37 @@ export default function Profile() {
         }
     })
 
+    const disconnectAccountMutation = useMutation<any, Error>({
+        mutationFn: async () => {
+            const response = await fetch('/api/profile/disconnect-account', {
+                method: 'POST',
+            });
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to disconnect account.');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            toast.success('Account disconnected successfully. You will be logged out.');
+            // Clerk session is invalidated by backend deletion, redirecting to home
+            // will result in Clerk's middleware taking over.
+            router.push('/');
+        },
+        onError: (error: Error) => {
+            toast.error(`Error: ${error.message}`);
+            setIsDisconnectModalOpen(false);
+        }
+    });
+
+    const handleDisconnectAccount = () => {
+        if (disconnectConfirmText === user?.username) {
+            disconnectAccountMutation.mutate();
+        } else {
+            toast.error("Username does not match.");
+        }
+    };
+
     const currentPlanDetails = availablePlans.find(
         plan => plan.planType === profileData?.profile?.subscriptionTier
       )
@@ -157,6 +191,27 @@ export default function Profile() {
             toast.dismiss();
             toast.error('Error setting up payouts.');
             console.error("Stripe onboarding error:", err);
+        }
+    };
+
+    const handleManageStripeAccount = async () => {
+        setIsCreatingManageLink(true);
+        toast.loading("Redirecting to your Stripe Dashboard...");
+        try {
+            const response = await fetch('/api/stripe/manage-account', { method: 'POST' });
+            const data = await response.json();
+            toast.dismiss();
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                toast.error(data.error || 'Failed to create dashboard link.');
+            }
+        } catch (err) {
+            toast.dismiss();
+            toast.error('An error occurred.');
+            console.error("Stripe manage account error:", err);
+        } finally {
+            setIsCreatingManageLink(false);
         }
     };
 
@@ -262,7 +317,7 @@ export default function Profile() {
                   <p className="text-red-500">Error loading profile: {(profileError as Error)?.message}</p>
                 ) : profile ? (
                   <div className="space-y-6">
-                    {/* GitHub Connection Section - ADD THIS */}
+                    {/* GitHub Connection Section */}
                     <div className="mt-6">
                         <GitHubConnectButton />
                     </div>
@@ -356,19 +411,28 @@ export default function Profile() {
                         </h3>
                         {profile.stripeConnectAccountId ? (
                             profile.stripePayoutsEnabled ? (
-                                <div className="text-green-700">
-                                    <p className="flex items-center">
-                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.06 0l4-5.5Z" clipRule="evenodd" />
-                                      </svg>
-                                      Your payout account is active and verified by Stripe.
-                                    </p>
-                                    <p className="text-sm mt-1 pl-7">Payouts will be sent to the bank account you configured with Stripe.</p>
+                                <div>
+                                    <div className="text-green-700 mb-3">
+                                        <p className="flex items-center">
+                                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.06 0l4-5.5Z" clipRule="evenodd" />
+                                          </svg>
+                                          Your payout account is currently enabled by Stripe.
+                                        </p>
+                                        <p className="text-sm mt-1 pl-7">You can manage your details or update your bank information on Stripe.</p>
+                                    </div>
+                                    <button
+                                        onClick={handleManageStripeAccount}
+                                        disabled={isCreatingManageLink}
+                                        className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                                    >
+                                        {isCreatingManageLink ? "Redirecting..." : "Manage Stripe Account"}
+                                    </button>
                                 </div>
                             ) : (
                                 <div className="text-orange-600">
-                                    <p>⚙️ Your Stripe account setup is in progress or requires more information from Stripe.</p>
-                                    <p className="text-sm mt-1">You might need to complete identity verification or add/update bank details on Stripe.</p>
+                                    <p>⚙️ Your Stripe account setup is in progress or requires more information.</p>
+                                    <p className="text-sm mt-1">Please continue to Stripe to complete your account setup and enable payouts.</p>
                                     <button
                                         onClick={handleSetupPayouts}
                                         className="mt-3 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
@@ -443,6 +507,21 @@ export default function Profile() {
                     <div className="mt-6">
                       <UsageDisplay /> 
                     </div>
+
+                    {/* Danger Zone for Account Disconnection */}
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-6">
+                        <h3 className="text-xl font-semibold mb-2 text-red-700">Danger Zone</h3>
+                        <p className="text-sm text-red-600 mb-4">
+                            Disconnecting your account is a permanent action and cannot be undone. All your personal data, contributions, and content will be deleted from our platform.
+                        </p>
+                        <button
+                            onClick={() => setIsDisconnectModalOpen(true)}
+                            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                        >
+                            Disconnect Account
+                        </button>
+                    </div>
+
                   </div>
       
                 ) : ( 
@@ -451,6 +530,44 @@ export default function Profile() {
               </div>
             </div>
           </div>
+          
+          {/* Disconnect Account Modal */}
+          {isDisconnectModalOpen && (
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                    <h3 className="text-lg font-bold mb-4 text-red-700">Are you absolutely sure?</h3>
+                    <p className="text-sm text-gray-700 mb-4">
+                        This action is irreversible. Your profile, subscriptions, API usage, and personally saved content (like sketches and visualizations) will be permanently deleted. To maintain the integrity of community discussions, your questions and answers will be disassociated from your account and fully anonymized.
+                    </p>
+                    <p className="text-sm text-gray-700 mb-2">
+                        Please type your username <strong className="font-mono">{user?.username}</strong> to confirm.
+                    </p>
+                    <input
+                        type="text"
+                        value={disconnectConfirmText}
+                        onChange={(e) => setDisconnectConfirmText(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md mb-4"
+                    />
+                    <div className="flex justify-end space-x-2">
+                        <button 
+                            onClick={() => setIsDisconnectModalOpen(false)}
+                            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleDisconnectAccount}
+                            disabled={disconnectConfirmText !== user?.username || disconnectAccountMutation.isPending}
+                            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center"
+                        >
+                            {disconnectAccountMutation.isPending && <Spinner className="w-4 h-4 mr-2" />}
+                            {disconnectAccountMutation.isPending ? 'Disconnecting...' : 'I understand, disconnect my account'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+          )}
+
         </div>
       )
 }
