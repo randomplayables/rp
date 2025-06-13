@@ -155,6 +155,8 @@ function GamelabWorkspace() {
     
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [sandpackTestData, setSandpackTestData] = useState<any[]>([]);
+
 
     const suggestedPrompts = {
       tsx: [
@@ -183,6 +185,7 @@ function GamelabWorkspace() {
             setCodeError(null);
     
             if (data.language === 'tsx') {
+                setSandpackTestData([]); // Clear previous test data
                 let filesToUpdate: SandpackFiles = {};
                 if (data.files && Object.keys(data.files).length > 0) {
                     filesToUpdate = { ...data.files };
@@ -406,7 +409,11 @@ function GamelabWorkspace() {
                 })
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.success) console.error('Failed to save sandbox data:', data.error);
+                    if (!data.success) {
+                        console.error('Failed to save sandbox data:', data.error);
+                    } else {
+                        setSandpackTestData(prev => [...prev, data.gameData]);
+                    }
                 })
                 .catch(err => console.error('Error sending sandbox data to API:', err));
             }
@@ -687,11 +694,19 @@ function GamelabWorkspace() {
                     <div className="rounded-lg flex flex-col flex-grow min-h-0 relative">
                         {language === 'tsx' ? (
                             <>
-                                <div style={{ display: currentTab === 'code' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+                                <div style={{ display: currentTab === 'code' ? 'flex' : 'none', height: '100%', overflow: 'auto' }}>
                                     <SandpackCodeEditor showTabs closableTabs />
                                 </div>
-                                <div style={{ display: currentTab === 'sandbox' ? 'block' : 'none', minHeight: '80vh' }}>
-                                    <SandpackPreview style={{height: '100%'}} />
+                                <div style={{ display: currentTab === 'sandbox' ? 'flex' : 'none' }} className="flex-1 flex-col h-full">
+                                    <div className="relative flex-grow">
+                                        <SandpackPreview style={{ width: '100%', height: '100%', border: '0' }} />
+                                    </div>
+                                    {sandpackTestData.length > 0 && (
+                                        <div className="p-3 bg-gray-800 text-white text-sm max-h-[150px] overflow-y-auto flex-shrink-0 border-t-2 border-gray-700">
+                                            <p className="font-semibold mb-1">Test Data Log (from GameLabSandbox.gamedatas):</p>
+                                            <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(sandpackTestData, null, 2)}</pre>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         ) : (
