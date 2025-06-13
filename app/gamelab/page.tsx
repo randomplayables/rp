@@ -171,32 +171,124 @@ function GamelabWorkspace() {
 
     const chatMutation = useMutation<GameLabApiResponse, Error, FormData>({
         mutationFn: (formData) => sendChatMessageToApi(formData),
-        onSuccess: (data: GameLabApiResponse) => { 
+        onSuccess: async (data: GameLabApiResponse) => {
             const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
             setMessages(prev => [...prev, assistantMessage]);
-            
+    
             if (data.error) {
                 setCodeError(data.error);
                 return;
             }
-            
+    
             setCodeError(null);
-      
+    
             if (data.language === 'tsx') {
+                let filesToUpdate: SandpackFiles = {};
                 if (data.files && Object.keys(data.files).length > 0) {
-                    console.log("Received multi-file TSX response, updating IDE...");
-                    Object.entries(data.files).forEach(([filePath, code]) => {
-                        console.log(`Updating file: ${filePath}`);
-                        updateFile(filePath, code);
-                    });
-                    if (data.files['/src/App.tsx']) {
-                        setActiveFile('/src/App.tsx');
-                    }
+                    filesToUpdate = { ...data.files };
                 } else if (data.originalCode) {
-                     console.log("Received single-file TSX response, updating IDE with fallback...");
-                     updateFile('/src/App.tsx', data.originalCode);
-                     setActiveFile('/src/App.tsx');
+                    filesToUpdate['/src/App.tsx'] = { code: data.originalCode };
+                } else {
+                    return; // Nothing to update
                 }
+    
+                try {
+                    // 1. Create a game entry
+                    const gameRes = await fetch('/api/gamelab/sandbox', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'create_game', data: { name: `React Sketch ${Date.now()}` } })
+                    });
+                    const gameData = await gameRes.json();
+                    if (!gameData.success) throw new Error("Failed to create sandbox game entry.");
+    
+                    // 2. Create a session for that game
+                    const sessionRes = await fetch('/api/gamelab/sandbox', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'create_session', data: { gameId: gameData.game.id } })
+                    });
+                    const sessionData = await sessionRes.json();
+                    if (!sessionData.success) throw new Error("Failed to create sandbox session.");
+                    
+                    const newSessionId = sessionData.session.sessionId;
+                    const gameIdForScript = gameData.game.id;
+    
+                    // 3. Prepare communication script as a new file
+                    const communicationScript = `
+                        window.GAMELAB_SESSION_ID = "${newSessionId || 'pending'}";
+                        window.GAMELAB_GAME_ID = "${gameIdForScript || 'pending'}";
+
+                        window.sendDataToGameLab = function(data) {
+                            console.log('Game (in Sandpack) sending data to GameLab:', data);
+                            const payloadWithSession = { 
+                                ...data, 
+                                sessionId: window.GAMELAB_SESSION_ID,
+                                gameId: window.GAMELAB_GAME_ID 
+                            };
+                            window.parent.postMessage({ type: 'GAMELAB_DATA', payload: payloadWithSession }, '*');
+                        };
+
+                        window.onerror = function(message, source, lineno, colno, error) {
+                          let M = message, S = source, L = lineno, C = colno;
+                          let ST = error && typeof error.stack === 'string' ? error.stack : (typeof error === 'string' ? error : undefined);
+                  
+                          if (error) {
+                            if (typeof error === 'object' && error !== null) { M = String(error.message || M); } 
+                            else if (typeof error === 'string') { M = error; }
+                          }
+                  
+                          const errorPayload = {
+                            message: String(M || "Unknown error from iframe"), source: String(S || "Unknown source"),
+                            lineno: L ? Number(L) : undefined, colno: C ? Number(C) : undefined, stack: ST
+                          };
+                          console.error('GameLab error (in iframe caught by window.onerror):', errorPayload);
+                          window.parent.postMessage({ type: 'GAMELAB_ERROR', payload: errorPayload }, '*');
+                          return true;
+                        };
+                    `;
+                    filesToUpdate['/src/communication.js'] = { code: communicationScript, hidden: true };
+
+                    // 4. Modify entry file to import the new communication script
+                    const entryFilePath = '/src/index.tsx';
+                    const existingEntryFile = filesToUpdate[entryFilePath];
+                    let originalEntryFileCode: string;
+
+                    if (typeof existingEntryFile === 'string') {
+                        originalEntryFileCode = existingEntryFile;
+                    } else if (existingEntryFile && typeof existingEntryFile.code === 'string') {
+                        originalEntryFileCode = existingEntryFile.code;
+                    } else {
+                        // The default file is an object with a code property
+                        originalEntryFileCode = (defaultFiles[entryFilePath] as { code: string }).code;
+                    }
+                    
+                    const modifiedEntryFileCode = `import './communication.js';\n${originalEntryFileCode}`;
+                    filesToUpdate[entryFilePath] = { code: modifiedEntryFileCode, hidden: true };
+
+    
+                    // Ensure other default files are present
+                    if (!filesToUpdate['/index.html']) filesToUpdate['/index.html'] = defaultFiles['/index.html'];
+                    if (!filesToUpdate['/src/styles.css']) filesToUpdate['/src/styles.css'] = defaultFiles['/src/styles.css'];
+                    if (!filesToUpdate['/package.json']) filesToUpdate['/package.json'] = defaultFiles['/package.json'];
+    
+                    // 5. Update Sandpack files
+                    Object.entries(filesToUpdate).forEach(([path, fileOrCode]) => {
+                        if (typeof fileOrCode === 'string') {
+                            updateFile(path, fileOrCode, false);
+                        } else if (fileOrCode && typeof fileOrCode.code === 'string') {
+                            updateFile(path, fileOrCode.code, fileOrCode.hidden || false);
+                        }
+                    });
+                    
+                    if (filesToUpdate['/src/App.tsx']) setActiveFile('/src/App.tsx');
+    
+                } catch (err) {
+                    const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during sandbox setup.";
+                    console.error("Sandbox setup error:", err);
+                    setCodeError(errorMessage);
+                }
+    
             } else if (data.language === 'javascript') {
               console.log("Received single-file JavaScript response, updating Sandbox...");
               setOriginalCode(data.originalCode || '');
@@ -290,21 +382,31 @@ function GamelabWorkspace() {
     
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
-            if (event.origin === '[https://sandpack-bundler.codesandbox.io](https://sandpack-bundler.codesandbox.io)' && event.data?.type === 'GAMELAB_DATA') {
+            if (event.data?.type === 'GAMELAB_DATA') {
                 console.log('Received data from Sandpack preview:', event.data.payload);
+                const { payload } = event.data;
+
+                if (!payload.sessionId || !payload.gameId) {
+                    console.error("Received GAMELAB_DATA without a sessionId or gameId. Cannot save.", payload);
+                    return;
+                }
+
                 fetch('/api/gamelab/sandbox', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         action: 'save_game_data',
-                        data: event.data.payload
+                        data: {
+                            sessionId: payload.sessionId,
+                            gameId: payload.gameId,
+                            roundNumber: payload.roundNumber || 1,
+                            roundData: payload
+                        }
                     })
                 })
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.success) {
-                        console.error('Failed to save sandbox data:', data.error);
-                    }
+                    if (!data.success) console.error('Failed to save sandbox data:', data.error);
                 })
                 .catch(err => console.error('Error sending sandbox data to API:', err));
             }
