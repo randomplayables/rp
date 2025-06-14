@@ -172,6 +172,38 @@ function GamelabWorkspace() {
       ]
     };
 
+    /**
+     * Cleans the files from the Sandpack instance before upload.
+     * It removes any known misplaced root files if a correct version exists in /src.
+     * It also handles duplicate index.html files, prioritizing /public/index.html.
+     */
+    const prepareTsxFilesForUpload = (originalFiles: SandpackFiles): SandpackFiles => {
+        const cleanedFiles: SandpackFiles = { ...originalFiles };
+        const misplacedRootFiles = ['/App.tsx', '/styles.css', '/index.tsx'];
+
+        // Original bug fix: Remove duplicated source files from root
+        misplacedRootFiles.forEach(misplacedPath => {
+            if (cleanedFiles[misplacedPath] && cleanedFiles[`/src${misplacedPath}`]) {
+                console.warn(`Removing duplicate, misplaced root file before upload: ${misplacedPath}`);
+                delete cleanedFiles[misplacedPath];
+            }
+        });
+
+        // New fix: Handle duplicate index.html files
+        if (cleanedFiles['/index.html'] && cleanedFiles['/public/index.html']) {
+            console.warn("Found both /index.html and /public/index.html. Removing the root /index.html.");
+            delete cleanedFiles['/index.html'];
+        } 
+        // If only the root one exists, move it to public/ to enforce correct structure
+        else if (cleanedFiles['/index.html'] && !cleanedFiles['/public/index.html']) {
+            console.warn("Found /index.html but not /public/index.html. Moving it to the public directory.");
+            cleanedFiles['/public/index.html'] = cleanedFiles['/index.html'];
+            delete cleanedFiles['/index.html'];
+        }
+
+        return cleanedFiles;
+    };
+
     const chatMutation = useMutation<GameLabApiResponse, Error, FormData>({
         mutationFn: (formData) => sendChatMessageToApi(formData),
         onSuccess: async (data: GameLabApiResponse) => {
@@ -502,6 +534,8 @@ function GamelabWorkspace() {
         };
     };
 
+    const tsxFilesForUpload = prepareTsxFilesForUpload(files);
+
     return (
         <div className="w-full max-w-7xl h-full flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
             <div className="w-full md:w-1/3 lg:w-1/3 flex flex-col bg-gray-50">
@@ -676,7 +710,7 @@ function GamelabWorkspace() {
                     </h2>
                     <div className="flex items-center space-x-2">
                         {language === 'tsx' 
-                            ? <><SaveSketchButton files={files} /><GitHubUploadButton files={files} /></>
+                            ? <><SaveSketchButton files={tsxFilesForUpload} /><GitHubUploadButton files={tsxFilesForUpload} /></>
                             : <><SaveSketchButton files={getJsFilesForUpload()} /><GitHubUploadButton files={getJsFilesForUpload()} /></>
                         }
                     </div>
