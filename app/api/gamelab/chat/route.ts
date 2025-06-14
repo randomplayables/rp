@@ -107,27 +107,35 @@ export async function POST(request: NextRequest) {
     const useCodeReview = formData.get('useCodeReview') === 'true';
     const selectedCoderModelId = formData.get('selectedCoderModelId') as string | null;
     const selectedReviewerModelId = formData.get('selectedReviewerModelId') as string | null;
-    const attachedAsset = formData.get('asset') as File | null;
     
-    let assetContext = "No asset attached.";
-    let dataUri = "";
-    const assetPlaceholder = "%%ASSET_DATA_URI%%";
+    // Handle multiple assets
+    const attachedAssets = formData.getAll('assets') as File[];
+    
+    let assetContext = "No assets attached.";
+    const assetDataPlaceholders: { placeholder: string; dataUri: string }[] = [];
 
-    if (attachedAsset) {
-        const originalFilename = attachedAsset.name;
-        const fileExtensionIndex = originalFilename.lastIndexOf('.');
-        const baseFilename = fileExtensionIndex === -1 ? originalFilename : originalFilename.substring(0, fileExtensionIndex);
-        const assetVarName = baseFilename.replace(/[^a-zA-Z0-9]/g, '_');
+    if (attachedAssets.length > 0) {
+        let contextInstructions = [];
+        for (let i = 0; i < attachedAssets.length; i++) {
+            const asset = attachedAssets[i];
+            const originalFilename = asset.name;
+            const fileExtensionIndex = originalFilename.lastIndexOf('.');
+            const baseFilename = fileExtensionIndex === -1 ? originalFilename : originalFilename.substring(0, fileExtensionIndex);
+            // Create a unique variable name including the index
+            const assetVarName = `${baseFilename.replace(/[^a-zA-Z0-9]/g, '_')}_${i}`;
+            
+            const fileBuffer = await asset.arrayBuffer();
+            const base64Content = Buffer.from(fileBuffer).toString('base64');
+            const dataUri = `data:${asset.type};base64,${base64Content}`;
+            
+            const placeholder = `%%ASSET_DATA_URI_${i}%%`;
+            assetDataPlaceholders.push({ placeholder, dataUri });
 
-        const fileBuffer = await attachedAsset.arrayBuffer();
-        const base64Content = Buffer.from(fileBuffer).toString('base64');
-        dataUri = `data:${attachedAsset.type};base64,${base64Content}`;
-
-        assetContext = `An asset named '${attachedAsset.name}' is attached. You MUST embed it directly in your React component by including this exact, unmodified line of code:
-\`const ${assetVarName} = "${assetPlaceholder}";\`
-Then, use this constant in an \`<img>\` tag's src attribute.
-For example: \`<img src={${assetVarName}} alt="Uploaded asset" />\`.
-Do NOT use a file import. Do NOT define the constant's value yourself; use the placeholder.`;
+            const instruction = `* For the asset named '${asset.name}', you MUST embed it in the code by including this exact, unmodified line:\n    \`const ${assetVarName} = "${placeholder}";\`\n    Then, use this constant, for example in an \`<img>\` tag's src attribute: \`<img src={${assetVarName}} alt="${asset.name}" />\`.`;
+            contextInstructions.push(instruction);
+        }
+        
+        assetContext = `One or more assets are attached. You MUST embed each one directly into your generated code as a base64 data URI constant. Follow these instructions precisely for each asset:\n\n${contextInstructions.join('\n\n')}\n\nDo NOT use file imports. Do NOT define the constant values yourself; use the provided placeholders exactly as they are.`;
     }
     
     const profile = await prisma.profile.findUnique({ where: { userId: clerkUser.id }, select: { subscriptionActive: true, subscriptionTier: true } });
@@ -185,9 +193,11 @@ Do NOT use a file import. Do NOT define the constant's value yourself; use the p
       finalAiResponseContent = response.choices[0].message.content;
     }
     
-    // Inject the real Data URI if an asset was attached
-    if (attachedAsset && finalAiResponseContent) {
-        finalAiResponseContent = finalAiResponseContent.replace(`"${assetPlaceholder}"`, `"${dataUri}"`);
+    // Inject the real Data URIs if assets were attached
+    if (assetDataPlaceholders.length > 0 && finalAiResponseContent) {
+        for (const { placeholder, dataUri } of assetDataPlaceholders) {
+            finalAiResponseContent = finalAiResponseContent.replace(`"${placeholder}"`, `"${dataUri}"`);
+        }
     }
 
     const extractionResult = extractGameLabCodeFromResponse(finalAiResponseContent, language);

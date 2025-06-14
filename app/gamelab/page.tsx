@@ -153,7 +153,8 @@ function GamelabWorkspace() {
     const [currentTab, setCurrentTab] = useState<'code' | 'sandbox'>('code');
     const [codeError, setCodeError] = useState<string | null>(null);
     
-    const [attachedFile, setAttachedFile] = useState<File | null>(null);
+    // MODIFIED: State to handle multiple files
+    const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [sandpackTestData, setSandpackTestData] = useState<any[]>([]);
 
@@ -438,18 +439,26 @@ function GamelabWorkspace() {
       formData.append('useCodeReview', String(useCodeReview));
       if (selectedCoderModel) formData.append('selectedCoderModelId', selectedCoderModel);
       if (selectedReviewerModel) formData.append('selectedReviewerModelId', selectedReviewerModel);
-      if (attachedFile) formData.append('asset', attachedFile);
+      
+      // MODIFIED: Append all attached files
+      if (attachedFiles.length > 0) {
+        attachedFiles.forEach(file => {
+          formData.append('assets', file);
+        });
+      }
 
       chatMutation.mutate(formData);
 
       setInputMessage("");
-      setAttachedFile(null);
+      // MODIFIED: Clear the attached files array
+      setAttachedFiles([]);
       if(fileInputRef.current) fileInputRef.current.value = "";
     };
 
+    // MODIFIED: Handle multiple file selection
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files && event.target.files[0]) {
-            setAttachedFile(event.target.files[0]);
+        if (event.target.files) {
+            setAttachedFiles(Array.from(event.target.files));
         }
     };
 
@@ -540,7 +549,7 @@ function GamelabWorkspace() {
                       />
                        <div className="flex items-center space-x-2">
                         <label htmlFor="file-upload" className="cursor-pointer text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md border">
-                            Choose File
+                            Choose Files
                         </label>
                         <input
                             id="file-upload"
@@ -549,18 +558,19 @@ function GamelabWorkspace() {
                             onChange={handleFileChange}
                             className="hidden"
                             disabled={isPending}
+                            multiple // MODIFIED: Allow multiple file selection
                         />
-                        {attachedFile && (
+                        {attachedFiles.length > 0 && (
                             <div className="flex items-center space-x-2 text-sm text-gray-600">
-                                <span>{attachedFile.name}</span>
+                                <span>{attachedFiles.length} file(s) selected</span>
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        setAttachedFile(null);
+                                        setAttachedFiles([]);
                                         if (fileInputRef.current) fileInputRef.current.value = "";
                                     }}
                                     className="text-red-500 text-xs"
-                                    title="Remove file"
+                                    title="Clear files"
                                 >
                                     (clear)
                                 </button>
