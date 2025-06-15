@@ -1,14 +1,17 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/nextjs';
 import {
   SandpackFiles,
   SandpackProvider,
   SandpackLayout,
-  SandpackPreview
+  SandpackPreview,
+  SandpackCodeEditor,
+  useSandpack,
+  SandpackProviderProps,
 } from '@codesandbox/sandpack-react';
 
-// The interface remains the same
 interface Sketch {
   _id: string;
   title: string;
@@ -17,7 +20,8 @@ interface Sketch {
   previewImage?: string;
   createdAt: string;
   isPublic: boolean; 
-  userId: string;    
+  userId: string;
+  sketchGameId?: string;
 }
 
 interface Props {
@@ -26,9 +30,114 @@ interface Props {
   onDelete: () => void;
 }
 
+const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean }) => {
+  const { sandpack } = useSandpack();
+  const { updateFile } = sandpack;
+  const { user, isSignedIn } = useUser();
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
+
+  useEffect(() => {
+    const createSession = async () => {
+      if (!sketch.sketchGameId) {
+        setIsLoadingSession(false);
+        return;
+      }
+
+      setIsLoadingSession(true);
+      try {
+        const response = await fetch('/api/sketch/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sketchGameId: sketch.sketchGameId,
+            passedUserId: isSignedIn ? user.id : undefined,
+            passedUsername: isSignedIn ? user.username : undefined,
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setSessionId(data.sessionId);
+          console.log(`Created sketch session ${data.sessionId} for sketch game ${sketch.sketchGameId}`);
+        } else {
+          console.error("Failed to create sketch game session");
+        }
+      } catch (error) {
+        console.error("Error creating sketch game session:", error);
+      } finally {
+        setIsLoadingSession(false);
+      }
+    };
+
+    createSession();
+  }, [sketch.sketchGameId, user, isSignedIn]);
+
+  useEffect(() => {
+    if (sessionId && sandpack.files['/src/communication.js']) {
+      const commsFile = sandpack.files['/src/communication.js'];
+      if(typeof commsFile === 'object' && 'code' in commsFile) {
+        const updatedCode = commsFile.code.replace(/const GAMELAB_SESSION_ID = "pending";/, `const GAMELAB_SESSION_ID = "${sessionId}";`);
+        updateFile('/src/communication.js', updatedCode);
+      }
+    }
+  }, [sessionId, sandpack.files, updateFile]);
+  
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'GAMELAB_DATA' && event.data.payload && sessionId) {
+        const payloadFromGame = event.data.payload;
+        
+        // This is the corrected structure for the API request
+        const dataToSave = {
+            sessionId: sessionId,
+            roundData: payloadFromGame,
+            roundNumber: payloadFromGame.roundNumber || 1 // Expect roundNumber from the game payload
+        };
+
+        fetch('/api/sketch/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dataToSave)
+        }).then(response => {
+          if (!response.ok) {
+            console.error("Failed to save sketch game data");
+          } else {
+            console.log("Successfully saved sketch data for session:", sessionId)
+          }
+        }).catch(err => {
+          console.error("Error saving sketch game data:", err);
+        });
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [sessionId]);
+
+  if (isLoadingSession) {
+    return <div className="flex items-center justify-center h-full"><p>Loading session...</p></div>;
+  }
+
+  if (showCode) {
+    return (
+      <SandpackLayout>
+        <SandpackCodeEditor readOnly />
+        <SandpackPreview showNavigator={true} showOpenInCodeSandbox={false} />
+      </SandpackLayout>
+    );
+  }
+
+  return <SandpackPreview showNavigator={true} showOpenInCodeSandbox={false} />;
+};
+
+
 export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) {
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showCodeInModal, setShowCodeInModal] = useState(false);
   
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -56,28 +165,47 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
     }
   };
 
-  // Function to prepare files for the read-only preview
-  const getReadOnlyFiles = (): SandpackFiles => {
+  const getSandpackSetup = () => {
     const readOnlyFiles: SandpackFiles = {};
     for (const path in sketch.files) {
         const file = sketch.files[path];
         const code = typeof file === 'string' ? file : file.code;
         readOnlyFiles[path] = {
             code,
-            readOnly: true
+            readOnly: true,
+            hidden: path.includes('communication.js')
         };
     }
-    return readOnlyFiles;
+
+    if (!readOnlyFiles['/src/communication.js']) {
+      readOnlyFiles['/src/communication.js'] = {
+        code: `
+          const GAMELAB_SESSION_ID = "pending";
+          window.sendDataToGameLab = function(data) {
+            console.log('Sketch (in Sandpack) sending data to platform:', data);
+            window.parent.postMessage({ type: 'GAMELAB_DATA', payload: data }, '*');
+          };
+        `,
+        hidden: true,
+      };
+
+      const entryFilePath = sketch.files['/src/index.tsx'] ? '/src/index.tsx' : '/index.js';
+      if(readOnlyFiles[entryFilePath]){
+        const entryFile = readOnlyFiles[entryFilePath];
+        if(typeof entryFile === 'object' && 'code' in entryFile){
+            entryFile.code = `import './communication.js';\n${entryFile.code}`;
+        }
+      }
+    }
+
+    const template: SandpackProviderProps['template'] = sketch.files && sketch.files['/src/App.tsx'] ? 'react-ts' : 'static';
+    return { files: readOnlyFiles, template };
   }
 
-  // Determine the correct Sandpack template. If it's a React/TSX sketch,
-  // it will have a /src/App.tsx file. Otherwise, we assume it's a static
-  // Vanilla JS sketch.
-  const sandpackTemplate = sketch.files && sketch.files['/src/App.tsx'] ? 'react-ts' : 'static';
+  const { files: sandpackFiles, template: sandpackTemplate } = getSandpackSetup();
   
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      {/* Content */}
       <div className="p-4">
         <h3 className="font-bold text-lg mb-1">{sketch.title}</h3>
         
@@ -90,8 +218,13 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
           
           <div className="flex space-x-2">
             <button
-              onClick={() => setIsFullscreenMode(true)}
+              onClick={() => {
+                setShowCodeInModal(false);
+                setIsFullscreenMode(true);
+              }}
               className="text-emerald-600 hover:text-emerald-700"
+              disabled={!sketch.sketchGameId}
+              title={sketch.sketchGameId ? "Preview Sketch" : "Sketch cannot be played (missing game link)"}
             >
               Preview
             </button>
@@ -109,7 +242,6 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
         </div>
       </div>
 
-      {/* Fullscreen Modal with Sandpack */}
       {isFullscreenMode && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-11/12 h-5/6 max-w-6xl flex flex-col">
@@ -129,21 +261,22 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
                 <SandpackProvider
                     template={sandpackTemplate}
                     theme="light"
-                    files={getReadOnlyFiles()}
+                    files={sandpackFiles}
                 >
-                    <SandpackLayout>
-                        <SandpackPreview 
-                            showNavigator={true}
-                            showOpenInCodeSandbox={false}
-                        />
-                    </SandpackLayout>
+                    <SketchPlayer sketch={sketch} showCode={showCodeInModal} />
                 </SandpackProvider>
             </div>
 
-            <div className="p-4 border-t flex justify-end space-x-4">
+            <div className="p-4 border-t flex justify-between items-center">
+              <button 
+                onClick={() => setShowCodeInModal(!showCodeInModal)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+              >
+                {showCodeInModal ? 'Hide Code' : 'Show Code'}
+              </button>
               <button 
                 onClick={() => setIsFullscreenMode(false)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600"
               >
                 Close
               </button>

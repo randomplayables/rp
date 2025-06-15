@@ -64,7 +64,6 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         return gameCode.replace(/<html[^>]*>/i, `$&<head><script>${sessionIdScript}${communicationCode}<\/script></head>`);
       }
     } else if (lang === 'jsx' || lang === 'tsx' || lang === 'react') {
-        // This now handles pre-compiled JavaScript. Babel is no longer needed.
         return `
 <!DOCTYPE html>
 <html>
@@ -80,16 +79,13 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   <div id="root"></div><div id="game-container"></div><div id="error-display"></div>
   <script>
     try {
-      // The 'gameCode' is now pre-compiled JavaScript from the server.
       ${gameCode}
 
-      // The compiled code should define an 'App' variable.
       const ComponentToRender = typeof App !== 'undefined' ? App : null;
 
       if (ComponentToRender && document.getElementById('root')) {
         ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ComponentToRender));
       } else if (!gameCode.trim()) {
-        // Do nothing if the code is empty, it's just not ready yet.
       } else {
         const errorMsg = 'GameLab Sandbox Critical Error: Main "App" component was not found after transpilation. The compiled code did not define an "App" component that could be rendered.';
         console.error(errorMsg);
@@ -167,16 +163,18 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
     initSandbox();
   }, [code, language, createGameHTML]);
 
-  const saveGameData = useCallback(async (roundDataFromGame: any) => {
+  const saveGameData = useCallback(async (payloadFromGame: any) => {
     if (!activeSandboxGame || !gameSessionId) {
       const errorMsg = 'Cannot save data: No active game or session ID.';
       setError(errorMsg); console.error('GameSandbox: Save data attempt failed', { activeSandboxGame, gameSessionId });
       return;
     }
     try {
+      // FIX: Expect roundNumber from the game payload instead of hardcoding it.
+      const roundNumber = payloadFromGame.roundNumber || 1;
       const response = await fetch('/api/gamelab/sandbox', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_game_data', data: { sessionId: gameSessionId, gameId: activeSandboxGame.id, roundNumber: 1, roundData: roundDataFromGame }})
+        body: JSON.stringify({ action: 'save_game_data', data: { sessionId: gameSessionId, gameId: activeSandboxGame.id, roundNumber: roundNumber, roundData: payloadFromGame }})
       });
       const data = await response.json();
       if (data.success) { setTestData(prev => [...prev, data.gameData]); }

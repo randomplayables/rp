@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import mongoose from "mongoose";
 import { currentUser } from "@clerk/nextjs/server";
 import { incrementUserContribution, decrementUserContribution, ContributionType } from "@/lib/contributionUpdater";
+import { SketchGameModel } from "@/models/SketchData"; // Import the new SketchGame model
 
 // Define the schema
 const UserSketchSchema = new mongoose.Schema({
@@ -12,6 +13,7 @@ const UserSketchSchema = new mongoose.Schema({
   description: { type: String },
   files: { type: mongoose.Schema.Types.Mixed, required: true },
   previewImage: { type: String },
+  sketchGameId: { type: String }, // Add sketchGameId
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   isPublic: { type: Boolean, default: true }
@@ -25,6 +27,7 @@ type UserSketchDocument = mongoose.Document & {
   description?: string;
   files: mongoose.Schema.Types.Mixed;
   previewImage?: string;
+  sketchGameId?: string; // Add sketchGameId
   createdAt: Date;
   updatedAt: Date;
   isPublic: boolean;
@@ -35,7 +38,6 @@ type UserSketchModelType = mongoose.Model<UserSketchDocument>;
 // Get or create the model
 let UserSketchModel: UserSketchModelType;
 try {
-  // Check if the model is already registered
   UserSketchModel = mongoose.models.UserSketch as UserSketchModelType || 
     mongoose.model<UserSketchDocument>("UserSketch", UserSketchSchema);
 } catch (error) {
@@ -51,18 +53,14 @@ export async function GET(request: NextRequest) {
     
     await connectToDatabase();
     
-    // Build the query filter
     const filter: any = {};
     
     if (userId) {
-      // Looking at own content - show everything
       filter.userId = userId;
     } else if (username) {
-      // Looking at someone else's content - only show public items
       filter.username = username;
       filter.isPublic = true;
     } else {
-      // No filter provided - default to current user's content
       const clerkUser = await currentUser();
       if (!clerkUser) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -96,6 +94,16 @@ export async function POST(request: NextRequest) {
     
     await connectToDatabase();
     console.log("Connected to database for sketch");
+
+    const sketchGameId = Date.now(); // Unique numeric ID for the sketch game
+    await SketchGameModel.create({
+      id: sketchGameId,
+      name: title,
+      description: description,
+      authorUserId: clerkUser.id,
+      authorUsername: clerkUser.username || "unknown",
+    });
+    console.log("Created entry in sketch_games with ID:", sketchGameId);
     
     const sketch = await UserSketchModel.create({
       userId: clerkUser.id,
@@ -104,7 +112,8 @@ export async function POST(request: NextRequest) {
       description,
       files,
       previewImage,
-      isPublic: isPublic !== undefined ? isPublic : true
+      isPublic: isPublic !== undefined ? isPublic : true,
+      sketchGameId: sketchGameId.toString(), // Link to the new sketch_games entry
     });
 
     await incrementUserContribution(
@@ -119,7 +128,8 @@ export async function POST(request: NextRequest) {
       success: true, 
       sketch: {
         id: sketch._id,
-        title: sketch.title
+        title: sketch.title,
+        sketchGameId: sketch.sketchGameId,
       }
     });
   } catch (error: any) {
@@ -151,6 +161,18 @@ export async function DELETE(request: NextRequest) {
     
     if (!sketch) {
       return NextResponse.json({ error: "Sketch not found or not owned by user" }, { status: 404 });
+    }
+
+    // Also delete from sketch_games, sketch_gamesessions, and sketch_gamedata
+    if (sketch.sketchGameId) {
+      const { SketchGameSessionModel, SketchGameDataModel } = await import('@/models/SketchData');
+      const sessions = await SketchGameSessionModel.find({ sketchGameId: sketch.sketchGameId });
+      const sessionIds = sessions.map(s => s.sessionId);
+      
+      await SketchGameDataModel.deleteMany({ sessionId: { $in: sessionIds } });
+      await SketchGameSessionModel.deleteMany({ sketchGameId: sketch.sketchGameId });
+      await SketchGameModel.deleteOne({ id: sketch.sketchGameId });
+      console.log("Deleted associated sketch data for game ID:", sketch.sketchGameId);
     }
     
     await UserSketchModel.deleteOne({ _id: id });
