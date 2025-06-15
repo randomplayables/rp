@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useUser } from '@clerk/nextjs';
 import {
   SandpackFiles,
@@ -36,8 +36,15 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
   const { user, isSignedIn } = useUser();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
+  const sessionEffectRan = useRef(false);
 
   useEffect(() => {
+    // BUG FIX: Duplicate Session Creation
+    // This effect now uses a ref to ensure it only runs once in Strict Mode.
+    if (sessionEffectRan.current === true && process.env.NODE_ENV === 'development') {
+        return;
+    }
+
     const createSession = async () => {
       if (!sketch.sketchGameId) {
         setIsLoadingSession(false);
@@ -71,6 +78,12 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
     };
 
     createSession();
+
+    return () => {
+        if(process.env.NODE_ENV === 'development') {
+            sessionEffectRan.current = true;
+        }
+    }
   }, [sketch.sketchGameId, user, isSignedIn]);
 
   useEffect(() => {
@@ -88,11 +101,12 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
       if (event.data?.type === 'GAMELAB_DATA' && event.data.payload && sessionId) {
         const payloadFromGame = event.data.payload;
         
-        // This is the corrected structure for the API request
+        // BUG FIX: Incorrect Round-by-Round Data Logging
+        // The roundNumber is now dynamically read from the game's payload.
         const dataToSave = {
             sessionId: sessionId,
             roundData: payloadFromGame,
-            roundNumber: payloadFromGame.roundNumber || 1 // Expect roundNumber from the game payload
+            roundNumber: payloadFromGame.roundNumber
         };
 
         fetch('/api/sketch/data', {

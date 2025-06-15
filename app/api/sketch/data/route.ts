@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       sketchGameId: session.sketchGameId,
       userId: session.userId,
       username: session.username,
-      roundNumber: roundNumber || 1, // Save the roundNumber
+      roundNumber: roundNumber, // FIX: Save the dynamic roundNumber
       roundData,
     });
 

@@ -7,17 +7,21 @@ import './styles.css';
 
 export default function App() {
   const [count, setCount] = useState(0);
+  const [round, setRound] = useState(1);
 
   const handleButtonClick = () => {
     const newCount = count + 1;
     setCount(newCount);
-    // Send data to the parent window (GameLabPage)
-    if (window.parent) {
-      window.parent.postMessage({
-        type: 'GAMELAB_DATA',
-        payload: { event: 'increment', newCount, timestamp: new Date().toISOString() }
-      }, '*');
+    // On each meaningful interaction, send data including the round number.
+    if (typeof window.sendDataToGameLab === 'function') {
+      window.sendDataToGameLab({
+        event: 'increment',
+        roundNumber: round, // Include the current round number
+        newCount,
+        timestamp: new Date().toISOString()
+      });
     }
+    setRound(prevRound => prevRound + 1); // Increment round for the next event
   };
 
   return (
@@ -27,6 +31,7 @@ export default function App() {
       <button onClick={handleButtonClick}>
         Count is {count}
       </button>
+      <p>Round: {round}</p>
     </div>
   );
 }
@@ -99,6 +104,7 @@ document.head.appendChild(styleSheet);
 
 const container = document.getElementById('game-container');
 let score = 0;
+let roundNumber = 1;
 
 if (container) {
     const title = document.createElement('h1');
@@ -118,8 +124,14 @@ if (container) {
       score++;
       scoreDisplay.textContent = 'Score: ' + score;
       if (typeof window.sendDataToGameLab === 'function') {
-        window.sendDataToGameLab({ event: 'click', newScore: score, timestamp: new Date().toISOString() });
+        window.sendDataToGameLab({ 
+          event: 'click',
+          roundNumber: roundNumber, // Include the current round number
+          newScore: score, 
+          timestamp: new Date().toISOString() 
+        });
       }
+      roundNumber++; // Increment for the next event
     });
 }
 `;
@@ -145,7 +157,9 @@ Your response **MUST** consist of one or more fenced code blocks. Each code bloc
 1.  **Main Component:** The primary game component must be located at \`/src/App.tsx\` and be a default exported React Functional Component (e.g., \`export default function App() { ... }\`).
 2.  **Styling:** If you generate CSS, place it in \`/src/styles.css\` and import it into \`/src/App.tsx\` using \`import './styles.css';\`.
 3.  **Dependencies:** Do not add new dependencies to \`package.json\`. Work with the existing React environment.
-4.  **Sandbox Communication:** To send data from the game to the GameLab environment, use the global function \`window.sendDataToGameLab(data)\`. Always check for its existence before calling: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
+4.  **Sandbox Communication:**
+    * To send data from the game to the GameLab environment, use the global function \`window.sendDataToGameLab(data)\`. Always check for its existence before calling: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
+    * **Data Payload:** When sending data, you **MUST** include a \`roundNumber\` field that increments with each significant game event or round. This is critical for data logging.
 
 ### Error Handling
 
@@ -172,7 +186,9 @@ Your entire response **MUST** be a single fenced code block containing all the n
 1.  **Pure JavaScript:** Write only plain, browser-compatible JavaScript. Do **NOT** use React, JSX, TSX, or any external libraries or frameworks.
 2.  **DOM Target:** All game elements must be created with JavaScript and appended to the existing \`<div id="game-container">\`. Your script must assume this element exists.
 3.  **Self-Contained Styling:** All CSS styles **MUST** be included as a JavaScript string and dynamically injected into the document's \`<head>\`. This ensures the game is a single, portable file.
-4.  **Sandbox Communication:** To send data from the game to the GameLab environment, use the global function \`window.sendDataToGameLab(data)\`. Always check for its existence before calling: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
+4.  **Sandbox Communication:**
+    * To send data from the game to the GameLab environment, use the global function \`window.sendDataToGameLab(data)\`. Always check for its existence before calling: \`if (typeof window.sendDataToGameLab === 'function') { ... }\`.
+    * **Data Payload:** When sending data, you **MUST** include a \`roundNumber\` field that increments with each significant game event or round. This is critical for data logging.
 
 ### Error Handling
 
@@ -203,6 +219,7 @@ Focus your review on these key areas:
     * **For React/TSX:** Is the main component named \`App\` and default exported from \`/src/App.tsx\`?
     * **For Vanilla JS:** Does the code correctly target the \`<div id="game-container">\` and inject its own styles?
     * Is \`window.sendDataToGameLab\` properly checked with \`typeof window.sendDataToGameLab === 'function'\` before use?
+    * **CRITICAL:** Does the data payload sent via \`window.sendDataToGameLab\` include a \`roundNumber\` field? This is required for correct data logging.
 
 Provide concise, specific, and constructive feedback. Your primary goal is to catch formatting and functional errors before they reach the user. Return only your review.
 `;

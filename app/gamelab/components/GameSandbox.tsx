@@ -16,6 +16,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [activeSandboxGame, setActiveSandboxGame] = useState<any | null>(null);
   const [gameSessionId, setGameSessionId] = useState<string | null>(null);
+  const initCalled = useRef(false); // Ref for duplicate session creation fix
 
   const createGameHTML = useCallback((gameCode: string, lang: string, currentSessionId: string | null) => {
     const sessionIdScript = `const GAMELAB_SESSION_ID = "${currentSessionId || 'pending'}";`;
@@ -128,27 +129,51 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
   }, []);
 
   useEffect(() => {
+    if (initCalled.current && process.env.NODE_ENV === 'development') {
+      return;
+    }
+
     if (!code) {
-      setGamePreview(null); setActiveSandboxGame(null); setGameSessionId(null); setIsLoading(false);
+      setGamePreview(null);
+      setActiveSandboxGame(null);
+      setGameSessionId(null);
+      setIsLoading(false);
       return;
     }
     const initSandbox = async () => {
-      setIsLoading(true); setError(null); setActiveSandboxGame(null); setGameSessionId(null); setGamePreview(null); setTestData([]);
+      setIsLoading(true);
+      setError(null);
+      setActiveSandboxGame(null);
+      setGameSessionId(null);
+      setGamePreview(null);
+      setTestData([]);
       try {
         const gameResponse = await fetch('/api/gamelab/sandbox', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'create_game', data: { name: `Test Game ${new Date().toLocaleTimeString()}`, description: 'Created in GameLab Sandbox', link: '/gamelab/sandbox', year: new Date().getFullYear() }})
         });
         const gameData = await gameResponse.json();
-        if (!gameData.success || !gameData.game) { setError('Failed to create sandbox game entry.'); console.error("GameSandbox: Failed to create_game", gameData); setIsLoading(false); return; }
+        if (!gameData.success || !gameData.game) {
+          setError('Failed to create sandbox game entry.');
+          console.error("GameSandbox: Failed to create_game", gameData);
+          setIsLoading(false);
+          return;
+        }
         setActiveSandboxGame(gameData.game);
 
         const sessionResponse = await fetch('/api/gamelab/sandbox', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'create_session', data: { gameId: gameData.game.id } })
         });
         const sessionData = await sessionResponse.json();
-        if (!sessionData.success || !sessionData.session) { setError('Failed to create sandbox session.'); console.error("GameSandbox: Failed to create_session", sessionData); setIsLoading(false); return; }
+        if (!sessionData.success || !sessionData.session) {
+          setError('Failed to create sandbox session.');
+          console.error("GameSandbox: Failed to create_session", sessionData);
+          setIsLoading(false);
+          return;
+        }
         setGameSessionId(sessionData.session.sessionId);
 
         const htmlTemplate = createGameHTML(code, language, sessionData.session.sessionId);
@@ -161,6 +186,12 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
       }
     };
     initSandbox();
+    
+    return () => {
+        if(process.env.NODE_ENV === 'development') {
+            initCalled.current = true;
+        }
+    }
   }, [code, language, createGameHTML]);
 
   const saveGameData = useCallback(async (payloadFromGame: any) => {
@@ -170,8 +201,9 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
       return;
     }
     try {
-      // FIX: Expect roundNumber from the game payload instead of hardcoding it.
-      const roundNumber = payloadFromGame.roundNumber || 1;
+      // BUG FIX: Incorrect Round-by-Round Data Logging
+      // The roundNumber is now dynamically read from the game's payload.
+      const roundNumber = payloadFromGame.roundNumber;
       const response = await fetch('/api/gamelab/sandbox', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save_game_data', data: { sessionId: gameSessionId, gameId: activeSandboxGame.id, roundNumber: roundNumber, roundData: payloadFromGame }})
