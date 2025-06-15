@@ -26,6 +26,7 @@ const AVAILABLE_DATA_TYPES_UI: DataTypeOption[] = [
   { id: "Contributions", name: "Contributions Data", description: "User contribution metrics for Random Payables." },
   { id: "Content", name: "User Content", description: "Saved instruments, sketches, and visualizations." },
   { id: "Sandbox", name: "Sandbox Data", description: "Data from GameLab's testing sandbox environment." },
+  { id: "Sketch Data", name: "Sketch Data", description: "Data from user-saved GameLab sketches (games, sessions, and gameplay)." }
 ];
 
 const BASE_DATALAB_CODER_SYSTEM_PROMPT_TEMPLATE = `

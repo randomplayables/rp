@@ -12,6 +12,7 @@ import { UserContributionModel } from "@/models/RandomPayables";
 import UserInstrumentModel from "@/models/UserInstrument";
 import UserSketchModel from "@/models/UserSketch";
 import UserVisualizationModel from "@/models/UserVisualization";
+import { SketchGameModel, SketchGameSessionModel, SketchGameDataModel } from "@/models/SketchData";
 
 // --- Sandbox Model Schemas ---
 const SandboxGameSchemaInternal = new mongoose.Schema({
@@ -84,7 +85,8 @@ export const DATA_TYPES = {
   STACK: "Stack",
   CONTRIBUTIONS: "Contributions",
   CONTENT: "Content",
-  SANDBOX: "Sandbox"
+  SANDBOX: "Sandbox",
+  SKETCH: "Sketch Data"
 };
 
 export async function fetchRelevantData(
@@ -174,6 +176,12 @@ export async function fetchRelevantData(
       console.error("DataLab Helper: Error fetching Sandbox data:", sandboxError.message);
       dataContext.sandboxFetchError = "Could not fetch Sandbox data: " + sandboxError.message;
     }
+  }
+
+  if (effectiveDataTypes.includes(DATA_TYPES.SKETCH)) {
+    dataContext.sketchGames = await SketchGameModel.find({}).limit(100).lean();
+    dataContext.sketchGameSessions = await SketchGameSessionModel.find({}).sort({ startTime: -1 }).limit(200).lean();
+    dataContext.sketchGameData = await SketchGameDataModel.find({}).sort({ timestamp: -1 }).limit(500).lean();
   }
   
   if (userId && (query.toLowerCase().includes('user') || query.toLowerCase().includes('player'))) {
