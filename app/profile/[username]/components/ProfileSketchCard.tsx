@@ -144,7 +144,11 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
     );
   }
 
-  return <SandpackPreview showNavigator={true} showOpenInCodeSandbox={false} />;
+  return (
+    <SandpackLayout>
+      <SandpackPreview showNavigator={true} showOpenInCodeSandbox={false} />
+    </SandpackLayout>
+  );
 };
 
 
@@ -258,7 +262,7 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
 
       {isFullscreenMode && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-11/12 h-5/6 max-w-6xl flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl w-11/12 max-h-[90vh] max-w-6xl flex flex-col">
             <div className="p-4 border-b flex justify-between items-center">
               <h3 className="text-xl font-bold">{sketch.title}</h3>
               <button 
