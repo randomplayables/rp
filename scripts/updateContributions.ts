@@ -102,7 +102,6 @@ async function updateUserContributions() {
             'metrics.codeContributions': sketchCount * 10,
             'metrics.contentCreation': (visualizationCount * 8) + (instrumentCount * 8),
             'metrics.communityEngagement': (questionCount * 5) + (answerCount * 3),
-            'metrics.bugReports': 0, // Placeholder
             'metrics.githubRepoPoints': githubRepoPoints, // Explicitly set
             // 'metrics.totalPoints' is not set here; it's calculated and set by payablesEngine
             updatedAt: new Date()

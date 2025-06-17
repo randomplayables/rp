@@ -27,7 +27,6 @@ export async function GET(request: NextRequest) {
           codeWeight: 1.0,
           contentWeight: 0.8,
           communityWeight: 0.5,
-          bugReportWeight: 0.3
         },
         githubRepoDetails: defaultGithubRepoDetails,
         lastUpdated: new Date(),
@@ -52,7 +51,7 @@ export async function GET(request: NextRequest) {
     const responseConfig: IPayoutConfigBase = {
       totalPool: plainConfig.totalPool,
       batchSize: plainConfig.batchSize,
-      weights: plainConfig.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5, bugReportWeight: 0.3 },
+      weights: plainConfig.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5 },
       githubRepoDetails: plainConfig.githubRepoDetails || defaultGithubRepoDetails,
       lastUpdated: plainConfig.lastUpdated,
       nextScheduledRun: plainConfig.nextScheduledRun,
@@ -85,10 +84,10 @@ export async function POST(request: NextRequest) {
     let fullUpdateData = { ...updateData };
 
     if (updateData.githubRepoDetails && currentConfigDoc?.githubRepoDetails) {
+        const existingDetails = currentConfigDoc.githubRepoDetails;
         fullUpdateData.githubRepoDetails = {
-            // ...currentConfigDoc.githubRepoDetails.toObject(), // existing values
-            ...currentConfigDoc.githubRepoDetails.toObject(), // existing values
-            ...updateData.githubRepoDetails // new values
+            ...(existingDetails.toObject ? existingDetails.toObject() : existingDetails),
+            ...updateData.githubRepoDetails
         };
     }
 
@@ -114,7 +113,7 @@ export async function POST(request: NextRequest) {
     const configToReturn: IPayoutConfigBase = {
         totalPool: plainObject.totalPool,
         batchSize: plainObject.batchSize,
-        weights: plainObject.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5, bugReportWeight: 0.3 },
+        weights: plainObject.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5 },
         githubRepoDetails: plainObject.githubRepoDetails || defaultGithubRepoDetails,
         lastUpdated: plainObject.lastUpdated,
         nextScheduledRun: plainObject.nextScheduledRun,

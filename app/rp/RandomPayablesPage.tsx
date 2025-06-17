@@ -85,8 +85,8 @@ export default function RandomPayablesPage() {
                     
                     <ol>
                       <li>
-                        <strong>Contribute to the platform:</strong> Create games, develop code, participate in 
-                        discussions, report bugs, and more.
+                        <strong>Contribute to the platform:</strong> Create games, develop code, and participate in 
+                        discussions.
                       </li>
                       <li>
                         <strong>Earn contribution points:</strong> Each type of contribution earns you points, with 
@@ -164,18 +164,12 @@ export default function RandomPayablesPage() {
                   <li>Participate in community events and challenges</li>
                 </ul>
                 
-                <h4>Bug Reports & Quality Assurance</h4>
-                <p>
-                  Help improve the platform by reporting bugs and issues. Well-documented bug reports with steps 
-                  to reproduce earn contribution points.
-                </p>
-                
                 <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100 mt-6">
                   <h5 className="text-emerald-800 font-medium">Point Distribution</h5>
                   <p className="text-emerald-700 text-sm">
                     The exact weighting of different contribution types may be adjusted over time to ensure 
                     fairness and incentivize valuable contributions. Currently, code contributions have 
-                    the highest weight, followed by content creation, community engagement, and bug reports.
+                    the highest weight, followed by content creation and community engagement.
                   </p>
                 </div>
               </div>

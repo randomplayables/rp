@@ -33,13 +33,12 @@ async function initializePayoutConfig() {
     const config = await PayoutConfigModel.create({
       totalPool: 1000,
       batchSize: 100,
-      weights: { // These are for the "Other Contributions" bucket (40%)
+      weights: { // These are for the "Other Contributions" bucket (50%)
         codeWeight: 1.0,
         contentWeight: 0.8,
         communityWeight: 0.5,
-        bugReportWeight: 0.3
       },
-      githubRepoDetails: { // Details for the main GitHub repo contributions (60%)
+      githubRepoDetails: { // Details for the main GitHub repo contributions (50%)
         owner: "randomplayables",
         repo: "rp",
         pointsPerCommit: 10,       // Example: 10 points per commit

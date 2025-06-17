@@ -8,7 +8,6 @@ interface ContributionMetrics {
   codeContributions: number;
   contentCreation: number;
   communityEngagement: number;
-  bugReports: number;
   githubRepoPoints: number; // This field is expected
   totalPoints: number; // This represents Points_OtherCategory
 }
@@ -122,7 +121,7 @@ export default function ContributionStats({ userId, username }: ContributionStat
               <div className="text-2xl font-bold text-emerald-700">
                 {(contribution.metrics.totalPoints || 0).toFixed(2)}
               </div>
-              <p className="text-xs text-emerald-600">Used for 40% of win chance</p>
+              <p className="text-xs text-emerald-600">Used for 50% of win chance</p>
             </div>
             <div className="bg-sky-50 p-4 rounded-lg border border-sky-100">
               <div className="text-sm text-sky-800">GitHub Platform Points</div>
@@ -130,7 +129,7 @@ export default function ContributionStats({ userId, username }: ContributionStat
                 {/* THIS IS THE FIX: Provide a fallback if githubRepoPoints is undefined/null */}
                 {(typeof contribution.metrics.githubRepoPoints === 'number' ? contribution.metrics.githubRepoPoints.toFixed(2) : '0.00')}
               </div>
-              <p className="text-xs text-sky-600">Used for 60% of win chance</p>
+              <p className="text-xs text-sky-600">Used for 50% of win chance</p>
             </div>
           </div>
           
@@ -148,10 +147,6 @@ export default function ContributionStats({ userId, username }: ContributionStat
               <div className="grid grid-cols-2 gap-2">
                 <div className="text-sm text-gray-600">Community Engagement (Stack Q&A):</div>
                 <div className="text-sm font-medium">{(contribution.metrics.communityEngagement || 0)} points</div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="text-sm text-gray-600">Bug Reports:</div>
-                <div className="text-sm font-medium">{(contribution.metrics.bugReports || 0)} points</div>
               </div>
             </div>
           </div>

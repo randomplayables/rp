@@ -1,4 +1,3 @@
-// app/api/rp/contribution/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { UserContributionModel, PayoutConfigModel } from "@/models/RandomPayables";
@@ -102,15 +101,13 @@ export async function POST(request: NextRequest) {
       codeWeight: 1.0,
       contentWeight: 0.8,
       communityWeight: 0.5,
-      bugReportWeight: 0.3
     };
     
     // Calculate total points
     const totalPoints = 
       metrics.codeContributions * weights.codeWeight +
       metrics.contentCreation * weights.contentWeight +
-      metrics.communityEngagement * weights.communityWeight +
-      metrics.bugReports * weights.bugReportWeight;
+      metrics.communityEngagement * weights.communityWeight;
     
     // Update or create user contribution
     const updatedUser = await UserContributionModel.findOneAndUpdate(

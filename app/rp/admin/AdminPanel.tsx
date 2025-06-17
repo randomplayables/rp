@@ -261,7 +261,7 @@ export default function AdminPanel() {
           {activeTab === 'settings' && config && (
             <form onSubmit={handleSaveConfig} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 space-y-6">
               <h2 className="text-xl font-medium text-gray-900 mb-6">System Configuration</h2>
-              <p className="text-sm text-gray-600">Note: The 60% (GitHub Repo) / 40% (Other Contributions) probability split is hardcoded in the payout engine. The weights below for 'Other Contributions' define their relative importance within that 40% bucket.</p>
+              <p className="text-sm text-gray-600">Note: The 50% (GitHub Repo) / 50% (Other Contributions) probability split is hardcoded in the payout engine. The weights below for 'Other Contributions' define their relative importance within that 50% bucket.</p>
               
               <div>
                 <label htmlFor="totalPool" className="block text-sm font-medium text-gray-700">Total Pool Size ($)</label>
@@ -272,7 +272,7 @@ export default function AdminPanel() {
                 <input type="number" name="batchSize" value={config.batchSize} onChange={handleConfigChange} className={inputClass} />
               </div>
 
-              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">Weights for "Other Contributions" (40% Bucket)</h3>
+              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">Weights for "Other Contributions" (50% Bucket)</h3>
               {(Object.keys(config.weights) as Array<keyof typeof config.weights>).map((key) => (
                 <div key={key}>
                   <label htmlFor={`weights.${key}`} className="block text-sm font-medium text-gray-700 capitalize">{key.replace('Weight', ' Weight')}</label>
@@ -280,7 +280,7 @@ export default function AdminPanel() {
                 </div>
               ))}
               
-              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">GitHub Repository Contributions (60% Bucket)</h3>
+              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">GitHub Repository Contributions (50% Bucket)</h3>
               <div>
                 <label htmlFor="githubRepoDetails.owner" className="block text-sm font-medium text-gray-700">Repo Owner</label>
                 <input type="text" name="githubRepoDetails.owner" value={config.githubRepoDetails?.owner || ''} onChange={handleConfigChange} className={inputClass} />

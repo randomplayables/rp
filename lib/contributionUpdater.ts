@@ -1,4 +1,3 @@
-// lib/contributionUpdater.ts
 import { UserContributionModel } from "@/models/RandomPayables";
 import { updateAllProbabilities } from "@/lib/payablesEngine";
 
@@ -8,7 +7,6 @@ export enum ContributionType {
   INSTRUMENT = 'instrument',
   QUESTION = 'question',
   ANSWER = 'answer',
-  BUG_REPORT = 'bug_report'
 }
 
 const CONTRIBUTION_POINTS = {
@@ -17,7 +15,6 @@ const CONTRIBUTION_POINTS = {
   [ContributionType.INSTRUMENT]: { field: 'contentCreation', points: 8 },
   [ContributionType.QUESTION]: { field: 'communityEngagement', points: 5 },
   [ContributionType.ANSWER]: { field: 'communityEngagement', points: 3 },
-  [ContributionType.BUG_REPORT]: { field: 'bugReports', points: 2 }
 };
 
 export async function incrementUserContribution(

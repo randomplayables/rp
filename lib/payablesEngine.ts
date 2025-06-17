@@ -10,12 +10,11 @@ import {
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 
-// Default weights for "other" contribution types (applied within the 40% bucket)
+// Default weights for "other" contribution types (applied within the 50% bucket)
 const DEFAULT_OTHER_WEIGHTS = {
   codeWeight: 1.0,
   contentWeight: 0.8,
   communityWeight: 0.5,
-  bugReportWeight: 0.3
 };
 
 /**
@@ -26,14 +25,13 @@ export function calculateOtherCategoryPoints(metrics: ContributionMetrics, other
   return (
     metrics.codeContributions * otherWeights.codeWeight +
     metrics.contentCreation * otherWeights.contentWeight +
-    metrics.communityEngagement * otherWeights.communityWeight +
-    metrics.bugReports * otherWeights.bugReportWeight
+    metrics.communityEngagement * otherWeights.communityWeight
   );
 }
 
 /**
  * Update all user probabilities.
- * This recalculates final win probabilities based on the 60/40 split.
+ * This recalculates final win probabilities based on the 50/50 split.
  */
 export async function updateAllProbabilities(): Promise<void> {
   const config = await PayoutConfigModel.findOne().lean();
@@ -75,7 +73,7 @@ export async function updateAllProbabilities(): Promise<void> {
     const otherHasContributions = totalGlobalOtherCategoryPoints > 0;
 
     if (ghHasContributions && otherHasContributions) {
-      finalWinProbability = (0.6 * probFromGitHub) + (0.4 * probFromOther);
+      finalWinProbability = (0.5 * probFromGitHub) + (0.5 * probFromOther);
     } else if (ghHasContributions) { // Only GitHub contributions exist in the system
       finalWinProbability = probFromGitHub;
     } else if (otherHasContributions) { // Only "other" contributions exist
@@ -100,7 +98,7 @@ export async function updateAllProbabilities(): Promise<void> {
   });
 
   await Promise.all(updates);
-  console.log("All user win probabilities updated with 60/40 split logic.");
+  console.log("All user win probabilities updated with 50/50 split logic.");
 }
 
 
