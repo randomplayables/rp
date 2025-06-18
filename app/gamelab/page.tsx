@@ -18,6 +18,15 @@ import { SandpackProvider, useSandpack, SandpackFiles, SandpackCodeEditor, Sandp
 import { CodeBlock } from './components/CodeBlock';
 import GameSandbox from "./components/GameSandbox";
 
+declare global {
+  interface Window {
+    sendDataToGameLab?: (data: any) => void;
+    GAMELAB_SESSION_ID?: string;
+    GAMELAB_GAME_ID?: string;
+    App?: React.FC<any>;
+  }
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -449,6 +458,16 @@ function GamelabWorkspace() {
                     }
                 })
                 .catch(err => console.error('Error sending sandbox data to API:', err));
+            }
+            
+            if (event.data?.type === 'GAMELAB_ERROR') {
+                console.error('Received error from Sandpack preview:', event.data.payload);
+                const payload = event.data.payload || {};
+                let displayMessage = `Error in game preview: ${payload.message || 'Unknown error'}`;
+                if (payload.lineno) {
+                    displayMessage += ` (line: ${payload.lineno})`;
+                }
+                setCodeError(displayMessage);
             }
         };
 

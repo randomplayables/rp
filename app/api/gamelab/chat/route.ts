@@ -242,11 +242,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to generate game code", details: error.message, stack: error.stack }, { status: 500 });
   }
 }
-
-declare global {
-  interface Window {
-    sendDataToGameLab?: (data: any) => void;
-    GAMELAB_SESSION_ID?: string;
-    App?: React.FC<any>;
-  }
-}
