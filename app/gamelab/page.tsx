@@ -428,6 +428,10 @@ function GamelabWorkspace() {
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === 'GAMELAB_DATA') {
+                if (event.data.source === 'GameSandbox') {
+                    return; // Ignore messages explicitly from the vanilla JS sandbox
+                }
+
                 console.log('Received data from Sandpack preview:', event.data.payload);
                 const { payload } = event.data;
 

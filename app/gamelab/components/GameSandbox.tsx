@@ -24,7 +24,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
     const communicationCode = `
       window.sendDataToGameLab = function(data) {
         console.log('Game (in iframe) sending data to GameLab:', data);
-        window.parent.postMessage({ type: 'GAMELAB_DATA', payload: data }, '*');
+        window.parent.postMessage({ type: 'GAMELAB_DATA', payload: data, source: 'GameSandbox' }, '*');
       };
 
       window.onerror = function(message, source, lineno, colno, error) {

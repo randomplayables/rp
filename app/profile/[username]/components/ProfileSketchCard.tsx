@@ -87,22 +87,11 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
   }, [sketch.sketchGameId, user, isSignedIn]);
 
   useEffect(() => {
-    if (sessionId && sandpack.files['/src/communication.js']) {
-      const commsFile = sandpack.files['/src/communication.js'];
-      if(typeof commsFile === 'object' && 'code' in commsFile) {
-        const updatedCode = commsFile.code.replace(/const GAMELAB_SESSION_ID = "pending";/, `const GAMELAB_SESSION_ID = "${sessionId}";`);
-        updateFile('/src/communication.js', updatedCode);
-      }
-    }
-  }, [sessionId, sandpack.files, updateFile]);
-  
-  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'GAMELAB_DATA' && event.data.payload && sessionId) {
         const payloadFromGame = event.data.payload;
         
-        // BUG FIX: Incorrect Round-by-Round Data Logging
-        // The roundNumber is now dynamically read from the game's payload.
+        // The parent listener augments the data with the session ID before sending
         const dataToSave = {
             sessionId: sessionId,
             roundData: payloadFromGame,
@@ -191,32 +180,46 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
         readOnlyFiles[path] = {
             code,
             readOnly: true,
-            hidden: path.includes('communication.js')
+            // hidden: path.includes('communication.js') // We'll handle injection manually
         };
     }
 
-    if (!readOnlyFiles['/src/communication.js']) {
-      readOnlyFiles['/src/communication.js'] = {
-        code: `
-          const GAMELAB_SESSION_ID = "pending";
-          window.sendDataToGameLab = function(data) {
+    const template: SandpackProviderProps['template'] = sketch.files && sketch.files['/src/App.tsx'] ? 'react-ts' : 'static';
+
+    const communicationScript = `
+        window.sendDataToGameLab = function(data) {
             console.log('Sketch (in Sandpack) sending data to platform:', data);
             window.parent.postMessage({ type: 'GAMELAB_DATA', payload: data }, '*');
-          };
-        `,
-        hidden: true,
-      };
+        };
+    `;
 
-      const entryFilePath = sketch.files['/src/index.tsx'] ? '/src/index.tsx' : '/index.js';
-      if(readOnlyFiles[entryFilePath]){
-        const entryFile = readOnlyFiles[entryFilePath];
-        if(typeof entryFile === 'object' && 'code' in entryFile){
-            entryFile.code = `import './communication.js';\n${entryFile.code}`;
+    if (template === 'react-ts') {
+        readOnlyFiles['/src/communication.js'] = { code: communicationScript, hidden: true };
+        const entryFilePath = '/src/index.tsx'; // Assuming this is the entry for React sketches
+        if (readOnlyFiles[entryFilePath]) {
+            const entryFile = readOnlyFiles[entryFilePath];
+            if (typeof entryFile === 'object' && 'code' in entryFile) {
+                // Prepend the import if it's not already there
+                if (!entryFile.code.includes("import './communication.js'")) {
+                    entryFile.code = `import './communication.js';\n${entryFile.code}`;
+                }
+            }
         }
-      }
+    } else { // Static (Vanilla JS) template
+        const indexPath = '/index.html';
+        const indexHtmlFile = readOnlyFiles[indexPath];
+        if (indexHtmlFile && typeof indexHtmlFile === 'object' && 'code' in indexHtmlFile) {
+            let htmlCode = indexHtmlFile.code;
+            // Inject the script into the head
+            if (htmlCode.includes('</head>')) {
+                htmlCode = htmlCode.replace('</head>', `<script>${communicationScript}<\/script></head>`);
+            } else {
+                htmlCode = `<head><script>${communicationScript}<\/script></head>` + htmlCode;
+            }
+            readOnlyFiles[indexPath] = { ...indexHtmlFile, code: htmlCode };
+        }
     }
-
-    const template: SandpackProviderProps['template'] = sketch.files && sketch.files['/src/App.tsx'] ? 'react-ts' : 'static';
+    
     return { files: readOnlyFiles, template };
   }
 
