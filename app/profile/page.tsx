@@ -10,6 +10,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation";
 import UsageDisplay from './UsageDisplay'; 
 import GitHubConnectButton from '@/components/GitHubConnectButton'; // IMPORT THE NEW COMPONENT
+import Link from 'next/link'; // IMPORT LINK
 
 // ... (keep existing interfaces: ProfileDetails, Payout) ...
 interface ProfileDetails {
@@ -317,6 +318,22 @@ export default function Profile() {
                   <p className="text-red-500">Error loading profile: {(profileError as Error)?.message}</p>
                 ) : profile ? (
                   <div className="space-y-6">
+                    {/* Game Submission Link/Button */}
+                    <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
+                        <h3 className="text-xl font-semibold mb-2 text-emerald-600">
+                          My Games
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-3">
+                          Have a game you built? Submit it to the RandomPlayables platform.
+                        </p>
+                        <Link
+                            href="/profile/submit-game"
+                            className="inline-block px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors"
+                        >
+                            Submit a Game
+                        </Link>
+                    </div>
+
                     {/* GitHub Connection Section */}
                     <div className="mt-6">
                         <GitHubConnectButton />
