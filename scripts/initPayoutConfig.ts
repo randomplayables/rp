@@ -34,9 +34,10 @@ async function initializePayoutConfig() {
       totalPool: 1000,
       batchSize: 100,
       weights: { // These are for the "Other Contributions" bucket (50%)
-        codeWeight: 1.0,
-        contentWeight: 0.8,
-        communityWeight: 0.5,
+        gamePublicationWeight: 0.25, // Game.games: 25%
+        communityWeight: 0.15,       // Community: 15%
+        codeWeight: 0.05,            // Code: 5%
+        contentWeight: 0.05,         // Content: 5%
       },
       githubRepoDetails: { // Details for the main GitHub repo contributions (50%)
         owner: "randomplayables",

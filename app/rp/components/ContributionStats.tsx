@@ -9,6 +9,7 @@ interface ContributionMetrics {
   contentCreation: number;
   communityEngagement: number;
   githubRepoPoints: number; // This field is expected
+  gamePublicationPoints: number; // ADDED
   totalPoints: number; // This represents Points_OtherCategory
 }
 
@@ -136,6 +137,10 @@ export default function ContributionStats({ userId, username }: ContributionStat
           <div className="bg-gray-50 rounded-lg p-4">
             <h4 className="font-medium text-gray-700 mb-3">Contribution Breakdown (Other Categories)</h4>
             <div className="space-y-3">
+               <div className="grid grid-cols-2 gap-2">
+                <div className="text-sm text-gray-600">Game Publications:</div>
+                <div className="text-sm font-medium">{(contribution.metrics.gamePublicationPoints || 0)} points</div>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="text-sm text-gray-600">Code Contributions (Sketches):</div>
                 <div className="text-sm font-medium">{(contribution.metrics.codeContributions || 0)} points</div>

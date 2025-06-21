@@ -273,12 +273,22 @@ export default function AdminPanel() {
               </div>
 
               <h3 className="text-md font-medium text-gray-700 pt-4 border-t">Weights for "Other Contributions" (50% Bucket)</h3>
-              {(Object.keys(config.weights) as Array<keyof typeof config.weights>).map((key) => (
-                <div key={key}>
-                  <label htmlFor={`weights.${key}`} className="block text-sm font-medium text-gray-700 capitalize">{key.replace('Weight', ' Weight')}</label>
-                  <input type="number" step="0.1" name={`weights.${key}`} value={config.weights[key]} onChange={handleConfigChange} className={inputClass} />
+                <div>
+                  <label htmlFor="weights.gamePublicationWeight" className="block text-sm font-medium text-gray-700">Game Publication Weight (e.g., 0.25 for 25%)</label>
+                  <input type="number" step="0.01" name="weights.gamePublicationWeight" value={config.weights.gamePublicationWeight || 0} onChange={handleConfigChange} className={inputClass} />
                 </div>
-              ))}
+                <div>
+                  <label htmlFor="weights.communityWeight" className="block text-sm font-medium text-gray-700">Community Weight (e.g., 0.15 for 15%)</label>
+                  <input type="number" step="0.01" name="weights.communityWeight" value={config.weights.communityWeight} onChange={handleConfigChange} className={inputClass} />
+                </div>
+                <div>
+                  <label htmlFor="weights.codeWeight" className="block text-sm font-medium text-gray-700">Code Weight (Sketches) (e.g., 0.05 for 5%)</label>
+                  <input type="number" step="0.01" name="weights.codeWeight" value={config.weights.codeWeight} onChange={handleConfigChange} className={inputClass} />
+                </div>
+                <div>
+                  <label htmlFor="weights.contentWeight" className="block text-sm font-medium text-gray-700">Content Weight (Viz, Instruments) (e.g., 0.05 for 5%)</label>
+                  <input type="number" step="0.01" name="weights.contentWeight" value={config.weights.contentWeight} onChange={handleConfigChange} className={inputClass} />
+                </div>
               
               <h3 className="text-md font-medium text-gray-700 pt-4 border-t">GitHub Repository Contributions (50% Bucket)</h3>
               <div>

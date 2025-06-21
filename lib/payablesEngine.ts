@@ -12,9 +12,10 @@ import { stripe } from "@/lib/stripe";
 
 // Default weights for "other" contribution types (applied within the 50% bucket)
 const DEFAULT_OTHER_WEIGHTS = {
-  codeWeight: 1.0,
-  contentWeight: 0.8,
-  communityWeight: 0.5,
+  gamePublicationWeight: 0.25, // ADDED
+  communityWeight: 0.15,
+  codeWeight: 0.05,
+  contentWeight: 0.05,
 };
 
 /**
@@ -23,9 +24,10 @@ const DEFAULT_OTHER_WEIGHTS = {
  */
 export function calculateOtherCategoryPoints(metrics: ContributionMetrics, otherWeights: IPayoutConfig['weights']): number {
   return (
-    metrics.codeContributions * otherWeights.codeWeight +
-    metrics.contentCreation * otherWeights.contentWeight +
-    metrics.communityEngagement * otherWeights.communityWeight
+    ((metrics.codeContributions || 0) * (otherWeights.codeWeight || 0)) +
+    ((metrics.contentCreation || 0) * (otherWeights.contentWeight || 0)) +
+    ((metrics.communityEngagement || 0) * (otherWeights.communityWeight || 0)) +
+    ((metrics.gamePublicationPoints || 0) * (otherWeights.gamePublicationWeight || 0))
   );
 }
 

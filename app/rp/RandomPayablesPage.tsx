@@ -130,27 +130,36 @@ export default function RandomPayablesPage() {
                   Your probability of winning in Random Payables is directly proportional to your contributions to 
                   the RandomPlayables platform. Here are the ways you can contribute and increase your chances:
                 </p>
-                
-                <h4>Code Contributions</h4>
+
+                <h4>Game Publications</h4>
                 <p>
-                  Submit code improvements, bug fixes, and new features to the RandomPlayables codebase. Code 
-                  contributions are weighted highly in the probability calculations.
+                  Getting a game approved and published on the main RandomPlayables platform is one of the most impactful ways to contribute. This is a highly-weighted activity because it provides significant value to the entire community.
                 </p>
                 <ul>
-                  <li>Submit pull requests to the platform repositories</li>
-                  <li>Fix bugs and implement feature requests</li>
-                  <li>Improve performance and accessibility</li>
+                  <li>Submit your game for review through your profile page.</li>
+                  <li>Ensure the game is well-documented, functional, and aligns with the platform's mission.</li>
+                  <li>Creative and engaging games are highly encouraged.</li>
                 </ul>
                 
-                <h4>Content Creation</h4>
+                <h4>GitHub Repository Contributions</h4>
                 <p>
-                  Create and share games, visualizations, and other content on the platform. Quality content that 
-                  engages other users earns substantial contribution points.
+                  Submit code improvements, bug fixes, and new features to the official RandomPlayables platform repository. These contributions are weighted highly in the probability calculations.
                 </p>
                 <ul>
-                  <li>Create new games in GameLab</li>
-                  <li>Build visualizations in DataLab</li>
-                  <li>Design survey instruments in Collect</li>
+                  <li>Submit pull requests to the platform repositories.</li>
+                  <li>Fix bugs and implement feature requests.</li>
+                  <li>Improve performance and accessibility.</li>
+                </ul>
+                
+                <h4>Content Creation (Other)</h4>
+                <p>
+                  Create and share games, visualizations, and other content on the platform. Quality content that 
+                  engages other users earns contribution points.
+                </p>
+                <ul>
+                  <li>Create new game sketches in GameLab.</li>
+                  <li>Build data visualizations in DataLab.</li>
+                  <li>Design survey instruments in Collect.</li>
                 </ul>
                 
                 <h4>Community Engagement</h4>
@@ -159,17 +168,16 @@ export default function RandomPayablesPage() {
                   contribute to discussions.
                 </p>
                 <ul>
-                  <li>Answer questions in Stack</li>
-                  <li>Provide feedback on other users' content</li>
-                  <li>Participate in community events and challenges</li>
+                  <li>Answer questions in the Stack.</li>
+                  <li>Provide feedback on other users' content.</li>
+                  <li>Participate in community events and challenges.</li>
                 </ul>
                 
                 <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100 mt-6">
                   <h5 className="text-emerald-800 font-medium">Point Distribution</h5>
                   <p className="text-emerald-700 text-sm">
                     The exact weighting of different contribution types may be adjusted over time to ensure 
-                    fairness and incentivize valuable contributions. Currently, code contributions have 
-                    the highest weight, followed by content creation and community engagement.
+                    fairness and incentivize valuable contributions. You can see the current point breakdown on the "Overview" tab.
                   </p>
                 </div>
               </div>
