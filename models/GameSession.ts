@@ -4,6 +4,7 @@ interface IGameSession extends Document {
   userId: string | null; // null for guests
   username: string | null; // Add username field
   gameId: string;
+  gameVersion: string;
   sessionId: string;
   startTime: Date;
   ipAddress?: string;
@@ -15,6 +16,7 @@ const GameSessionSchema = new mongoose.Schema({
   userId: { type: String, default: null },
   username: { type: String, default: null }, // Add username field
   gameId: { type: String, required: true },
+  gameVersion: { type: String },
   sessionId: { type: String, required: true, unique: true },
   startTime: { type: Date, default: Date.now },
   ipAddress: String,

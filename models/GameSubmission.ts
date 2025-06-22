@@ -5,6 +5,7 @@ interface IGameSubmission extends Document {
   description?: string;
   year: number;
   image: string;
+  version: string;
   codeUrl: string;
   irlInstructions?: { title: string; url: string }[];
   authorUsername: string;
@@ -20,6 +21,7 @@ const GameSubmissionSchema = new Schema({
   description: { type: String },
   year: { type: Number, required: true },
   image: { type: String, required: true },
+  version: { type: String, required: true },
   // REMOVED: The 'link' field is no longer part of the initial submission
   codeUrl: { type: String, required: true },
   irlInstructions: [{

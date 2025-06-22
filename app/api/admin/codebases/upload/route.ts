@@ -20,9 +20,10 @@ export async function POST(request: NextRequest) {
     
     const formData = await request.formData();
     const gameId = formData.get("gameId") as string;
+    const version = formData.get("version") as string;
     const codebaseFile = formData.get("codebase") as File;
     
-    if (!gameId || !codebaseFile) {
+    if (!gameId || !version || !codebaseFile) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     
@@ -41,12 +42,13 @@ export async function POST(request: NextRequest) {
     const fileName = codebaseFile.name.toLowerCase();
     const contentType = fileName.endsWith('.xml') ? 'repomix-xml' : 'source-code';
     
-    // Save or update the codebase
+    // Save or update the codebase for a specific gameId and version
     await CodeBaseModel.findOneAndUpdate(
-      { gameId: parseInt(gameId) },
+      { gameId: parseInt(gameId), version: version },
       {
         gameId: parseInt(gameId),
         gameName: game.name,
+        version: version,
         codeContent,
         contentType,
         lastUpdated: new Date()

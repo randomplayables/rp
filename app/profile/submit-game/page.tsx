@@ -18,6 +18,7 @@ interface GameSubmissionData {
   description: string;
   year: number;
   image: string;
+  version: string;
   codeUrl: string;
   irlInstructions: IrlInstruction[];
 }
@@ -49,6 +50,7 @@ export default function SubmitGamePage() {
     description: '',
     year: new Date().getFullYear(),
     image: '',
+    version: '',
     codeUrl: '',
     irlInstructions: [{ title: '', url: '' }],
   });
@@ -151,14 +153,24 @@ export default function SubmitGamePage() {
               />
             </div>
             <div>
-              <label htmlFor="image" className="block text-sm font-medium text-gray-700">Image URL</label>
+              <label htmlFor="version" className="block text-sm font-medium text-gray-700">Version</label>
               <input
-                type="url" name="image" id="image" required
-                placeholder="https://example.com/image.jpg"
-                value={formData.image} onChange={handleChange}
+                type="text" name="version" id="version" required
+                placeholder="e.g., 1.0.1"
+                value={formData.version} onChange={handleChange}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
               />
             </div>
+          </div>
+          
+          <div>
+            <label htmlFor="image" className="block text-sm font-medium text-gray-700">Image URL</label>
+            <input
+              type="url" name="image" id="image" required
+              placeholder="https://example.com/image.jpg"
+              value={formData.image} onChange={handleChange}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            />
           </div>
           
           {/* REMOVED: Playable Game Link field */}

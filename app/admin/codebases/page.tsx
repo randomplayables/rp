@@ -7,6 +7,7 @@ import { isAdmin } from '@/lib/auth'; // Import our new function
 export default function CodebaseAdminPage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const [gameId, setGameId] = useState('');
+  const [version, setVersion] = useState('');
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -20,8 +21,8 @@ export default function CodebaseAdminPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!file || !gameId) {
-      setMessage('Please select a file and enter a game ID');
+    if (!file || !gameId || !version) {
+      setMessage('Please select a file, enter a game ID, and a version');
       return;
     }
     
@@ -30,6 +31,7 @@ export default function CodebaseAdminPage() {
     try {
       const formData = new FormData();
       formData.append('gameId', gameId);
+      formData.append('version', version);
       formData.append('codebase', file);
       
       const response = await fetch('/api/admin/codebases/upload', {
@@ -42,6 +44,7 @@ export default function CodebaseAdminPage() {
       if (response.ok) {
         setMessage('Codebase uploaded successfully!');
         setGameId('');
+        setVersion('');
         setFile(null);
       } else {
         setMessage(`Error: ${data.error}`);
@@ -85,6 +88,18 @@ export default function CodebaseAdminPage() {
             type="text"
             value={gameId}
             onChange={(e) => setGameId(e.target.value)}
+            className="w-full p-2 border rounded"
+            required
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block mb-2">Game Version:</label>
+          <input
+            type="text"
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="e.g. 1.0.1"
             className="w-full p-2 border rounded"
             required
           />

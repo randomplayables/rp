@@ -5,6 +5,7 @@ interface IGameData extends Document {
   gameId: string;
   userId: string | null;
   username: string | null; // Add username field
+  gameVersion: string;
   timestamp: Date;
   roundNumber: number;
   roundData: any; // Store any JSON data
@@ -16,6 +17,7 @@ const GameDataSchema = new mongoose.Schema({
   gameId: { type: String, required: true },
   userId: { type: String, default: null },
   username: { type: String, default: null }, // Add username field
+  gameVersion: { type: String },
   timestamp: { type: Date, default: Date.now },
   roundNumber: Number,
   roundData: mongoose.Schema.Types.Mixed, // Allows for flexible JSON storage

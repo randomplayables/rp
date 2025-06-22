@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
       userId,
       username,
       isGuest,
-      gameId: session.gameId
+      gameId: session.gameId,
+      gameVersion: session.gameVersion // Log the version
     });
     
     // Create game data entry
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
       gameId: session.gameId,
       userId,
       username,
+      gameVersion: session.gameVersion, // Store the version
       roundNumber,
       roundData,
       isGuest

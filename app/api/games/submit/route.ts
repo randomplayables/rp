@@ -18,10 +18,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     // MODIFIED: Removed 'link' from destructuring
-    const { name, description, year, image, codeUrl, irlInstructions } = body;
+    const { name, description, year, image, version, codeUrl, irlInstructions } = body;
 
     // MODIFIED: Updated validation
-    if (!name || !year || !image || !codeUrl) {
+    if (!name || !year || !image || !version || !codeUrl) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       description,
       year,
       image,
+      version,
       // REMOVED: 'link' field
       codeUrl,
       irlInstructions: irlInstructions || [],

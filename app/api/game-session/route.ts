@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameSessionModel from "@/models/GameSession";
+import GameModel from "@/models/Game"; // Import Game model
 import { currentUser } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from "uuid";
 import { allowedOrigins } from "../../../lib/corsConfig";
@@ -59,6 +60,15 @@ export async function POST(request: NextRequest) {
     if (!gameId) {
       return NextResponse.json({ error: "Missing gameId." }, { 
         status: 400,
+        headers: getDynamicCorsHeaders(request)
+      });
+    }
+
+    // Fetch the game to get its version
+    const game = await GameModel.findOne({ id: gameId });
+    if (!game) {
+      return NextResponse.json({ error: "Game not found." }, {
+        status: 404,
         headers: getDynamicCorsHeaders(request)
       });
     }
@@ -125,6 +135,7 @@ export async function POST(request: NextRequest) {
       userId,
       username,
       gameId,
+      gameVersion: game.version, // Store the game version
       sessionId,
       ipAddress,
       userAgent,
@@ -139,6 +150,7 @@ export async function POST(request: NextRequest) {
       username,
       isGuest,
       gameId,
+      gameVersion: game.version,
       surveyMode,
       surveyQuestionId,
       authSource: userId ? authSource : undefined
@@ -182,6 +194,7 @@ export async function GET(request: NextRequest) {
       username: session.username,
       isGuest: session.isGuest,
       gameId: session.gameId,
+      gameVersion: session.gameVersion,
       sessionId: session.sessionId
     }, {
       headers: getDynamicCorsHeaders(request)

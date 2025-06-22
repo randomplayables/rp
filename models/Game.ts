@@ -14,6 +14,7 @@ const GameSchema = new mongoose.Schema({
   description: String, // Added this line
   year: Number,
   link: String,
+  version: { type: String, default: '1.0.0' },
   irlInstructions: [IRLInstructionSchema],
   codeUrl: String,
   authorUsername: String,
