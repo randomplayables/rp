@@ -177,10 +177,7 @@ export async function GET(request: NextRequest) {
     
     let game: (IGame & mongoose.Document) | null = null; // Define game type
     if (gameIdParam) {
-      const numericId = parseInt(gameIdParam);
-      if (!isNaN(numericId)) {
-        game = await GameModel.findOne({ id: numericId }).lean();
-      }
+      game = await GameModel.findOne({ gameId: gameIdParam }).lean();
     } else if (gameNameParam) {
       game = await GameModel.findOne({ 
         name: { $regex: new RegExp(gameNameParam, "i") } 
@@ -191,12 +188,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
     
-    const codebase = await CodeBaseModel.findOne({ gameId: game.id }).lean();
+    const codebase = await CodeBaseModel.findOne({ gameId: game.gameId }).lean();
     
     if (!codebase) {
       return NextResponse.json({ 
         error: "No codebase found for this game",
-        game: { id: game.id, name: game.name }
+        game: { gameId: game.gameId, name: game.name }
       }, { status: 404 });
     }
     
@@ -206,7 +203,7 @@ export async function GET(request: NextRequest) {
     if (codebase.contentType === "repomix-xml") {
       const parsedContent = parseRepomixXml_detailed(codebase.codeContent);
       parsedCodebase = {
-        game: { id: game.id, name: game.name },
+        game: { gameId: game.gameId, name: game.name },
         repo: repoDetails,
         structure: null, // The explorer page does not currently use gameCode.structure
         packageJson: parsedContent.packageJson,
@@ -216,7 +213,7 @@ export async function GET(request: NextRequest) {
       };
     } else { // Assumed "source-code" or other direct content
       parsedCodebase = {
-        game: { id: game.id, name: game.name },
+        game: { gameId: game.gameId, name: game.name },
         repo: repoDetails,
         structure: null,
         packageJson: null, // Single source file unlikely to have separate package.json

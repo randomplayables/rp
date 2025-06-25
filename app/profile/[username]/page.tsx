@@ -31,10 +31,12 @@ interface Sketch {
   _id: string;
   title: string;
   description: string;
-  code: string;
-  language: string;
+  files: any; // Changed from code/language
   previewImage?: string;
   createdAt: string;
+  isPublic: boolean; // Added
+  userId: string; // Added
+  sketchGameId?: string; // Added
 }
 
 interface Instrument {
@@ -50,7 +52,7 @@ interface Instrument {
 
 // Add Game type
 interface Game {
-  id: number;
+  gameId: string;
   image: string;
   name: string;
   year: number;
@@ -298,7 +300,7 @@ export default function UserProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {games.map((game) => (
                     <ContentCard 
-                      key={game.id} 
+                      key={game.gameId} 
                       {...game}
                     />
                   ))}

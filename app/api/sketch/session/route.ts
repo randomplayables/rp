@@ -9,14 +9,14 @@ export async function POST(request: NextRequest) {
   try {
     await connectToDatabase();
     
-    const { sketchGameId, passedUserId, passedUsername } = await request.json();
+    const { gameId, passedUserId, passedUsername } = await request.json();
 
-    if (!sketchGameId) {
-      return NextResponse.json({ error: "Missing sketchGameId." }, { status: 400 });
+    if (!gameId) {
+      return NextResponse.json({ error: "Missing gameId." }, { status: 400 });
     }
 
     // Verify the sketch game exists
-    const sketchGame = await SketchGameModel.findOne({ id: sketchGameId });
+    const sketchGame = await SketchGameModel.findOne({ gameId: gameId });
     if (!sketchGame) {
       return NextResponse.json({ error: "Sketch game not found." }, { status: 404 });
     }
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     await SketchGameSessionModel.create({
       sessionId,
-      sketchGameId,
+      gameId,
       userId,
       username,
       isGuest,

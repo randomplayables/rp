@@ -16,7 +16,7 @@ import { SketchGameModel, SketchGameSessionModel, SketchGameDataModel } from "@/
 
 // --- Sandbox Model Schemas ---
 const SandboxGameSchemaInternal = new mongoose.Schema({
-  id: { type: Number, unique: true, required: true },
+  gameId: { type: String, unique: true, required: true },
   name: { type: String, required: true },
   description: { type: String },
   year: { type: Number, default: new Date().getFullYear() },

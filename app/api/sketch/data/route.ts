@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     const sketchGameData = await SketchGameDataModel.create({
       sessionId,
-      sketchGameId: session.sketchGameId,
+      gameId: session.gameId,
       userId: session.userId,
       username: session.username,
       roundNumber: roundNumber, // FIX: Save the dynamic roundNumber

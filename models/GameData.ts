@@ -31,6 +31,6 @@ GameDataSchema.index({ username: 1 }); // Add username index
 
 // Explicitly set the collection name to avoid pluralization issues
 const GameDataModel: Model<IGameData> =
-  mongoose.models.GameData || mongoose.model("GameData", GameDataSchema, "gamedata");
+  mongoose.models.GameData || mongoose.model("GameData", GameDataSchema, "gamedatas");
 
 export default GameDataModel;

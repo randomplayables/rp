@@ -165,7 +165,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
         const sessionResponse = await fetch('/api/gamelab/sandbox', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'create_session', data: { gameId: gameData.game.id } })
+          body: JSON.stringify({ action: 'create_session', data: { gameId: gameData.game.gameId } })
         });
         const sessionData = await sessionResponse.json();
         if (!sessionData.success || !sessionData.session) {
@@ -206,7 +206,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
       const roundNumber = payloadFromGame.roundNumber;
       const response = await fetch('/api/gamelab/sandbox', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_game_data', data: { sessionId: gameSessionId, gameId: activeSandboxGame.id, roundNumber: roundNumber, roundData: payloadFromGame }})
+        body: JSON.stringify({ action: 'save_game_data', data: { sessionId: gameSessionId, gameId: activeSandboxGame.gameId, roundNumber: roundNumber, roundData: payloadFromGame }})
       });
       const data = await response.json();
       if (data.success) { setTestData(prev => [...prev, data.gameData]); }
@@ -278,7 +278,7 @@ const GameSandbox = ({ code, language }: GameSandboxProps) => {
     try {
       const sessionResponse = await fetch('/api/gamelab/sandbox', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_session', data: { gameId: activeSandboxGame.id } })
+        body: JSON.stringify({ action: 'create_session', data: { gameId: activeSandboxGame.gameId } })
       });
       const sessionData = await sessionResponse.json();
       if (sessionData.success && sessionData.session) {

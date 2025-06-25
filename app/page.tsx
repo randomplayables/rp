@@ -15,11 +15,10 @@ export default async function HomePage() {
       <section>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {data.map((item) => (
-            <ContentCard {...item} key={item.id} />
+            <ContentCard {...item} key={item.gameId} />
           ))}
         </div>
       </section>
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 import mongoose, { Document, Model } from "mongoose";
 
 interface ICodeBase extends Document {
-  gameId: number;          // Reference to the Game model
+  gameId: string;          // Reference to the Game model
   gameName: string;        // Name of the game
   version: string;         // Game version (e.g., '1.0.1')
   codeContent: string;     // Complete codebase content (XML/text format)
@@ -10,7 +10,7 @@ interface ICodeBase extends Document {
 }
 
 const CodeBaseSchema = new mongoose.Schema({
-  gameId: { type: Number, required: true },
+  gameId: { type: String, required: true },
   gameName: { type: String, required: true },
   version: { type: String, required: true },
   codeContent: { type: String, required: true },

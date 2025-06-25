@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the game to get its version
-    const game = await GameModel.findOne({ id: gameId });
+    const game = await GameModel.findOne({ gameId: gameId });
     if (!game) {
       return NextResponse.json({ error: "Game not found." }, {
         status: 404,

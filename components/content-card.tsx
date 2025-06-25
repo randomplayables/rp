@@ -10,7 +10,7 @@ interface IRLInstruction {
 }
 
 interface Props {
-  id: number;
+  gameId: string;
   image: string;
   name: string;
   year: number;
@@ -20,7 +20,7 @@ interface Props {
   authorUsername?: string;  // New prop for author's username
 }
 
-const ContentCard = ({ id, image, name, year, link, irlInstructions, codeUrl, authorUsername }: Props) => {
+const ContentCard = ({ gameId, image, name, year, link, irlInstructions, codeUrl, authorUsername }: Props) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, isSignedIn } = useUser();
   const { getToken } = useAuth();

@@ -251,13 +251,13 @@ function GamelabWorkspace() {
                     const sessionRes = await fetch('/api/gamelab/sandbox', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'create_session', data: { gameId: gameData.game.id } })
+                        body: JSON.stringify({ action: 'create_session', data: { gameId: gameData.game.gameId } })
                     });
                     const sessionData = await sessionRes.json();
                     if (!sessionData.success) throw new Error("Failed to create sandbox session.");
                     
                     const newSessionId = sessionData.session.sessionId;
-                    const gameIdForScript = gameData.game.id;
+                    const gameIdForScript = gameData.game.gameId;
     
                     // 3. Prepare communication script as a new file
                     const communicationScript = `

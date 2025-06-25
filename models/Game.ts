@@ -8,7 +8,7 @@ const IRLInstructionSchema = new mongoose.Schema({
 }, { _id: false });
 
 const GameSchema = new mongoose.Schema({
-  id: { type: Number, unique: true, required: true },
+  gameId: { type: String, unique: true, required: true },
   image: String,
   name: String,
   description: String, // Added this line

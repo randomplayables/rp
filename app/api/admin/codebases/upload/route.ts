@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
     
     // Validate that the game exists
-    const game = await GameModel.findOne({ id: parseInt(gameId) });
+    const game = await GameModel.findOne({ gameId: gameId });
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
     
     // Save or update the codebase for a specific gameId and version
     await CodeBaseModel.findOneAndUpdate(
-      { gameId: parseInt(gameId), version: version },
+      { gameId: gameId, version: version },
       {
-        gameId: parseInt(gameId),
+        gameId: gameId,
         gameName: game.name,
         version: version,
         codeContent,

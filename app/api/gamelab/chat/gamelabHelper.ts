@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import { connectToDatabase as connectToMainDatabase } from "@/lib/mongodb";
+import GameSessionModel from "@/models/GameSession";
+import GameDataModel from "@/models/GameData";
 import GameModel from "@/models/Game";
 import CodeBaseModel from "@/models/CodeBase";
 
@@ -112,7 +114,7 @@ const App: React.FC = () => {
     // Keep the mongodb example as it's for data structure, not a game template
     mongodb: {
       gameStructure: {
-        id: "unique-game-id",
+        gameId: "unique-game-id-slug",
         name: "Game Name",
         description: "Short game description",
         year: 2025,
@@ -272,17 +274,17 @@ export async function fetchGameCodeExamplesForQuery(query: string) {
     const gameCodeContext: Record<string, any> = {};
 
     for (const game of selectedGames) {
-      if (!game.id) {
-        console.log(`[GameLab Helper] WARNING: Game "${game.name}" has no ID, skipping codebase fetch.`);
+      if (!game.gameId) {
+        console.log(`[GameLab Helper] WARNING: Game "${game.name}" has no gameId, skipping codebase fetch.`);
         continue;
       }
-      console.log(`[GameLab Helper] INFO: Accessing CodeBaseModel for game: "${game.name}" (ID: ${game.id})`);
-      const codebase = await CodeBaseModel.findOne({ gameId: game.id }).lean();
+      console.log(`[GameLab Helper] INFO: Accessing CodeBaseModel for game: "${game.name}" (ID: ${game.gameId})`);
+      const codebase = await CodeBaseModel.findOne({ gameId: game.gameId }).lean();
 
       if (codebase) {
         console.log(`[GameLab Helper] SUCCESS: Found codebase for game "${game.name}". ContentType: "${codebase.contentType}".`);
         let gameDataToStore: any = {
-            id: game.id,
+            gameId: game.gameId,
             name: game.name,
             description: game.description,
         };

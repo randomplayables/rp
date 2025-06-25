@@ -38,7 +38,7 @@ async function getSandboxModels() {
   const conn = await connectToSandboxDB();
   
   const GameSchema = new mongoose.Schema({
-    id: { type: Number, unique: true, required: true },
+    gameId: { type: String, unique: true, required: true },
     name: { type: String, required: true },
     description: { type: String },
     createdBy: { type: String },
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         const gameData = {
           name: data.name,
           description: data.description,
-          id: Date.now(),
+          gameId: `sandbox-game-${Date.now()}`,
           createdBy: userId,
         };
         const newGame = await models.Game.create(gameData);

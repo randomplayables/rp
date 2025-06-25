@@ -21,7 +21,7 @@ interface Sketch {
   createdAt: string;
   isPublic: boolean; 
   userId: string;
-  sketchGameId?: string;
+  gameId?: string;
 }
 
 interface Props {
@@ -46,7 +46,7 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
     }
 
     const createSession = async () => {
-      if (!sketch.sketchGameId) {
+      if (!sketch.gameId) {
         setIsLoadingSession(false);
         return;
       }
@@ -57,7 +57,7 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sketchGameId: sketch.sketchGameId,
+            gameId: sketch.gameId,
             passedUserId: isSignedIn ? user.id : undefined,
             passedUsername: isSignedIn ? user.username : undefined,
           })
@@ -66,7 +66,7 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
         if (response.ok) {
           const data = await response.json();
           setSessionId(data.sessionId);
-          console.log(`Created sketch session ${data.sessionId} for sketch game ${sketch.sketchGameId}`);
+          console.log(`Created sketch session ${data.sessionId} for sketch game ${sketch.gameId}`);
         } else {
           console.error("Failed to create sketch game session");
         }
@@ -84,7 +84,7 @@ const SketchPlayer = ({ sketch, showCode }: { sketch: Sketch, showCode: boolean 
             sessionEffectRan.current = true;
         }
     }
-  }, [sketch.sketchGameId, user, isSignedIn]);
+  }, [sketch.gameId, user, isSignedIn]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -244,8 +244,8 @@ export default function ProfileSketchCard({ sketch, isOwner, onDelete }: Props) 
                 setIsFullscreenMode(true);
               }}
               className="text-emerald-600 hover:text-emerald-700"
-              disabled={!sketch.sketchGameId}
-              title={sketch.sketchGameId ? "Preview Sketch" : "Sketch cannot be played (missing game link)"}
+              disabled={!sketch.gameId}
+              title={sketch.gameId ? "Preview Sketch" : "Sketch cannot be played (missing game link)"}
             >
               Preview
             </button>
