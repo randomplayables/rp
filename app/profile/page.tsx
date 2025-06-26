@@ -410,7 +410,7 @@ export default function Profile() {
                         </div>
                      )}
                      {!profile.subscriptionActive && (
-                        <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200 text-center">
+                        <div className="bg-white shadow-md rounded-lg p-4 border border-emerald-200">
                             <p className="mb-2">You currently do not have an active subscription.</p>
                             <button
                                 onClick={() => router.push('/subscribe')}

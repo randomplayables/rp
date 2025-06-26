@@ -34,15 +34,33 @@ export default function AdminPanel() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'execute' | 'settings'>('dashboard');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [isUpdatingContributions, setIsUpdatingContributions] = useState(false);
+  const [updateStatusMessage, setUpdateStatusMessage] = useState('');
 
   const isUserAdmin = isAdmin(user?.id, user?.username);
 
   const inputClass = "mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm";
 
-  useEffect(() => {
-    const fetchAdminData = async () => {
-      if (!isUserAdmin) return;
+  const fetchAdminData = async () => {
+    if (!isUserAdmin) return;
 
+    setIsLoadingStats(true);
+    try {
+      const statsResponse = await fetch('/api/rp/stats');
+      if (!statsResponse.ok) throw new Error('Failed to fetch stats');
+      const statsData = await statsResponse.json();
+      setStats(statsData.stats);
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred fetching stats');
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchInitialConfig = async () => {
+      if (!isUserAdmin) return;
       setIsLoadingConfig(true);
       try {
         const configResponse = await fetch('/api/rp/config');
@@ -55,25 +73,41 @@ export default function AdminPanel() {
       } finally {
         setIsLoadingConfig(false);
       }
-
-      setIsLoadingStats(true);
-      try {
-        const statsResponse = await fetch('/api/rp/stats');
-        if (!statsResponse.ok) throw new Error('Failed to fetch stats');
-        const statsData = await statsResponse.json();
-        setStats(statsData.stats);
-      } catch (err) {
-        console.error('Error fetching stats:', err);
-        setError(err instanceof Error ? err.message : 'An error occurred fetching stats');
-      } finally {
-        setIsLoadingStats(false);
-      }
     };
-
+    
     if (isLoaded && isSignedIn) {
+      fetchInitialConfig();
       fetchAdminData();
     }
   }, [isLoaded, isSignedIn, isUserAdmin]);
+
+  const handleRecalculateContributions = async () => {
+    if (!confirm('This may be a long-running process. Are you sure you want to recalculate all user contributions?')) {
+      return;
+    }
+    setIsUpdatingContributions(true);
+    setUpdateStatusMessage('');
+    setError(null);
+    try {
+      const response = await fetch('/api/rp/update-contributions', {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update contributions.');
+      }
+      setUpdateStatusMessage(data.message || 'Contributions updated successfully!');
+      // Refresh stats after update
+      await fetchAdminData();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred during recalculation.';
+      setError(errorMessage);
+      setUpdateStatusMessage('');
+    } finally {
+      setIsUpdatingContributions(false);
+    }
+  };
+
 
   const handleConfigChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -84,7 +118,6 @@ export default function AdminPanel() {
 
     setConfig(prevConfig => {
       if (!prevConfig) return null;
-      // Deep clone to avoid direct state mutation
       const newConfig = JSON.parse(JSON.stringify(prevConfig)) as IPayoutConfigBase;
       
       const parsedValue = isNumberInput ? parseFloat(value) || 0 : value;
@@ -187,6 +220,24 @@ export default function AdminPanel() {
         <div>
           {activeTab === 'dashboard' && stats && config && (
             <div className="space-y-8">
+               <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">System Actions</h3>
+                <div className="mt-4">
+                    <button
+                        onClick={handleRecalculateContributions}
+                        disabled={isUpdatingContributions}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50"
+                    >
+                        {isUpdatingContributions ? <Spinner className="inline w-4 h-4 mr-2" /> : null}
+                        {isUpdatingContributions ? 'Recalculating...' : 'Recalculate All Contributions'}
+                    </button>
+                    <p className="text-sm text-gray-500 mt-2">
+                        Fetches latest GitHub activity and recalculates points for all users. This may take a few moments.
+                    </p>
+                    {updateStatusMessage && <p className="mt-2 text-sm text-green-600">{updateStatusMessage}</p>}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
                   <h3 className="text-sm font-medium text-gray-500">Total Contributors</h3>
