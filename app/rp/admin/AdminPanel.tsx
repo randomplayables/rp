@@ -13,10 +13,13 @@ interface Stats {
   currentPoolSize: number;
   topContributors: Array<{
     username: string;
-    metrics: { totalPoints: number }; // This is "Other Category Points"
+    metrics: { 
+        totalPoints: number; // This is "Other Category Points"
+        githubRepoPoints?: number;
+        peerReviewPoints?: number; // Added for the new column
+    }; 
     winCount: number;
     winProbability?: number;
-    githubRepoPoints?: number;
   }>;
   recentPayouts: Array<{
     username: string;
@@ -263,6 +266,7 @@ export default function AdminPanel() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Win Chance</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Other Cat. Points</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GH Repo Points</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Peer Review Points</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Win Count</th>
                       </tr>
                     </thead>
@@ -272,7 +276,8 @@ export default function AdminPanel() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{c.username}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.winProbability !== undefined ? (c.winProbability * 100).toFixed(4) + '%' : 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.metrics.totalPoints !== undefined ? c.metrics.totalPoints.toFixed(2) : 'N/A'}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.githubRepoPoints !== undefined ? c.githubRepoPoints.toFixed(2) : 'N/A'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.metrics.githubRepoPoints?.toFixed(2) || '0.00'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.metrics.peerReviewPoints?.toFixed(2) || '0.00'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{c.winCount}</td>
                         </tr>
                       ))}

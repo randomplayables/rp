@@ -19,16 +19,14 @@ export async function GET(request: NextRequest) {
       .select('username metrics winProbability winCount') 
       .lean();
 
-    // Map to the structure expected by the frontend Stats interface
+    // MODIFICATION START: Pass the entire metrics object instead of reconstructing it.
     const topContributors = rawTopContributors.map(c => ({
         username: c.username,
-        metrics: { // For "Other Cat. Points"
-            totalPoints: c.metrics.totalPoints 
-        },
+        metrics: c.metrics, // This now includes all fields from the metrics object
         winCount: c.winCount,
-        winProbability: c.winProbability, // Directly from the model
-        githubRepoPoints: c.metrics.githubRepoPoints // From metrics
+        winProbability: c.winProbability,
     }));
+    // MODIFICATION END
     
     const totalPayoutAmountResult = await PayoutRecordModel.aggregate([
       { $match: { status: 'completed' } }, // Only sum completed payouts
