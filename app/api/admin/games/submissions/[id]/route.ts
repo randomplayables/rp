@@ -22,20 +22,11 @@ export async function PUT(
         }
 
         await connectToDatabase();
-        
-        if (status === 'rejected') {
-            const deletedSubmission = await GameSubmissionModel.findByIdAndDelete(submissionId);
-            if (!deletedSubmission) {
-                return NextResponse.json({ error: "Submission not found to reject." }, { status: 404 });
-            }
-            console.log(`Submission ${submissionId} was rejected and deleted.`);
-            return NextResponse.json({ success: true, message: "Submission rejected and deleted." });
-        }
 
-        // If approved, update the status
+        // Update the status for both 'approved' and 'rejected'
         const updatedSubmission = await GameSubmissionModel.findByIdAndUpdate(
             submissionId,
-            { $set: { status: 'approved' } },
+            { $set: { status: status } },
             { new: true }
         );
 
@@ -43,7 +34,9 @@ export async function PUT(
             return NextResponse.json({ error: "Submission not found." }, { status: 404 });
         }
 
+        console.log(`Submission ${submissionId} status updated to ${status}.`);
         return NextResponse.json({ success: true, submission: updatedSubmission });
+        
     } catch (error: any) {
         console.error(`Error updating submission ${params.id}:`, error);
         return NextResponse.json({

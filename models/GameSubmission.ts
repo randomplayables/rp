@@ -9,12 +9,16 @@ interface IGameSubmission extends Document {
   codeUrl: string;
   irlInstructions?: { title: string; url: string }[];
   authorUsername: string;
-  authorEmail: string; 
+  authorEmail: string;
   submittedByUserId: string;
   status: 'pending' | 'approved' | 'rejected';
-  isPeerReviewEnabled: boolean; // ADDED
+  isPeerReviewEnabled: boolean;
   submittedAt: Date;
   reviewerNotes?: string;
+  // Fields for resubmission handling
+  submissionType: 'initial' | 'update';
+  targetGameId?: string; // gameId of the game being updated
+  previousVersion?: string;
 }
 
 const GameSubmissionSchema = new Schema({
@@ -30,16 +34,28 @@ const GameSubmissionSchema = new Schema({
     _id: false
   }],
   authorUsername: { type: String, required: true },
-  authorEmail: { type: String, required: true }, 
+  authorEmail: { type: String, required: true },
   submittedByUserId: { type: String, required: true },
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending',
   },
-  isPeerReviewEnabled: { type: Boolean, default: false }, // ADDED
+  isPeerReviewEnabled: { type: Boolean, default: false },
   submittedAt: { type: Date, default: Date.now },
   reviewerNotes: { type: String },
+  // Fields for resubmission handling
+  submissionType: {
+    type: String,
+    enum: ['initial', 'update'],
+    default: 'initial'
+  },
+  targetGameId: {
+    type: String,
+  },
+  previousVersion: {
+    type: String,
+  },
 });
 
 // Create index for easier querying by status or user

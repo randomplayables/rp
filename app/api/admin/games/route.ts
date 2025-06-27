@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameModel from "@/models/Game";
+import GameSubmissionModel from "@/models/GameSubmission";
 import { currentUser } from "@clerk/nextjs/server";
 import { isAdmin } from "@/lib/auth";
 import { incrementUserContribution, ContributionType } from "@/lib/contributionUpdater";
@@ -14,50 +15,102 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { authorUsername, ...gameData } = body;
+        const { submissionId, gameId, link } = body;
 
-        if (!gameData.gameId || !authorUsername) {
-            return NextResponse.json({ error: "Missing required fields: gameId and authorUsername are required." }, { status: 400 });
+        if (!submissionId) {
+            return NextResponse.json({ error: "Missing required field: submissionId is required." }, { status: 400 });
         }
 
         await connectToDatabase();
 
-        // Check if gameId already exists
-        const existingGame = await GameModel.findOne({ gameId: gameData.gameId });
-        if (existingGame) {
-            return NextResponse.json({ error: `Game with gameId '${gameData.gameId}' already exists.` }, { status: 409 });
+        const submission = await GameSubmissionModel.findById(submissionId);
+        if (!submission) {
+            return NextResponse.json({ error: "Game submission not found." }, { status: 404 });
         }
 
-        // Create the new game
-        const newGame = await GameModel.create({
-            ...gameData,
-            authorUsername // Ensure authorUsername is saved with the game
-        });
+        const { authorUsername } = submission;
 
-        // Find the author's profile to get their clerkId
         const authorProfile = await prisma.profile.findUnique({
             where: { username: authorUsername }
         });
 
-        if (authorProfile) {
-            // Award contribution points
-            await incrementUserContribution(
-                authorProfile.userId,
-                authorUsername,
-                ContributionType.GAME_PUBLICATION,
-                1
-            );
-            console.log(`Awarded GAME_PUBLICATION points to ${authorUsername}`);
-        } else {
-            console.warn(`Could not find profile for username: ${authorUsername}. Contribution points not awarded.`);
+        if (!authorProfile) {
+            console.warn(`Could not find profile for username: ${authorUsername}. Contribution points will not be awarded.`);
         }
 
-        return NextResponse.json({ success: true, game: newGame }, { status: 201 });
+        if (submission.submissionType === 'update') {
+            if (!submission.targetGameId) {
+                 return NextResponse.json({ error: "Update submission is missing a targetGameId." }, { status: 400 });
+            }
+            const gameToUpdate = await GameModel.findOne({ gameId: submission.targetGameId });
+            if (!gameToUpdate) {
+                return NextResponse.json({ error: `Game with targetGameId '${submission.targetGameId}' not found for update.` }, { status: 404 });
+            }
+
+            gameToUpdate.name = submission.name;
+            gameToUpdate.description = submission.description;
+            gameToUpdate.year = submission.year;
+            gameToUpdate.image = submission.image;
+            gameToUpdate.version = submission.version;
+            gameToUpdate.irlInstructions = submission.irlInstructions;
+
+            await gameToUpdate.save();
+
+            if (authorProfile) {
+                await incrementUserContribution(
+                    authorProfile.userId,
+                    authorUsername,
+                    ContributionType.GAME_UPDATE
+                );
+                console.log(`Awarded GAME_UPDATE points to ${authorUsername}`);
+            }
+
+            // The submission status is already 'approved', so we just leave it.
+            // DO NOT DELETE: await GameSubmissionModel.findByIdAndDelete(submissionId);
+
+            return NextResponse.json({ success: true, game: gameToUpdate }, { status: 200 });
+
+        } else {
+            if (!gameId) {
+                return NextResponse.json({ error: "Missing gameId for initial submission." }, { status: 400 });
+            }
+            const existingGame = await GameModel.findOne({ gameId: gameId });
+            if (existingGame) {
+                return NextResponse.json({ error: `Game with gameId '${gameId}' already exists.` }, { status: 409 });
+            }
+
+            const newGame = await GameModel.create({
+                gameId: gameId,
+                link: link,
+                name: submission.name,
+                description: submission.description,
+                year: submission.year,
+                image: submission.image,
+                version: submission.version,
+                codeUrl: submission.codeUrl,
+                irlInstructions: submission.irlInstructions,
+                authorUsername: submission.authorUsername
+            });
+
+            if (authorProfile) {
+                await incrementUserContribution(
+                    authorProfile.userId,
+                    authorUsername,
+                    ContributionType.GAME_PUBLICATION
+                );
+                console.log(`Awarded GAME_PUBLICATION points to ${authorUsername}`);
+            }
+
+            // The submission status is already 'approved', so we just leave it.
+            // DO NOT DELETE: await GameSubmissionModel.findByIdAndDelete(submissionId);
+
+            return NextResponse.json({ success: true, game: newGame }, { status: 201 });
+        }
 
     } catch (error: any) {
-        console.error("Error creating game from submission:", error);
+        console.error("Error promoting game from submission:", error);
         return NextResponse.json({
-            error: "Failed to create game",
+            error: "Failed to promote game",
             details: error.message
         }, { status: 500 });
     }

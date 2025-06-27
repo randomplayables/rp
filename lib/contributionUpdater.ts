@@ -9,6 +9,7 @@ export enum ContributionType {
   ANSWER = 'answer',
   GAME_PUBLICATION = 'game_publication',
   PEER_REVIEW = 'peer_review',
+  GAME_UPDATE = 'game_update',
 }
 
 const CONTRIBUTION_POINTS = {
@@ -19,6 +20,7 @@ const CONTRIBUTION_POINTS = {
   [ContributionType.ANSWER]: { field: 'communityEngagement', points: 3 },
   [ContributionType.GAME_PUBLICATION]: { field: 'gamePublicationPoints', points: 50 },
   [ContributionType.PEER_REVIEW]: { field: 'peerReviewPoints', points: 25 },
+  [ContributionType.GAME_UPDATE]: { field: 'gamePublicationPoints', points: 10 },
 };
 
 export async function incrementUserContribution(

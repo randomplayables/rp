@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import GameSubmissionModel from "@/models/GameSubmission";
+import GameModel from "@/models/Game"; // Import the Game model
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,22 +11,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get the primary email address
     const email = clerkUser.emailAddresses[0]?.emailAddress;
     if (!email) {
       return NextResponse.json({ error: "User email not found." }, { status: 400 });
     }
 
     const body = await request.json();
-    // MODIFIED: Removed 'link' from destructuring
-    const { name, description, year, image, version, codeUrl, irlInstructions } = body;
+    const {
+      name,
+      description,
+      year,
+      image,
+      version,
+      codeUrl,
+      irlInstructions,
+      submissionType,
+      targetGameId,
+      previousVersion
+    } = body;
 
-    // MODIFIED: Updated validation
     if (!name || !year || !image || !version || !codeUrl) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     await connectToDatabase();
+
+    let isPeerReviewEnabledForUpdate = false;
+    // If this is an update, check if the original game exists, which implies peer review is set up.
+    if (submissionType === 'update' && targetGameId) {
+        const existingGame = await GameModel.findOne({ gameId: targetGameId });
+        if (existingGame) {
+            isPeerReviewEnabledForUpdate = true;
+        }
+    }
 
     const newGameSubmission = new GameSubmissionModel({
       name,
@@ -33,13 +51,17 @@ export async function POST(request: NextRequest) {
       year,
       image,
       version,
-      // REMOVED: 'link' field
       codeUrl,
       irlInstructions: irlInstructions || [],
       authorUsername: clerkUser.username,
-      authorEmail: email, // ADDED: Save the user's email
+      authorEmail: email,
       submittedByUserId: clerkUser.id,
       status: 'pending',
+      submissionType,
+      targetGameId,
+      previousVersion,
+      // Set the flag based on our check for updates, otherwise it defaults to false for initial submissions.
+      isPeerReviewEnabled: isPeerReviewEnabledForUpdate, 
     });
 
     await newGameSubmission.save();
