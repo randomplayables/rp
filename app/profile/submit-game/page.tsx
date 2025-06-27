@@ -12,7 +12,6 @@ interface IrlInstruction {
   url: string;
 }
 
-// MODIFIED: Removed 'link'
 interface GameSubmissionData {
   name: string;
   description: string;
@@ -21,6 +20,12 @@ interface GameSubmissionData {
   version: string;
   codeUrl: string;
   irlInstructions: IrlInstruction[];
+}
+
+interface SubmissionSuccessData {
+  gameId: string;
+  name: string;
+  repoUrl: string;
 }
 
 async function submitGame(gameData: GameSubmissionData) {
@@ -43,8 +48,9 @@ async function submitGame(gameData: GameSubmissionData) {
 export default function SubmitGamePage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
+  const [submissionSuccessData, setSubmissionSuccessData] = useState<SubmissionSuccessData | null>(null);
+  const [isConnectingRepo, setIsConnectingRepo] = useState(false);
 
-  // MODIFIED: Removed 'link' from initial state
   const [formData, setFormData] = useState<GameSubmissionData>({
     name: '',
     description: '',
@@ -59,7 +65,11 @@ export default function SubmitGamePage() {
     mutationFn: submitGame,
     onSuccess: (data) => {
       toast.success('Game submitted for review successfully!');
-      router.push(`/profile/${user?.username}`);
+      setSubmissionSuccessData({
+        gameId: data.submission._id, 
+        name: data.submission.name,
+        repoUrl: data.submission.codeUrl,
+      });
     },
     onError: (error: Error) => {
       toast.error(`Error: ${error.message}`);
@@ -110,6 +120,38 @@ export default function SubmitGamePage() {
     mutation.mutate(formData);
   };
 
+  const handleConnectRepo = async () => {
+    if (!submissionSuccessData) return;
+
+    setIsConnectingRepo(true);
+    toast.loading('Preparing GitHub connection...');
+
+    try {
+      const response = await fetch('/api/github/connect-repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: submissionSuccessData.gameId,
+          repoUrl: submissionSuccessData.repoUrl,
+        }),
+      });
+
+      const data = await response.json();
+      toast.dismiss();
+
+      if (data.success && data.installationUrl) {
+        window.location.href = data.installationUrl;
+      } else {
+        toast.error(data.error || 'Could not initiate GitHub connection.');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error('An error occurred while connecting to GitHub.');
+    } finally {
+      setIsConnectingRepo(false);
+    }
+  };
+
   if (!isLoaded || !isSignedIn) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -119,12 +161,45 @@ export default function SubmitGamePage() {
     );
   }
 
+  // If submission was successful, show the 'Next Step' UI
+  if (submissionSuccessData) {
+    return (
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+            <Toaster position="top-center" />
+            <div className="bg-white p-6 rounded-lg shadow-md text-center">
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">Submission Received!</h1>
+                <p className="text-gray-600 mb-6">Your game, "{submissionSuccessData.name}", is now pending review.</p>
+
+                <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-lg">
+                    <h2 className="text-xl font-bold text-emerald-700 mb-3">Final Step: Enable Peer Review</h2>
+                    <p className="text-gray-600 mb-4">
+                        To be eligible for inclusion on the platform, you must connect your GitHub repository. This allows other developers to submit peer reviews (pull requests).
+                    </p>
+                    <button
+                        onClick={handleConnectRepo}
+                        disabled={isConnectingRepo}
+                        className="w-full px-6 py-3 bg-gray-800 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 flex items-center justify-center"
+                    >
+                        {isConnectingRepo ? <Spinner className="w-5 h-5 mr-2" /> : null}
+                        {isConnectingRepo ? 'Connecting...' : 'Connect GitHub Repository'}
+                    </button>
+                </div>
+                 <button onClick={() => router.push(`/profile/${user?.username}`)} className="mt-6 text-sm text-gray-600 hover:underline">
+                    Cancel Submission
+                </button>
+            </div>
+        </div>
+    );
+  }
+
+  // Default form UI
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <Toaster position="top-center" />
       <h1 className="text-3xl font-bold text-gray-800 mb-6">Submit a Game for Review</h1>
       <div className="bg-white p-6 rounded-lg shadow-md">
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Form fields are unchanged, so they are omitted here for brevity but should remain in your file */}
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700">Game Name</label>
             <input
@@ -172,8 +247,6 @@ export default function SubmitGamePage() {
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
-          
-          {/* REMOVED: Playable Game Link field */}
           
           <div>
             <label htmlFor="codeUrl" className="block text-sm font-medium text-gray-700">Source Code URL</label>

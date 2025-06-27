@@ -24,6 +24,7 @@ interface GameSubmission {
     authorEmail: string;
     submittedByUserId: string;
     status: 'pending' | 'approved' | 'rejected';
+    isPeerReviewEnabled: boolean; // ADDED
     submittedAt: string;
     reviewerNotes?: string;
 }
@@ -85,12 +86,11 @@ export default function GameAdminPage() {
         mutationFn: updateSubmissionStatus,
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['gameSubmissions'] });
-            if (data.submission.status === 'approved') {
+            if (data.submission?.status === 'approved') {
                 setSelectedSubmission(data.submission);
-                // **FIX**: Populate formData with ALL fields from the submission
                 setFormData({
-                    gameId: '', // Admin needs to fill this
-                    link: '', // Admin needs to fill this
+                    gameId: '', 
+                    link: '', 
                     name: data.submission.name,
                     description: data.submission.description || '',
                     year: data.submission.year,
@@ -150,6 +150,7 @@ export default function GameAdminPage() {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Author</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Peer Review Ready</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -160,10 +161,11 @@ export default function GameAdminPage() {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.authorUsername}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(sub.submittedAt).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sub.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : sub.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{sub.status}</span></td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">{sub.isPeerReviewEnabled ? '✅' : '❌'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     {sub.status === 'pending' && (
                                         <div className="flex space-x-2">
-                                            <button onClick={() => statusMutation.mutate({ id: sub._id, status: 'approved' })} className="text-green-600 hover:text-green-900 disabled:opacity-50" disabled={statusMutation.isPending}>Approve</button>
+                                            <button onClick={() => statusMutation.mutate({ id: sub._id, status: 'approved' })} className="text-green-600 hover:text-green-900 disabled:opacity-50" disabled={statusMutation.isPending || !sub.isPeerReviewEnabled} title={!sub.isPeerReviewEnabled ? 'Peer review must be enabled first' : ''}>Approve</button>
                                             <button onClick={() => statusMutation.mutate({ id: sub._id, status: 'rejected' })} className="text-red-600 hover:text-red-900 disabled:opacity-50" disabled={statusMutation.isPending}>Reject</button>
                                         </div>
                                     )}
@@ -199,6 +201,7 @@ export default function GameAdminPage() {
                     <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl">
                         <h2 className="text-xl font-bold mb-4">Promote to Game</h2>
                         <form onSubmit={handleFormSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                            {/* Form fields are unchanged */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Game ID *</label>
                                 <input name="gameId" value={formData.gameId} onChange={handleFormChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500" required />

@@ -7,7 +7,8 @@ export interface ContributionMetrics {
   communityEngagement: number;
   githubRepoPoints: number;
   gamePublicationPoints: number; // ADDED
-  totalPoints: number; // Represents "Other Category Points"
+  totalPoints: number; // This represents "Other Category Points"
+  peerReviewPoints: number;
 }
 
 // Base interface for Payout Configuration (plain object structure)
@@ -69,7 +70,8 @@ const UserContributionSchema = new mongoose.Schema({
     communityEngagement: { type: Number, default: 0 },
     githubRepoPoints: { type: Number, default: 0 },
     gamePublicationPoints: { type: Number, default: 0 }, // ADDED
-    totalPoints: { type: Number, default: 0 }
+    totalPoints: { type: Number, default: 0 },
+    peerReviewPoints: { type: Number, default: 0 }
   },
   winProbability: { type: Number, default: 0 },
   winCount: { type: Number, default: 0 },

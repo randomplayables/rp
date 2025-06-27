@@ -9,9 +9,10 @@ interface IGameSubmission extends Document {
   codeUrl: string;
   irlInstructions?: { title: string; url: string }[];
   authorUsername: string;
-  authorEmail: string; // ADDED: To store the submitter's email
+  authorEmail: string; 
   submittedByUserId: string;
   status: 'pending' | 'approved' | 'rejected';
+  isPeerReviewEnabled: boolean; // ADDED
   submittedAt: Date;
   reviewerNotes?: string;
 }
@@ -22,7 +23,6 @@ const GameSubmissionSchema = new Schema({
   year: { type: Number, required: true },
   image: { type: String, required: true },
   version: { type: String, required: true },
-  // REMOVED: The 'link' field is no longer part of the initial submission
   codeUrl: { type: String, required: true },
   irlInstructions: [{
     title: String,
@@ -30,13 +30,14 @@ const GameSubmissionSchema = new Schema({
     _id: false
   }],
   authorUsername: { type: String, required: true },
-  authorEmail: { type: String, required: true }, // ADDED
+  authorEmail: { type: String, required: true }, 
   submittedByUserId: { type: String, required: true },
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending',
   },
+  isPeerReviewEnabled: { type: Boolean, default: false }, // ADDED
   submittedAt: { type: Date, default: Date.now },
   reviewerNotes: { type: String },
 });

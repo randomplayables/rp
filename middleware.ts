@@ -16,7 +16,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/game-data(.*)",
   "/api/games(.*)",
   "/datalab(.*)",
-  "/api/datalab(.*)"
+  "/api/datalab(.*)",
+  "/api/github/webhook(.*)" // UPDATED
 ])
 
 const isSignUpRoute = createRouteMatcher(["/sign-up(.*)"])
