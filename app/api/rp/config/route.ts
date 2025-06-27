@@ -17,12 +17,19 @@ export async function GET(request: NextRequest) {
       pointsPerCommit: 10,
       pointsPerLineChanged: 0.1
     };
+    
+    const defaultTopLevelWeights = {
+      githubPlatformWeight: 0.4,
+      peerReviewWeight: 0.4,
+      otherContributionsWeight: 0.2,
+    };
 
     if (!configFromDbDoc) {
       console.log("No payout config found, creating a default one.");
       configFromDbDoc = await PayoutConfigModel.create({
         totalPool: 1000,
         batchSize: 100,
+        topLevelWeights: defaultTopLevelWeights,
         weights: {
           codeWeight: 1.0,
           contentWeight: 0.8,
@@ -33,25 +40,23 @@ export async function GET(request: NextRequest) {
         nextScheduledRun: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
     } else {
-      // Ensure githubRepoDetails exists and is complete, especially for older documents
+      // Ensure nested objects exist for older documents
       if (!configFromDbDoc.githubRepoDetails || typeof configFromDbDoc.githubRepoDetails.owner === 'undefined') {
-        console.log("Existing config missing or has incomplete githubRepoDetails. Applying defaults to the response.");
-        // To ensure the response is complete, we'll merge defaults if parts are missing
-        // This doesn't save to DB unless a POST request is made, but ensures API consistency
-        configFromDbDoc.githubRepoDetails = {
-          ...defaultGithubRepoDetails, // Start with defaults
-          ...(configFromDbDoc.githubRepoDetails || {}), // Overlay existing partial data if any
-        };
+        configFromDbDoc.githubRepoDetails = defaultGithubRepoDetails;
+      }
+      if (!configFromDbDoc.topLevelWeights || typeof configFromDbDoc.topLevelWeights.githubPlatformWeight === 'undefined') {
+        configFromDbDoc.topLevelWeights = defaultTopLevelWeights;
       }
     }
 
     const plainConfig = configFromDbDoc.toObject({ versionKey: false }) as IPayoutConfigBase;
 
-    // Ensure the final response object strictly adheres to IPayoutConfigBase, especially nested objects
+    // Ensure the final response object is always complete
     const responseConfig: IPayoutConfigBase = {
       totalPool: plainConfig.totalPool,
       batchSize: plainConfig.batchSize,
-      weights: plainConfig.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5 },
+      topLevelWeights: plainConfig.topLevelWeights || defaultTopLevelWeights,
+      weights: plainConfig.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5, gamePublicationWeight: 0.25 },
       githubRepoDetails: plainConfig.githubRepoDetails || defaultGithubRepoDetails,
       lastUpdated: plainConfig.lastUpdated,
       nextScheduledRun: plainConfig.nextScheduledRun,
@@ -79,7 +84,6 @@ export async function POST(request: NextRequest) {
 
     await connectToDatabase();
 
-    // Ensure githubRepoDetails is not accidentally wiped if partially updated
     let currentConfigDoc = await PayoutConfigModel.findOne();
     let fullUpdateData = { ...updateData };
 
@@ -90,7 +94,6 @@ export async function POST(request: NextRequest) {
             ...updateData.githubRepoDetails
         };
     }
-
 
     const updatedConfigDoc = await PayoutConfigModel.findOneAndUpdate(
       {},
@@ -109,11 +112,18 @@ export async function POST(request: NextRequest) {
       pointsPerCommit: 10,
       pointsPerLineChanged: 0.1
     };
+    
+    const defaultTopLevelWeights = {
+      githubPlatformWeight: 0.4,
+      peerReviewWeight: 0.4,
+      otherContributionsWeight: 0.2,
+    };
 
     const configToReturn: IPayoutConfigBase = {
         totalPool: plainObject.totalPool,
         batchSize: plainObject.batchSize,
-        weights: plainObject.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5 },
+        topLevelWeights: plainObject.topLevelWeights || defaultTopLevelWeights,
+        weights: plainObject.weights || { codeWeight: 1, contentWeight: 0.8, communityWeight: 0.5, gamePublicationWeight: 0.25 },
         githubRepoDetails: plainObject.githubRepoDetails || defaultGithubRepoDetails,
         lastUpdated: plainObject.lastUpdated,
         nextScheduledRun: plainObject.nextScheduledRun,

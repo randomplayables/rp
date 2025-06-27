@@ -9,7 +9,8 @@
     "lint": "next lint",
     "init-payout-config": "tsx scripts/initPayoutConfig.ts",
     "update-contributions": "tsx scripts/updateContributions.ts",
-    "update-db-versions": "tsx scripts/oneTimeUpdate.ts"
+    "update-db-versions": "tsx scripts/oneTimeUpdate.ts",
+    "add-toplevel-weights": "tsx scripts/addTopLevelWeights.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.12.5",

@@ -8,9 +8,10 @@ interface ContributionMetrics {
   codeContributions: number;
   contentCreation: number;
   communityEngagement: number;
-  githubRepoPoints: number; // This field is expected
-  gamePublicationPoints: number; // ADDED
+  githubRepoPoints: number;
+  gamePublicationPoints: number;
   totalPoints: number; // This represents Points_OtherCategory
+  peerReviewPoints: number;
 }
 
 interface UserContribution {
@@ -46,8 +47,7 @@ export default function ContributionStats({ userId, username }: ContributionStat
       } else if (username) {
         queryParams.append("username", username);
       }
-      // If neither userId nor username is provided, the API uses the authenticated user
-      // Only add query params if they exist
+      
       if (queryParams.toString()) {
         url += `?${queryParams.toString()}`;
       }
@@ -116,26 +116,33 @@ export default function ContributionStats({ userId, username }: ContributionStat
         </div>
       ) : contribution ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-sky-50 p-4 rounded-lg border border-sky-100">
+              <div className="text-sm text-sky-800">GitHub Platform Points</div>
+              <div className="text-2xl font-bold text-sky-700">
+                {(contribution.metrics.githubRepoPoints || 0).toFixed(2)}
+              </div>
+              <p className="text-xs text-sky-600">From commits to the main repo</p>
+            </div>
+             <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+              <div className="text-sm text-purple-800">Peer Review Points</div>
+              <div className="text-2xl font-bold text-purple-700">
+                {(contribution.metrics.peerReviewPoints || 0).toFixed(2)}
+              </div>
+              <p className="text-xs text-purple-600">From merged PR reviews</p>
+            </div>
+          </div>
+
+           <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
               <div className="text-sm text-emerald-800">Other Category Points</div>
               <div className="text-2xl font-bold text-emerald-700">
                 {(contribution.metrics.totalPoints || 0).toFixed(2)}
               </div>
-              <p className="text-xs text-emerald-600">Used for 50% of win chance</p>
+              <p className="text-xs text-emerald-600">From all other contributions</p>
             </div>
-            <div className="bg-sky-50 p-4 rounded-lg border border-sky-100">
-              <div className="text-sm text-sky-800">GitHub Platform Points</div>
-              <div className="text-2xl font-bold text-sky-700">
-                {/* THIS IS THE FIX: Provide a fallback if githubRepoPoints is undefined/null */}
-                {(typeof contribution.metrics.githubRepoPoints === 'number' ? contribution.metrics.githubRepoPoints.toFixed(2) : '0.00')}
-              </div>
-              <p className="text-xs text-sky-600">Used for 50% of win chance</p>
-            </div>
-          </div>
           
           <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="font-medium text-gray-700 mb-3">Contribution Breakdown (Other Categories)</h4>
+            <h4 className="font-medium text-gray-700 mb-3">Breakdown (Other Categories)</h4>
             <div className="space-y-3">
                <div className="grid grid-cols-2 gap-2">
                 <div className="text-sm text-gray-600">Game Publications:</div>

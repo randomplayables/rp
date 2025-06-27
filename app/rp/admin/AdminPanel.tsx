@@ -312,7 +312,6 @@ export default function AdminPanel() {
           {activeTab === 'settings' && config && (
             <form onSubmit={handleSaveConfig} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 space-y-6">
               <h2 className="text-xl font-medium text-gray-900 mb-6">System Configuration</h2>
-              <p className="text-sm text-gray-600">Note: The 50% (GitHub Repo) / 50% (Other Contributions) probability split is hardcoded in the payout engine. The weights below for 'Other Contributions' define their relative importance within that 50% bucket.</p>
               
               <div>
                 <label htmlFor="totalPool" className="block text-sm font-medium text-gray-700">Total Pool Size ($)</label>
@@ -323,25 +322,40 @@ export default function AdminPanel() {
                 <input type="number" name="batchSize" value={config.batchSize} onChange={handleConfigChange} className={inputClass} />
               </div>
 
-              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">Weights for "Other Contributions" (50% Bucket)</h3>
+              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">Top-Level Contribution Weights</h3>
+              <p className="text-sm text-gray-600">These three weights determine the overall importance of each main category. They should sum to 1.0 for a 100% distribution.</p>
                 <div>
-                  <label htmlFor="weights.gamePublicationWeight" className="block text-sm font-medium text-gray-700">Game Publication Weight (e.g., 0.25 for 25%)</label>
+                  <label htmlFor="topLevelWeights.githubPlatformWeight" className="block text-sm font-medium text-gray-700">GitHub Platform Weight (e.g., 0.4 for 40%)</label>
+                  <input type="number" step="0.01" name="topLevelWeights.githubPlatformWeight" value={config.topLevelWeights?.githubPlatformWeight || 0} onChange={handleConfigChange} className={inputClass} />
+                </div>
+                <div>
+                  <label htmlFor="topLevelWeights.peerReviewWeight" className="block text-sm font-medium text-gray-700">Peer Review Weight (e.g., 0.4 for 40%)</label>
+                  <input type="number" step="0.01" name="topLevelWeights.peerReviewWeight" value={config.topLevelWeights?.peerReviewWeight || 0} onChange={handleConfigChange} className={inputClass} />
+                </div>
+                <div>
+                  <label htmlFor="topLevelWeights.otherContributionsWeight" className="block text-sm font-medium text-gray-700">Other Contributions Weight (e.g., 0.2 for 20%)</label>
+                  <input type="number" step="0.01" name="topLevelWeights.otherContributionsWeight" value={config.topLevelWeights?.otherContributionsWeight || 0} onChange={handleConfigChange} className={inputClass} />
+                </div>
+
+              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">Sub-Weights for "Other Contributions" Bucket</h3>
+                <div>
+                  <label htmlFor="weights.gamePublicationWeight" className="block text-sm font-medium text-gray-700">Game Publication Weight</label>
                   <input type="number" step="0.01" name="weights.gamePublicationWeight" value={config.weights.gamePublicationWeight || 0} onChange={handleConfigChange} className={inputClass} />
                 </div>
                 <div>
-                  <label htmlFor="weights.communityWeight" className="block text-sm font-medium text-gray-700">Community Weight (e.g., 0.15 for 15%)</label>
+                  <label htmlFor="weights.communityWeight" className="block text-sm font-medium text-gray-700">Community Weight (Stack Q&A)</label>
                   <input type="number" step="0.01" name="weights.communityWeight" value={config.weights.communityWeight} onChange={handleConfigChange} className={inputClass} />
                 </div>
                 <div>
-                  <label htmlFor="weights.codeWeight" className="block text-sm font-medium text-gray-700">Code Weight (Sketches) (e.g., 0.05 for 5%)</label>
+                  <label htmlFor="weights.codeWeight" className="block text-sm font-medium text-gray-700">Code Weight (Sketches)</label>
                   <input type="number" step="0.01" name="weights.codeWeight" value={config.weights.codeWeight} onChange={handleConfigChange} className={inputClass} />
                 </div>
                 <div>
-                  <label htmlFor="weights.contentWeight" className="block text-sm font-medium text-gray-700">Content Weight (Viz, Instruments) (e.g., 0.05 for 5%)</label>
+                  <label htmlFor="weights.contentWeight" className="block text-sm font-medium text-gray-700">Content Weight (Viz, Instruments)</label>
                   <input type="number" step="0.01" name="weights.contentWeight" value={config.weights.contentWeight} onChange={handleConfigChange} className={inputClass} />
                 </div>
               
-              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">GitHub Repository Contributions (50% Bucket)</h3>
+              <h3 className="text-md font-medium text-gray-700 pt-4 border-t">GitHub Repository Settings</h3>
               <div>
                 <label htmlFor="githubRepoDetails.owner" className="block text-sm font-medium text-gray-700">Repo Owner</label>
                 <input type="text" name="githubRepoDetails.owner" value={config.githubRepoDetails?.owner || ''} onChange={handleConfigChange} className={inputClass} />

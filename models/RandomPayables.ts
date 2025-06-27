@@ -15,11 +15,16 @@ export interface ContributionMetrics {
 export interface IPayoutConfigBase {
   totalPool: number;
   batchSize: number;
+  topLevelWeights: { // ADDED
+    githubPlatformWeight: number;
+    peerReviewWeight: number;
+    otherContributionsWeight: number;
+  };
   weights: {
     codeWeight: number;
     contentWeight: number;
     communityWeight: number;
-    gamePublicationWeight: number; // ADDED
+    gamePublicationWeight: number;
   };
   githubRepoDetails: {
     toObject?(): { owner: string; repo: string; pointsPerCommit: number; pointsPerLineChanged: number; } | undefined;
@@ -97,11 +102,16 @@ const PayoutRecordSchema = new mongoose.Schema({
 const PayoutConfigSchemaDefinition = {
   totalPool: { type: Number, default: 0 },
   batchSize: { type: Number, default: 100 },
+  topLevelWeights: { // ADDED
+    githubPlatformWeight: { type: Number, default: 0.4 },
+    peerReviewWeight: { type: Number, default: 0.4 },
+    otherContributionsWeight: { type: Number, default: 0.2 },
+  },
   weights: {
-    gamePublicationWeight: { type: Number, default: 0.25 }, // ADDED & UPDATED
-    communityWeight: { type: Number, default: 0.15 }, // UPDATED
-    codeWeight: { type: Number, default: 0.05 }, // UPDATED
-    contentWeight: { type: Number, default: 0.05 }, // UPDATED
+    gamePublicationWeight: { type: Number, default: 0.25 },
+    communityWeight: { type: Number, default: 0.15 },
+    codeWeight: { type: Number, default: 0.05 },
+    contentWeight: { type: Number, default: 0.05 },
   },
   githubRepoDetails: {
     owner: { type: String, default: "randomplayables" },

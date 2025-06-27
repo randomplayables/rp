@@ -10,12 +10,18 @@ import {
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 
-// Default weights for "other" contribution types (applied within the 50% bucket)
+// Default weights for "other" contribution types (applied within the otherContributionsWeight bucket)
 const DEFAULT_OTHER_WEIGHTS = {
-  gamePublicationWeight: 0.25, // ADDED
+  gamePublicationWeight: 0.25,
   communityWeight: 0.15,
   codeWeight: 0.05,
   contentWeight: 0.05,
+};
+
+const DEFAULT_TOP_LEVEL_WEIGHTS = {
+  githubPlatformWeight: 0.4,
+  peerReviewWeight: 0.4,
+  otherContributionsWeight: 0.2,
 };
 
 /**
@@ -33,59 +39,74 @@ export function calculateOtherCategoryPoints(metrics: ContributionMetrics, other
 
 /**
  * Update all user probabilities.
- * This recalculates final win probabilities based on the 50/50 split.
+ * This recalculates final win probabilities based on the three main categories.
  */
 export async function updateAllProbabilities(): Promise<void> {
   const config = await PayoutConfigModel.findOne().lean();
   const otherWeights = config?.weights || DEFAULT_OTHER_WEIGHTS;
+  const topLevelWeights = config?.topLevelWeights || DEFAULT_TOP_LEVEL_WEIGHTS;
 
   const users = await UserContributionModel.find();
   if (users.length === 0) return;
 
   let totalGlobalGitHubRepoPoints = 0;
+  let totalGlobalPeerReviewPoints = 0;
   let totalGlobalOtherCategoryPoints = 0;
 
-  // First pass: Calculate OtherCategoryPoints for each user and sum up global totals
+  // First pass: Calculate OtherCategoryPoints for each user and sum up global totals for all three categories
   for (const user of users) {
     const otherCategoryPoints = calculateOtherCategoryPoints(user.metrics, otherWeights);
-    // Store this intermediate calculation in user.metrics.totalPoints for transparency/debugging
-    // This field now represents Points_OtherCategory
-    user.metrics.totalPoints = otherCategoryPoints;
+    user.metrics.totalPoints = otherCategoryPoints; // This field now represents Points_OtherCategory
 
     totalGlobalGitHubRepoPoints += user.metrics.githubRepoPoints || 0;
+    totalGlobalPeerReviewPoints += user.metrics.peerReviewPoints || 0;
     totalGlobalOtherCategoryPoints += otherCategoryPoints;
+  }
+
+  // Dynamic Weight Redistribution
+  let dynamicWeights = { ...topLevelWeights };
+  let totalActiveWeight = 0;
+
+  if (totalGlobalGitHubRepoPoints > 0) {
+    totalActiveWeight += topLevelWeights.githubPlatformWeight;
+  } else {
+    dynamicWeights.githubPlatformWeight = 0;
+  }
+
+  if (totalGlobalPeerReviewPoints > 0) {
+    totalActiveWeight += topLevelWeights.peerReviewWeight;
+  } else {
+    dynamicWeights.peerReviewWeight = 0;
+  }
+
+  if (totalGlobalOtherCategoryPoints > 0) {
+    totalActiveWeight += topLevelWeights.otherContributionsWeight;
+  } else {
+    dynamicWeights.otherContributionsWeight = 0;
+  }
+
+  if (totalActiveWeight > 0) {
+    dynamicWeights.githubPlatformWeight /= totalActiveWeight;
+    dynamicWeights.peerReviewWeight /= totalActiveWeight;
+    dynamicWeights.otherContributionsWeight /= totalActiveWeight;
   }
 
   // Second pass: Calculate final win probability for each user and save
   const updates = users.map(user => {
-    let probFromGitHub = 0;
-    if (totalGlobalGitHubRepoPoints > 0 && (user.metrics.githubRepoPoints || 0) > 0) {
-      probFromGitHub = (user.metrics.githubRepoPoints || 0) / totalGlobalGitHubRepoPoints;
-    }
-
-    let probFromOther = 0;
-    if (totalGlobalOtherCategoryPoints > 0 && user.metrics.totalPoints > 0) {
-      probFromOther = user.metrics.totalPoints / totalGlobalOtherCategoryPoints;
-    }
+    let probFromGitHub = totalGlobalGitHubRepoPoints > 0 ? (user.metrics.githubRepoPoints || 0) / totalGlobalGitHubRepoPoints : 0;
+    let probFromPeerReview = totalGlobalPeerReviewPoints > 0 ? (user.metrics.peerReviewPoints || 0) / totalGlobalPeerReviewPoints : 0;
+    let probFromOther = totalGlobalOtherCategoryPoints > 0 ? (user.metrics.totalPoints || 0) / totalGlobalOtherCategoryPoints : 0;
 
     let finalWinProbability: number;
 
-    // Determine effective weights for combining probabilities
-    const ghHasContributions = totalGlobalGitHubRepoPoints > 0;
-    const otherHasContributions = totalGlobalOtherCategoryPoints > 0;
-
-    if (ghHasContributions && otherHasContributions) {
-      finalWinProbability = (0.5 * probFromGitHub) + (0.5 * probFromOther);
-    } else if (ghHasContributions) { // Only GitHub contributions exist in the system
-      finalWinProbability = probFromGitHub;
-    } else if (otherHasContributions) { // Only "other" contributions exist
-      finalWinProbability = probFromOther;
-    } else { // No contributions of any kind, or only one user with no points
-      finalWinProbability = users.length > 0 ? 1 / users.length : 0;
+    if (totalActiveWeight > 0) {
+        finalWinProbability = 
+            (probFromGitHub * dynamicWeights.githubPlatformWeight) +
+            (probFromPeerReview * dynamicWeights.peerReviewWeight) +
+            (probFromOther * dynamicWeights.otherContributionsWeight);
+    } else {
+        finalWinProbability = users.length > 0 ? 1 / users.length : 0;
     }
-    
-    // Ensure the sum of probabilities doesn't exceed 1 due to this combined approach
-    // This is naturally handled if individual probFromGitHub and probFromOther are correct.
 
     return UserContributionModel.updateOne(
       { _id: user._id },
@@ -100,7 +121,7 @@ export async function updateAllProbabilities(): Promise<void> {
   });
 
   await Promise.all(updates);
-  console.log("All user win probabilities updated with 50/50 split logic.");
+  console.log("All user win probabilities updated with 3-category dynamic split logic.");
 }
 
 
@@ -291,10 +312,5 @@ function weightedRandomSelection(weights: number[]): number {
     }
     random -= (weights[i] || 0);
   }
-  // Fallback, should ideally not be reached if totalWeight > 0
-  // Can happen with floating point inaccuracies if random is extremely close to totalWeight
-  // Or if weights array has issues.
-  // For safety, return the last index if it's a valid scenario, or -1 if something is wrong.
-  // Consider logging an anomaly if this path is hit frequently.
   return weights.length > 0 ? weights.length -1 : -1;
 }
