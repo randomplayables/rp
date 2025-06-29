@@ -120,3 +120,19 @@ export async function performAiReviewCycle(
     chatbot1RevisionResponse,
   };
 }
+
+/**
+ * Calls the OpenAI-compatible embedding API (OpenRouter).
+ * @param modelName The name of the embedding model to use.
+ * @param texts The array of strings to embed.
+ * @returns The API response.
+ */
+export async function callOpenAIEmbeddings(
+  modelName: string,
+  texts: string[]
+) {
+  return openAI.embeddings.create({
+    model: modelName,
+    input: texts,
+  });
+}
