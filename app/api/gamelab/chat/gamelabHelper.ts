@@ -320,3 +320,35 @@ export async function fetchGameCodeExamplesForQuery(query: string) {
 export async function fetchGeneralGameLabContext() {
   return {};
 }
+
+export async function fetchMainGameExample(gameName: string): Promise<string | null> {
+    console.log(`[GameLab Helper] INFO: Attempting to fetch main game example for: "${gameName}"`);
+    try {
+      await connectToMainDatabase();
+      console.log("[GameLab Helper] INFO: Connected to MongoDB for fetching game example.");
+  
+      const game = await GameModel.findOne({ name: gameName }).lean();
+      if (!game) {
+        console.warn(`[GameLab Helper] WARNING: Game "${gameName}" not found in Games collection.`);
+        return null;
+      }
+  
+      if (!game.gameId) {
+        console.warn(`[GameLab Helper] WARNING: Game "${gameName}" has no gameId, skipping codebase fetch.`);
+        return null;
+      }
+  
+      const codebase = await CodeBaseModel.findOne({ gameId: game.gameId }).lean();
+      if (!codebase) {
+        console.warn(`[GameLab Helper] WARNING: No codebase found for gameId: ${game.gameId} (${gameName})`);
+        return null;
+      }
+      
+      console.log(`[GameLab Helper] SUCCESS: Found codebase for game "${gameName}".`);
+      return codebase.codeContent;
+  
+    } catch (error) {
+      console.error(`[GameLab Helper] ERROR: Error fetching main game example for "${gameName}":`, error);
+      return null;
+    }
+}

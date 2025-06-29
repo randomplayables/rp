@@ -12,7 +12,8 @@ import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
 import {
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT,
   BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
-  BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS
 } from "./prompts";
 import { SandpackProvider, useSandpack, SandpackFiles, SandpackCodeEditor, SandpackPreview } from "@codesandbox/sandpack-react";
 import { CodeBlock } from './components/CodeBlock';
@@ -156,17 +157,14 @@ function GamelabWorkspace() {
     const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // State for the single-file Vanilla JS sandbox 
     const [originalCode, setOriginalCode] = useState<string>("");
     const [sandboxCode, setSandboxCode] = useState<string>("");
     const [currentTab, setCurrentTab] = useState<'code' | 'sandbox'>('code');
     const [codeError, setCodeError] = useState<string | null>(null);
     
-    // MODIFIED: State to handle multiple files
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [sandpackTestData, setSandpackTestData] = useState<any[]>([]);
-
 
     const suggestedPrompts = {
       tsx: [
@@ -178,19 +176,18 @@ function GamelabWorkspace() {
           "Create a simple clicker game with Vanilla JS",
           "Make a Vanilla JS game where a circle avoids the mouse cursor",
           "Build a basic 'Whack-a-Mole' game using plain JavaScript and CSS",
+      ],
+      rpts: [
+        "Create a game like GothamLoops but with a different scoring mechanic",
+        "Generate a complete project structure for a grid-based puzzle game",
+        "Build a game that uses the apiService to save player moves each turn"
       ]
     };
 
-    /**
-     * Cleans the files from the Sandpack instance before upload.
-     * It removes any known misplaced root files if a correct version exists in /src.
-     * It also handles duplicate index.html files, prioritizing /public/index.html.
-     */
     const prepareTsxFilesForUpload = (originalFiles: SandpackFiles): SandpackFiles => {
         const cleanedFiles: SandpackFiles = { ...originalFiles };
         const misplacedRootFiles = ['/App.tsx', '/styles.css', '/index.tsx'];
 
-        // Original bug fix: Remove duplicated source files from root
         misplacedRootFiles.forEach(misplacedPath => {
             if (cleanedFiles[misplacedPath] && cleanedFiles[`/src${misplacedPath}`]) {
                 console.warn(`Removing duplicate, misplaced root file before upload: ${misplacedPath}`);
@@ -198,12 +195,10 @@ function GamelabWorkspace() {
             }
         });
 
-        // New fix: Handle duplicate index.html files
         if (cleanedFiles['/index.html'] && cleanedFiles['/public/index.html']) {
             console.warn("Found both /index.html and /public/index.html. Removing the root /index.html.");
             delete cleanedFiles['/index.html'];
         } 
-        // If only the root one exists, move it to public/ to enforce correct structure
         else if (cleanedFiles['/index.html'] && !cleanedFiles['/public/index.html']) {
             console.warn("Found /index.html but not /public/index.html. Moving it to the public directory.");
             cleanedFiles['/public/index.html'] = cleanedFiles['/index.html'];
@@ -226,19 +221,18 @@ function GamelabWorkspace() {
     
             setCodeError(null);
     
-            if (data.language === 'tsx') {
-                setSandpackTestData([]); // Clear previous test data
+            if (data.language === 'tsx' || data.language === 'rpts') {
+                setSandpackTestData([]); 
                 let filesToUpdate: SandpackFiles = {};
                 if (data.files && Object.keys(data.files).length > 0) {
                     filesToUpdate = { ...data.files };
                 } else if (data.originalCode) {
                     filesToUpdate['/src/App.tsx'] = { code: data.originalCode };
                 } else {
-                    return; // Nothing to update
+                    return;
                 }
     
                 try {
-                    // 1. Create a game entry
                     const gameRes = await fetch('/api/gamelab/sandbox', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -247,7 +241,6 @@ function GamelabWorkspace() {
                     const gameData = await gameRes.json();
                     if (!gameData.success) throw new Error("Failed to create sandbox game entry.");
     
-                    // 2. Create a session for that game
                     const sessionRes = await fetch('/api/gamelab/sandbox', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -259,7 +252,6 @@ function GamelabWorkspace() {
                     const newSessionId = sessionData.session.sessionId;
                     const gameIdForScript = gameData.game.gameId;
     
-                    // 3. Prepare communication script as a new file
                     const communicationScript = `
                         window.GAMELAB_SESSION_ID = "${newSessionId || 'pending'}";
                         window.GAMELAB_GAME_ID = "${gameIdForScript || 'pending'}";
@@ -294,7 +286,6 @@ function GamelabWorkspace() {
                     `;
                     filesToUpdate['/src/communication.js'] = { code: communicationScript, hidden: true };
 
-                    // 4. Modify entry file to import the new communication script
                     const entryFilePath = '/src/index.tsx';
                     const existingEntryFile = filesToUpdate[entryFilePath];
                     let originalEntryFileCode: string;
@@ -304,20 +295,16 @@ function GamelabWorkspace() {
                     } else if (existingEntryFile && typeof existingEntryFile.code === 'string') {
                         originalEntryFileCode = existingEntryFile.code;
                     } else {
-                        // The default file is an object with a code property
                         originalEntryFileCode = (defaultFiles[entryFilePath] as { code: string }).code;
                     }
                     
                     const modifiedEntryFileCode = `import './communication.js';\n${originalEntryFileCode}`;
                     filesToUpdate[entryFilePath] = { code: modifiedEntryFileCode, hidden: true };
-
     
-                    // Ensure other default files are present
                     if (!filesToUpdate['/index.html']) filesToUpdate['/index.html'] = defaultFiles['/index.html'];
                     if (!filesToUpdate['/src/styles.css']) filesToUpdate['/src/styles.css'] = defaultFiles['/src/styles.css'];
                     if (!filesToUpdate['/package.json']) filesToUpdate['/package.json'] = defaultFiles['/package.json'];
     
-                    // 5. Update Sandpack files
                     Object.entries(filesToUpdate).forEach(([path, fileOrCode]) => {
                         if (typeof fileOrCode === 'string') {
                             updateFile(path, fileOrCode, false);
@@ -388,6 +375,8 @@ function GamelabWorkspace() {
     useEffect(() => {
         if (language === 'javascript') {
           setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
+        } else if (language === 'rpts') {
+            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS);
         } else {
           setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
         }
@@ -429,7 +418,7 @@ function GamelabWorkspace() {
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === 'GAMELAB_DATA') {
                 if (event.data.source === 'GameSandbox') {
-                    return; // Ignore messages explicitly from the vanilla JS sandbox
+                    return; 
                 }
 
                 console.log('Received data from Sandpack preview:', event.data.payload);
@@ -495,7 +484,6 @@ function GamelabWorkspace() {
       if (selectedCoderModel) formData.append('selectedCoderModelId', selectedCoderModel);
       if (selectedReviewerModel) formData.append('selectedReviewerModelId', selectedReviewerModel);
       
-      // MODIFIED: Append all attached files
       if (attachedFiles.length > 0) {
         attachedFiles.forEach(file => {
           formData.append('assets', file);
@@ -505,12 +493,10 @@ function GamelabWorkspace() {
       chatMutation.mutate(formData);
 
       setInputMessage("");
-      // MODIFIED: Clear the attached files array
       setAttachedFiles([]);
       if(fileInputRef.current) fileInputRef.current.value = "";
     };
 
-    // MODIFIED: Handle multiple file selection
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         if (event.target.files) {
             setAttachedFiles(Array.from(event.target.files));
@@ -520,6 +506,8 @@ function GamelabWorkspace() {
     const handleResetCoderSystemPrompt = () => {
         if (language === 'javascript') {
           setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
+        } else if (language === 'rpts') {
+            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS);
         } else {
           setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
         }
@@ -615,7 +603,7 @@ function GamelabWorkspace() {
                             onChange={handleFileChange}
                             className="hidden"
                             disabled={isPending}
-                            multiple // MODIFIED: Allow multiple file selection
+                            multiple
                         />
                         {attachedFiles.length > 0 && (
                             <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -636,12 +624,12 @@ function GamelabWorkspace() {
                       </div>
                       <div>
                           <label className="block text-xs font-medium text-gray-600">Language</label>
-                          <div className="mt-1 flex w-full rounded-md shadow-sm">
+                          <div className="mt-1 grid grid-cols-3 rounded-md shadow-sm">
                               <button
                                   type="button"
                                   onClick={() => setLanguage('tsx')}
                                   disabled={isPending}
-                                  className={`relative inline-flex items-center justify-center w-1/2 rounded-l-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'tsx' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                  className={`relative inline-flex items-center justify-center rounded-l-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'tsx' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                               >
                                   React/TSX
                               </button>
@@ -649,9 +637,17 @@ function GamelabWorkspace() {
                                   type="button"
                                   onClick={() => setLanguage('javascript')}
                                   disabled={isPending}
-                                  className={`relative -ml-px inline-flex items-center justify-center w-1/2 rounded-r-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'javascript' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                  className={`relative -ml-px inline-flex items-center justify-center border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'javascript' ? 'bg-emerald-500 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                               >
                                   Vanilla JS
+                              </button>
+                              <button
+                                  type="button"
+                                  onClick={() => setLanguage('rpts')}
+                                  disabled={isPending}
+                                  className={`relative -ml-px inline-flex items-center justify-center rounded-r-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'rpts' ? 'bg-indigo-600 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                              >
+                                  RPTS
                               </button>
                           </div>
                       </div>
@@ -732,34 +728,43 @@ function GamelabWorkspace() {
                       Game Lab
                     </h2>
                     <div className="flex items-center space-x-2">
-                        {language === 'tsx' 
-                            ? <><SaveSketchButton files={tsxFilesForUpload} /><GitHubUploadButton files={tsxFilesForUpload} /></>
-                            : <><SaveSketchButton files={getJsFilesForUpload()} /><GitHubUploadButton files={getJsFilesForUpload()} /></>
-                        }
+                        {language === 'rpts' ? (
+                            <GitHubUploadButton files={tsxFilesForUpload} />
+                        ) : language === 'tsx' ? (
+                            <><SaveSketchButton files={tsxFilesForUpload} /><GitHubUploadButton files={tsxFilesForUpload} /></>
+                        ) : (
+                            <><SaveSketchButton files={getJsFilesForUpload()} /><GitHubUploadButton files={getJsFilesForUpload()} /></>
+                        )}
                     </div>
                 </div>
 
                 <div className="flex flex-col flex-grow min-h-0">
-                    <div className="mb-4 border-b border-gray-200 flex-shrink-0">
-                        <ul className="flex flex-wrap -mb-px">
-                            <li className="mr-2">
-                                <button 
-                                    className={`inline-block p-4 ${currentTab === 'code' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                                    onClick={() => setCurrentTab('code')}>
-                                    Code Editor
-                                </button>
-                            </li>
-                            <li className="mr-2">
-                                <button 
-                                    className={`inline-block p-4 ${currentTab === 'sandbox' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                                    onClick={() => setCurrentTab('sandbox')}>
-                                    Game Preview
-                                </button>
-                            </li>
-                        </ul>
-                    </div>
+                    {language !== 'rpts' && (
+                        <div className="mb-4 border-b border-gray-200 flex-shrink-0">
+                            <ul className="flex flex-wrap -mb-px">
+                                <li className="mr-2">
+                                    <button 
+                                        className={`inline-block p-4 ${currentTab === 'code' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                                        onClick={() => setCurrentTab('code')}>
+                                        Code Editor
+                                    </button>
+                                </li>
+                                <li className="mr-2">
+                                    <button 
+                                        className={`inline-block p-4 ${currentTab === 'sandbox' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                                        onClick={() => setCurrentTab('sandbox')}>
+                                        Game Preview
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    )}
                     <div className="rounded-lg flex flex-col flex-grow min-h-0 relative">
-                        {language === 'tsx' ? (
+                        {language === 'rpts' ? (
+                            <div style={{ display: 'flex', height: '100%', overflow: 'auto' }}>
+                                <SandpackCodeEditor showTabs closableTabs style={{flex: 1}}/>
+                            </div>
+                        ) : language === 'tsx' ? (
                             <>
                                 <div style={{ display: currentTab === 'code' ? 'flex' : 'none', height: '100%', overflow: 'auto' }}>
                                     <SandpackCodeEditor showTabs closableTabs />

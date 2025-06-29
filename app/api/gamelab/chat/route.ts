@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { resolveModelsForChat, incrementApiUsage, IncrementApiUsageParams } from "@/lib/modelSelection";
-import { getTemplateStructure, fetchGameCodeExamplesForQuery } from "./gamelabHelper";
+import { getTemplateStructure, fetchGameCodeExamplesForQuery, fetchMainGameExample } from "./gamelabHelper";
 import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
 import { 
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT, 
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
-  BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT 
+  BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS
 } from "@/app/gamelab/prompts";
 
 function sanitizeCodeForBrowser(code: string, language: string): string {
@@ -50,7 +51,7 @@ function extractGameLabCodeFromResponse(
     let message_text = aiResponseContent;
   
     // TSX: Multi-file logic
-    if (languageHint === 'tsx') {
+    if (languageHint === 'tsx' || languageHint === 'rpts') {
       const files: Record<string, string> = {};
       const codeBlockRegex = /```\w*:(\/[\S]+)\n([\s\S]*?)```/g;
       let match;
@@ -65,7 +66,7 @@ function extractGameLabCodeFromResponse(
       if (Object.keys(files).length > 0) {
         return {
           files,
-          language: 'tsx',
+          language: languageHint,
           message_text: message_text || "Multi-file code generated successfully."
         };
       }
@@ -141,27 +142,36 @@ export async function POST(request: NextRequest) {
     const profile = await prisma.profile.findUnique({ where: { userId: clerkUser.id }, select: { subscriptionActive: true, subscriptionTier: true } });
     const isSubscribed = !!profile?.subscriptionActive;
     
-    const templateStructure = getTemplateStructure();
-    const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery);
-    const gameCodeExamplesString = Object.keys(querySpecificGameCodeExamples).length > 0 
-        ? `Context from existing game code: ${JSON.stringify(querySpecificGameCodeExamples, null, 2)}`
-        : "No specific game code examples found.";
-    const templateStructuresString = JSON.stringify(templateStructure, null, 2);
+    let coderSystemPromptToUse: string;
 
-    let baseCoderPrompt;
-    if (language === 'javascript') {
-        baseCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS;
+    if (language === 'rpts') {
+        const gameExampleContent = await fetchMainGameExample('GothamLoops');
+        let baseCoderPrompt = coderSystemPrompt && coderSystemPrompt.trim() !== "" ? coderSystemPrompt : BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS;
+        coderSystemPromptToUse = baseCoderPrompt
+            .replace('%%GAMELAB_MAIN_GAME_EXAMPLE%%', gameExampleContent || '/* No game example found. */')
+            .replace('%%GAMELAB_ASSET_CONTEXT%%', assetContext);
     } else {
-        baseCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT;
+        const templateStructure = getTemplateStructure();
+        const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery);
+        const gameCodeExamplesString = Object.keys(querySpecificGameCodeExamples).length > 0 
+            ? `Context from existing game code: ${JSON.stringify(querySpecificGameCodeExamples, null, 2)}`
+            : "No specific game code examples found.";
+        const templateStructuresString = JSON.stringify(templateStructure, null, 2);
+
+        let baseCoderPrompt;
+        if (language === 'javascript') {
+            baseCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS;
+        } else {
+            baseCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT;
+        }
+        
+        coderSystemPromptToUse = (coderSystemPrompt && coderSystemPrompt.trim() !== "") ? coderSystemPrompt : baseCoderPrompt;
+
+        coderSystemPromptToUse = coderSystemPromptToUse
+            .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
+            .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString)
+            .replace('%%GAMELAB_ASSET_CONTEXT%%', assetContext);
     }
-    
-    let coderSystemPromptToUse = (coderSystemPrompt && coderSystemPrompt.trim() !== "") ? coderSystemPrompt : baseCoderPrompt;
-
-    coderSystemPromptToUse = coderSystemPromptToUse
-        .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
-        .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', gameCodeExamplesString)
-        .replace('%%GAMELAB_ASSET_CONTEXT%%', assetContext);
-
 
     let finalAiResponseContent: string | null = null;
     const initialUserMessages: ChatCompletionMessageParam[] = [...(chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })) as ChatCompletionMessageParam[]), { role: "user", content: userQuery }];
@@ -193,7 +203,6 @@ export async function POST(request: NextRequest) {
       finalAiResponseContent = response.choices[0].message.content;
     }
     
-    // Inject the real Data URIs if assets were attached
     if (assetDataPlaceholders.length > 0 && finalAiResponseContent) {
         for (const { placeholder, dataUri } of assetDataPlaceholders) {
             finalAiResponseContent = finalAiResponseContent.replace(`"${placeholder}"`, `"${dataUri}"`);
@@ -213,11 +222,11 @@ export async function POST(request: NextRequest) {
         limitReached?: boolean;
       };
 
-    if (language === 'tsx' && extractionResult.files && Object.keys(extractionResult.files).length > 0) {
+    if ((language === 'tsx' || language === 'rpts') && extractionResult.files && Object.keys(extractionResult.files).length > 0) {
         finalApiResponse = {
           message: extractionResult.message_text,
           files: extractionResult.files,
-          language: 'tsx',
+          language: language,
         };
     } else {
         const originalCode = extractionResult.code || '';
