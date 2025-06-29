@@ -731,9 +731,9 @@ function GamelabWorkspace() {
                         {language === 'rpts' ? (
                             <GitHubUploadButton files={tsxFilesForUpload} />
                         ) : language === 'tsx' ? (
-                            <><SaveSketchButton files={tsxFilesForUpload} /><GitHubUploadButton files={tsxFilesForUpload} /></>
+                            <SaveSketchButton files={tsxFilesForUpload} />
                         ) : (
-                            <><SaveSketchButton files={getJsFilesForUpload()} /><GitHubUploadButton files={getJsFilesForUpload()} /></>
+                            <SaveSketchButton files={getJsFilesForUpload()} />
                         )}
                     </div>
                 </div>
