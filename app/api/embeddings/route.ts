@@ -5,12 +5,11 @@ import { isModelFree } from "@/lib/modelConfig";
 import { incrementApiUsage, IncrementApiUsageParams } from "@/lib/modelSelection";
 import { prisma } from "@/lib/prisma";
 
-// A simple model resolver for embeddings. Could be expanded later.
+// A simple model resolver for embeddings.
 const getEmbeddingModelForUser = (isSubscribed: boolean): string => {
   // This function can be expanded to use different models based on subscription.
-  // For now, we use the model from the original emojiphone game for consistency.
-  // OpenRouter can proxy this OpenAI model.
-  return "text-embedding-ada-002";
+  // Using OpenAI's newer, standard embedding model.
+  return "text-embedding-3-small";
 };
 
 // Helper function to get monthly limit based on tier

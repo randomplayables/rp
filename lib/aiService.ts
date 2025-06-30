@@ -5,8 +5,8 @@ import {
   ChatCompletionSystemMessageParam
 } from "openai/resources/chat/completions";
 
-// Initialize OpenAI client for OpenRouter
-const openAI = new OpenAI({
+// Client for OpenRouter (for chat completions)
+const openRouterAI = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
   defaultHeaders: {
@@ -14,6 +14,12 @@ const openAI = new OpenAI({
     "X-Title": "randomplayables",
   },
 });
+
+// NEW: Client specifically for native OpenAI API (for embeddings)
+const nativeOpenAI = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY, // Assumes you have OPENAI_API_KEY in your .env.local
+});
+
 
 /**
  * Calls the OpenAI-compatible chat API (OpenRouter).
@@ -48,7 +54,8 @@ export async function callOpenAIChat(
     return msg;
   });
 
-  return openAI.chat.completions.create({
+  // This function continues to use the OpenRouter client
+  return openRouterAI.chat.completions.create({
     model: modelName,
     messages: messagesForApi as any, // Cast to any if OpenAI types cause issues with specific structures
     temperature: 0.7,
@@ -122,7 +129,7 @@ export async function performAiReviewCycle(
 }
 
 /**
- * Calls the OpenAI-compatible embedding API (OpenRouter).
+ * Calls the NATIVE OPENAI embedding API.
  * @param modelName The name of the embedding model to use.
  * @param texts The array of strings to embed.
  * @returns The API response.
@@ -131,7 +138,8 @@ export async function callOpenAIEmbeddings(
   modelName: string,
   texts: string[]
 ) {
-  return openAI.embeddings.create({
+  // This function now uses the native OpenAI client
+  return nativeOpenAI.embeddings.create({
     model: modelName,
     input: texts,
   });

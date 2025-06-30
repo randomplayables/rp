@@ -32,22 +32,23 @@ const isAdminRoute = createRouteMatcher([
   "/api/rp/execute(.*)" // Assuming this is an admin-only endpoint
 ])
 
+// Define credentialed API routes that need specific CORS handling
+const isCredentialedApiRoute = createRouteMatcher([
+  '/api/game-session(.*)',
+  '/api/game-data(.*)',
+  '/api/embeddings(.*)'
+]);
+
+
 // Apply CORS headers to all responses
 function applyCorsHeaders(response: NextResponse, request: Request) {
   const origin = request.headers.get('origin');
   
-  // For game API endpoints, allow specific origins
-  if (request.url.includes('/api/game-')) {
-    
-    // If the origin is in our allowed list, set it specifically
-    if (origin && allowedOrigins.includes(origin)) {
-      response.headers.set('Access-Control-Allow-Origin', origin);
-    } else {
-      // For other origins, use a wildcard (but credentials won't work)
-      response.headers.set('Access-Control-Allow-Origin', '*');
-    }
+  // If the origin is in our allowed list, set it specifically
+  if (origin && allowedOrigins.includes(origin)) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
   } else {
-    // For non-game API endpoints, use a wildcard
+    // For other origins, use a wildcard
     response.headers.set('Access-Control-Allow-Origin', '*');
   }
   
@@ -88,8 +89,8 @@ export default clerkMiddleware(async (auth, req) => {
     return applyCorsHeaders(response, req);
   }
 
-  // Apply CORS to game API endpoints
-  if (pathname.startsWith('/api/game-')) {
+  // Apply specific CORS headers for credentialed API routes
+  if (isCredentialedApiRoute(req)) {
     const response = NextResponse.next();
     return applyCorsHeaders(response, req);
   }
