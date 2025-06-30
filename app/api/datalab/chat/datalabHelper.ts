@@ -13,6 +13,8 @@ import UserInstrumentModel from "@/models/UserInstrument";
 import UserSketchModel from "@/models/UserSketch";
 import UserVisualizationModel from "@/models/UserVisualization";
 import { SketchGameModel, SketchGameSessionModel, SketchGameDataModel } from "@/models/SketchData";
+import PeerReviewModel from "@/models/PeerReview";
+import CodeBaseModel from "@/models/CodeBase";
 
 // --- Sandbox Model Schemas ---
 const SandboxGameSchemaInternal = new mongoose.Schema({
@@ -86,7 +88,9 @@ export const DATA_TYPES = {
   CONTRIBUTIONS: "Contributions",
   CONTENT: "Content",
   SANDBOX: "Sandbox",
-  SKETCH: "Sketch Data"
+  SKETCH: "Sketch Data",
+  PEER_REVIEWS: "Peer Reviews",
+  CODEBASES: "Codebases",
 };
 
 export async function fetchRelevantData(
@@ -184,6 +188,14 @@ export async function fetchRelevantData(
     dataContext.sketchGameData = await SketchGameDataModel.find({}).sort({ timestamp: -1 }).limit(500).lean();
   }
   
+  if (effectiveDataTypes.includes(DATA_TYPES.PEER_REVIEWS)) {
+    dataContext.peerReviews = await PeerReviewModel.find().sort({ mergedAt: -1 }).limit(200).lean();
+  }
+
+  if (effectiveDataTypes.includes(DATA_TYPES.CODEBASES)) {
+    dataContext.codebases = await CodeBaseModel.find().sort({ lastUpdated: -1 }).limit(100).lean();
+  }
+
   if (userId && (query.toLowerCase().includes('user') || query.toLowerCase().includes('player'))) {
     dataContext.userProfile = await prisma.profile.findUnique({ where: { userId } });
   }
