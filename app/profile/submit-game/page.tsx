@@ -37,6 +37,7 @@ interface GameSubmissionData {
   submissionType: 'initial' | 'update';
   targetGameId?: string;
   previousVersion?: string;
+  usesAiModels: boolean;
 }
 
 interface SubmissionSuccessData {
@@ -85,6 +86,7 @@ export default function SubmitGamePage() {
   const [version, setVersion] = useState('');
   const [codeUrl, setCodeUrl] = useState('');
   const [irlInstructions, setIrlInstructions] = useState<IrlInstruction[]>([{ title: '', url: '' }]);
+  const [usesAiModels, setUsesAiModels] = useState(false);
   
   // UI/Flow State
   const [submissionSuccessData, setSubmissionSuccessData] = useState<SubmissionSuccessData | null>(null);
@@ -131,6 +133,7 @@ export default function SubmitGamePage() {
     setCodeUrl('');
     setIrlInstructions([{ title: '', url: '' }]);
     setSelectedGameForUpdate(null);
+    setUsesAiModels(false);
   };
   
   const handleModeChange = (mode: 'initial' | 'update') => {
@@ -184,6 +187,7 @@ export default function SubmitGamePage() {
         submissionType: submissionMode,
         targetGameId: selectedGameForUpdate?.gameId,
         previousVersion: selectedGameForUpdate?.version,
+        usesAiModels,
     };
     mutation.mutate(payload);
   };
@@ -313,6 +317,20 @@ export default function SubmitGamePage() {
             <button type="button" onClick={addInstruction} className="text-sm text-emerald-600 hover:text-emerald-700"> + Add Another Instruction </button>
           </div>
           
+          <div className="flex items-center">
+              <input
+                  type="checkbox"
+                  id="usesAiModels"
+                  name="usesAiModels"
+                  checked={usesAiModels}
+                  onChange={(e) => setUsesAiModels(e.target.checked)}
+                  className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+              />
+              <label htmlFor="usesAiModels" className="ml-2 block text-sm text-gray-900">
+                  This game uses AI models that may consume a player's API credits.
+              </label>
+          </div>
+
           <div className="flex justify-end pt-4 border-t">
             <button type="submit" disabled={mutation.isPending} className="px-6 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 flex items-center">
               {mutation.isPending && <Spinner className="w-4 h-4 mr-2" />}

@@ -18,6 +18,20 @@ const GameSchema = new mongoose.Schema({
   irlInstructions: [IRLInstructionSchema],
   codeUrl: String,
   authorUsername: String,
+  aiUsageDetails: {
+    type: {
+      modelType: {
+        type: String, // e.g., 'embedding', 'chat', 'image-gen'
+        required: true
+      },
+      isPaid: {
+        type: Boolean, // Does this feature require a paid plan?
+        required: true,
+        default: false
+      }
+    },
+    required: false
+  }
 });
 
 const GameModel: Model<IGame & Document> =

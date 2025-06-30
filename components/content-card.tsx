@@ -19,9 +19,13 @@ interface Props {
   codeUrl?: string;
   authorUsername?: string;
   description?: string;
+  aiUsageDetails?: {
+    modelType: string;
+    isPaid: boolean;
+  };
 }
 
-const ContentCard = ({ gameId, image, name, year, link, irlInstructions, codeUrl, authorUsername, description }: Props) => {
+const ContentCard = ({ gameId, image, name, year, link, irlInstructions, codeUrl, authorUsername, description, aiUsageDetails }: Props) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDescriptionVisible, setIsDescriptionVisible] = useState(false); // New state for description
   const { user, isSignedIn } = useUser();
@@ -29,6 +33,35 @@ const ContentCard = ({ gameId, image, name, year, link, irlInstructions, codeUrl
 
   const getGameLink = async (e: React.MouseEvent) => {
     e.preventDefault();
+    
+    // AI Usage and Subscription Checks
+    if (aiUsageDetails) {
+      if (aiUsageDetails.isPaid) {
+        if (!isSignedIn) {
+          alert('This is a premium AI game and requires an active subscription. Please sign in to play.');
+          return;
+        }
+        try {
+          const subCheckResponse = await fetch(`/api/check-subscription?userId=${user.id}`);
+          const subData = await subCheckResponse.json();
+          if (!subData.subscriptionActive) {
+            alert('This game requires an active subscription to play.');
+            return;
+          }
+        } catch (error) {
+          console.error("Subscription check failed:", error);
+          alert('Could not verify your subscription status. Please try again later.');
+          return;
+        }
+      }
+      
+      const confirmed = window.confirm('This game uses AI models and may consume your monthly API credits. Do you want to continue?');
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Proceed with existing logic if checks pass
     const userId = user?.id;
     const username = user?.username;
     console.log("Opening game link with auth. User ID:", userId, "Username:", username);

@@ -28,6 +28,7 @@ interface GameSubmission {
     submittedAt: string;
     reviewerNotes?: string;
     submissionType?: 'initial' | 'update';
+    usesAiModels?: boolean;
 }
 
 // Fetcher functions
@@ -53,7 +54,7 @@ const updateSubmissionStatus = async ({ id, status }: { id: string, status: 'app
     return response.json();
 };
 
-const promoteToGame = async (payload: { submissionId: string }) => {
+const promoteToGame = async (payload: any) => {
     const response = await fetch('/api/admin/games', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,20 +90,16 @@ export default function GameAdminPage() {
             queryClient.invalidateQueries({ queryKey: ['gameSubmissions'] });
             if (data.submission?.status === 'approved') {
                 setSelectedSubmission(data.submission);
-                // For updates, the modal is simpler. For initial, it requires a gameId.
-                // We will only open the modal for 'initial' submissions to enter the gameId.
-                // Updates are promoted directly.
-                if (data.submission.submissionType !== 'update') {
-                    setFormData({
-                        // Pre-fill with a suggestion for gameId if possible
-                        gameId: data.submission.name.toLowerCase().replace(/\s+/g, '-'),
-                        link: '', 
-                    });
-                    setIsModalOpen(true);
-                } else {
-                    // Directly promote updates without needing modal input
-                    promotionMutation.mutate({ submissionId: data.submission._id });
-                }
+                // Always open the modal on approval to handle AI details for both new and update submissions
+                setFormData({
+                    gameId: data.submission.submissionType === 'update' 
+                        ? data.submission.targetGameId 
+                        : data.submission.name.toLowerCase().replace(/\s+/g, '-'),
+                    link: '', 
+                    modelType: '',
+                    isPaid: false,
+                });
+                setIsModalOpen(true);
             }
         },
     });
@@ -121,25 +118,31 @@ export default function GameAdminPage() {
     });
 
     const handleFormChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-        setFormData((prev: any) => ({ ...prev, [name]: value }));
+        const { name, value, type } = e.target;
+        const isCheckbox = type === 'checkbox';
+        
+        setFormData((prev: any) => ({
+             ...prev, 
+             [name]: isCheckbox ? (e.target as HTMLInputElement).checked : value 
+        }));
     };
 
     const handleFormSubmit = (e: FormEvent) => {
         e.preventDefault();
         if (!selectedSubmission) return;
 
-        // For initial submissions, we still need the gameId from the modal.
-        // We will pass it along with the submissionId.
         if (selectedSubmission.submissionType !== 'update' && !formData.gameId) {
             setFormError("Game ID is a required field for initial submissions.");
             return;
         }
         setFormError(null);
+        // Pass all data; backend will know whether it's an update or initial promotion
         promotionMutation.mutate({ 
             submissionId: selectedSubmission._id,
-            // Pass modal-specific data only when needed
-            ...(selectedSubmission.submissionType !== 'update' && { gameId: formData.gameId, link: formData.link })
+            gameId: formData.gameId, 
+            link: formData.link,
+            modelType: formData.modelType,
+            isPaid: formData.isPaid,
         });
     };
 
@@ -159,6 +162,7 @@ export default function GameAdminPage() {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Game Name</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Author</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uses AI</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Peer Review Ready</th>
@@ -175,6 +179,7 @@ export default function GameAdminPage() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sub.name}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.authorUsername}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">{sub.usesAiModels ? '✔️' : '❌'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(sub.submittedAt).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sub.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : sub.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{sub.status}</span></td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-center">{sub.isPeerReviewEnabled ? '✅' : '❌'}</td>
@@ -221,14 +226,32 @@ export default function GameAdminPage() {
                         <form onSubmit={handleFormSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Game ID *</label>
-                                <input name="gameId" value={formData.gameId} onChange={handleFormChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500" required />
-                                <p className="text-xs text-gray-500 mt-1">Unique identifier for the game (e.g., 'gotham-loops'). Cannot be changed.</p>
+                                <input name="gameId" value={formData.gameId} onChange={handleFormChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500" required readOnly={selectedSubmission.submissionType === 'update'} />
+                                <p className="text-xs text-gray-500 mt-1">Unique identifier for the game. Cannot be changed for updates.</p>
                             </div>
-                             <div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700">Playable Link</label>
                                 <input name="link" value={formData.link} onChange={handleFormChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" placeholder="URL to the live game"/>
                             </div>
                             
+                            {selectedSubmission.usesAiModels && (
+                                <div className="p-4 bg-emerald-50 border-l-4 border-emerald-400">
+                                    <h3 className="font-medium text-gray-800">AI Usage Details</h3>
+                                    <p className="text-sm text-gray-600 mb-2">Developer has indicated this game uses AI. Please configure the details.</p>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">AI Model Type</label>
+                                        <input name="modelType" value={formData.modelType} onChange={handleFormChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" placeholder="e.g., embedding, chat" />
+                                        <p className="text-xs text-gray-500 mt-1">Short identifier for the type of AI used.</p>
+                                    </div>
+                                    <div className="mt-2">
+                                        <label className="flex items-center">
+                                            <input type="checkbox" name="isPaid" checked={formData.isPaid} onChange={handleFormChange} className="mr-2"/>
+                                            <span className="text-sm font-medium text-gray-700">Is this a premium (paid) AI feature?</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
                             {formError && <p className="text-red-500 text-sm">{formError}</p>}
                             <div className="flex justify-end space-x-4 pt-4">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Cancel</button>

@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { submissionId, gameId, link } = body;
+        const { submissionId, gameId, link, modelType, isPaid } = body;
 
         if (!submissionId) {
             return NextResponse.json({ error: "Missing required field: submissionId is required." }, { status: 400 });
@@ -54,6 +54,17 @@ export async function POST(request: NextRequest) {
             gameToUpdate.version = submission.version;
             gameToUpdate.irlInstructions = submission.irlInstructions;
 
+            // Handle AI usage details for updates
+            if (submission.usesAiModels && modelType) {
+                gameToUpdate.aiUsageDetails = {
+                    modelType: modelType,
+                    isPaid: isPaid || false
+                };
+            } else {
+                // If the "uses AI" box was unchecked or no model type provided, remove the details
+                gameToUpdate.aiUsageDetails = undefined;
+            }
+
             await gameToUpdate.save();
 
             if (authorProfile) {
@@ -64,9 +75,6 @@ export async function POST(request: NextRequest) {
                 );
                 console.log(`Awarded GAME_UPDATE points to ${authorUsername}`);
             }
-
-            // The submission status is already 'approved', so we just leave it.
-            // DO NOT DELETE: await GameSubmissionModel.findByIdAndDelete(submissionId);
 
             return NextResponse.json({ success: true, game: gameToUpdate }, { status: 200 });
 
@@ -79,7 +87,7 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ error: `Game with gameId '${gameId}' already exists.` }, { status: 409 });
             }
 
-            const newGame = await GameModel.create({
+            const newGameData: any = {
                 gameId: gameId,
                 link: link,
                 name: submission.name,
@@ -90,7 +98,16 @@ export async function POST(request: NextRequest) {
                 codeUrl: submission.codeUrl,
                 irlInstructions: submission.irlInstructions,
                 authorUsername: submission.authorUsername
-            });
+            };
+
+            if (submission.usesAiModels && modelType) {
+                newGameData.aiUsageDetails = {
+                    modelType: modelType,
+                    isPaid: isPaid || false
+                };
+            }
+
+            const newGame = await GameModel.create(newGameData);
 
             if (authorProfile) {
                 await incrementUserContribution(
@@ -100,9 +117,6 @@ export async function POST(request: NextRequest) {
                 );
                 console.log(`Awarded GAME_PUBLICATION points to ${authorUsername}`);
             }
-
-            // The submission status is already 'approved', so we just leave it.
-            // DO NOT DELETE: await GameSubmissionModel.findByIdAndDelete(submissionId);
 
             return NextResponse.json({ success: true, game: newGame }, { status: 201 });
         }

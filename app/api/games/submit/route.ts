@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
       irlInstructions,
       submissionType,
       targetGameId,
-      previousVersion
+      previousVersion,
+      usesAiModels
     } = body;
 
     if (!name || !year || !image || !version || !codeUrl) {
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
       submissionType,
       targetGameId,
       previousVersion,
+      usesAiModels,
       // Set the flag based on our check for updates, otherwise it defaults to false for initial submissions.
       isPeerReviewEnabled: isPeerReviewEnabledForUpdate, 
     });

@@ -9,4 +9,8 @@ export interface IGame {
   irlInstructions?: { title: string; url: string }[];
   codeUrl?: string;
   authorUsername?: string;
+  aiUsageDetails?: {
+    modelType: string;
+    isPaid: boolean;
+  };
 }

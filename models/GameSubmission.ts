@@ -19,6 +19,7 @@ interface IGameSubmission extends Document {
   submissionType: 'initial' | 'update';
   targetGameId?: string; // gameId of the game being updated
   previousVersion?: string;
+  usesAiModels: boolean;
 }
 
 const GameSubmissionSchema = new Schema({
@@ -56,6 +57,7 @@ const GameSubmissionSchema = new Schema({
   previousVersion: {
     type: String,
   },
+  usesAiModels: { type: Boolean, default: false },
 });
 
 // Create index for easier querying by status or user
