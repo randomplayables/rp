@@ -108,10 +108,10 @@ This project and everyone participating in it is governed by the [Contributor Co
 
 ## License
 
-Distributed under the MIT License. See `LICENSE.txt` for more information.
+Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Contact
 
-[randomplayables@proton.me]
+randomplayables@proton.me
 
 Project Link: [https://github.com/randomplayables/rp](https://github.com/randomplayables/rp)
