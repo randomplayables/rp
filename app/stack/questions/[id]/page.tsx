@@ -325,18 +325,17 @@ export default function QuestionPage() {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      code({ node, inline, className, children, ...props }) {
+                      code({ node, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || '');
-                        if (inline) {
-                          return <code className={className} {...props}>{children}</code>;
-                        }
                         return match ? (
                           <CodeBlock
                             code={String(children).replace(/\n$/, '')}
                             language={match[1]}
                           />
                         ) : (
-                          <code className={className} {...props}>{children}</code>
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
                         );
                       }
                     }}
