@@ -1,3 +1,22 @@
+// export interface IGame {
+//   gameId: string;
+//   image: string;
+//   name: string;
+//   year: number;
+//   link: string;
+//   description?: string; // Added this line
+//   version?: string;
+//   irlInstructions?: { title: string; url: string }[];
+//   codeUrl?: string;
+//   authorUsername?: string;
+//   aiUsageDetails?: {
+//     modelType: string;
+//     isPaid: boolean;
+//   };
+// }
+
+
+
 export interface IGame {
   gameId: string;
   image: string;
@@ -9,6 +28,7 @@ export interface IGame {
   irlInstructions?: { title: string; url: string }[];
   codeUrl?: string;
   authorUsername?: string;
+  tags?: string[];
   aiUsageDetails?: {
     modelType: string;
     isPaid: boolean;
