@@ -49,44 +49,51 @@ function extractGameLabCodeFromResponse(
     }
   
     let message_text = aiResponseContent;
+    const files: Record<string, string> = {};
+    const codeBlockRegex = /```\w*:(\/[\S]+)\n([\s\S]*?)```/g;
+    let match;
   
-    // TSX: Multi-file logic
-    if (languageHint === 'tsx' || languageHint === 'rpts') {
-      const files: Record<string, string> = {};
-      const codeBlockRegex = /```\w*:(\/[\S]+)\n([\s\S]*?)```/g;
-      let match;
-  
-      while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) {
-        const filePath = match[1].trim();
-        const codeContent = match[2].trim();
-        files[filePath] = codeContent;
-        message_text = message_text.replace(match[0], "").trim();
-      }
-  
-      if (Object.keys(files).length > 0) {
-        return {
-          files,
-          language: languageHint,
-          message_text: message_text || "Multi-file code generated successfully."
-        };
-      }
+    // Multi-file parsing for tsx and rpts
+    while ((match = codeBlockRegex.exec(aiResponseContent)) !== null) {
+      const filePath = match[1].trim();
+      const codeContent = match[2].trim();
+      files[filePath] = codeContent;
+      message_text = message_text.replace(match[0], "").trim();
     }
-  
-    // JS (and fallback for TSX if no multi-file format found): Single-file logic
+
+    if (Object.keys(files).length > 0) {
+      return {
+        files,
+        language: languageHint,
+        message_text: message_text || "Multi-file code generated successfully."
+      };
+    }
+
+    // If language is RPTS and we found no multi-file blocks, it's an error in generation.
+    // Return empty files object so the frontend can handle it gracefully.
+    if (languageHint === 'rpts') {
+        return {
+            files: {},
+            language: languageHint,
+            message_text: message_text || "The AI did not return the expected multi-file format. Please try rephrasing your request."
+        };
+    }
+
+    // Fallback to single-file parsing ONLY for non-rpts languages (i.e., tsx sketches)
     const singleFileRegex = /```(javascript|js|tsx|jsx|react)?\n([\s\S]*?)```/;
-    const match = aiResponseContent.match(singleFileRegex);
+    const singleMatch = aiResponseContent.match(singleFileRegex);
   
-    if (match && match[2]) {
-      const code = match[2].trim();
-      message_text = aiResponseContent.replace(match[0], "").trim();
+    if (singleMatch && singleMatch[2]) {
+      const code = singleMatch[2].trim();
+      message_text = aiResponseContent.replace(singleMatch[0], "").trim();
       return {
         code,
         language: languageHint,
         message_text: message_text || "Code generated."
       };
     }
-  
-    // If no specific code block is found, but it looks like code, return it all
+
+    // Handle JS without code blocks
     if (languageHint === 'javascript' && !aiResponseContent.includes("```")) {
       return { code: aiResponseContent, language: 'javascript', message_text: "Generated JavaScript code." };
     }
@@ -145,7 +152,7 @@ export async function POST(request: NextRequest) {
     let coderSystemPromptToUse: string;
 
     if (language === 'rpts') {
-        const gameExampleContent = await fetchMainGameExample('GothamLoops');
+        const gameExampleContent = await fetchMainGameExample();
         let baseCoderPrompt = coderSystemPrompt && coderSystemPrompt.trim() !== "" ? coderSystemPrompt : BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS;
         coderSystemPromptToUse = baseCoderPrompt
             .replace('%%GAMELAB_MAIN_GAME_EXAMPLE%%', gameExampleContent || '/* No game example found. */')

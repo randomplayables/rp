@@ -75,38 +75,28 @@ export default function RandomPayablesPage() {
                 <div className="bg-white shadow-sm rounded-lg p-6 border border-gray-200">
                   <h3 className="text-xl font-semibold mb-4">About Random Payables</h3>
                   
-                  <div className="prose max-w-none">
+                  <div className="prose max-w-none space-y-4">
                     <p>
-                      Random Payables is a way for RandomPlayables to distribute a portion of its profits back to the 
-                      community of contributors who help make the platform possible.
+                      Random Payables is our method for distributing a portion of platform profits back to the community of contributors who make RandomPlayables possible.
                     </p>
                     
-                    <h4>How it works:</h4>
-                    
-                    <ol>
-                      <li>
-                        <strong>Contribute to the platform:</strong> Create games, develop code, and participate in 
-                        discussions.
-                      </li>
-                      <li>
-                        <strong>Earn contribution points:</strong> Each type of contribution earns you points, with 
-                        different weights based on the effort involved.
-                      </li>
-                      <li>
-                        <strong>Win payouts probabilistically:</strong> For each dollar in the payout pool, winners are 
-                        selected randomly, with probabilities proportional to contribution points.
-                      </li>
-                    </ol>
-                    
-                    <p>
-                      Your probability of winning is directly related to your contribution level compared to all other 
-                      contributors. The more you contribute, the higher your chance of winning payouts.
-                    </p>
-                    
-                    <p>
-                      Payouts are distributed on a regular schedule, and you can check your current probability of 
-                      winning at any time.
-                    </p>
+                    <div>
+                      <h4 className="font-semibold">How It Works</h4>
+                      <ul className="list-disc pl-5 space-y-2 mt-2">
+                        <li>
+                          <strong>Contribute:</strong> Help the platform grow by developing the codebase, peer-reviewing games, creating your own games and content, and participating in community discussions.
+                        </li>
+                        <li>
+                          <strong>Earn Points:</strong> Every contribution you make earns you points. Different types of contributions are assigned different point values, or 'weights', based on the platform's needs.
+                        </li>
+                        <li>
+                          <strong>Win Payouts:</strong> For each dollar in the payout pool, a winner is randomly selected. Your chance of winning is proportional to your contribution points relative to all other contributors. The more you contribute, the higher your odds.
+                        </li>
+                        <li>
+                          <strong>Get Paid:</strong> Payouts are distributed on Fridays. To receive payouts, you must connect a Stripe account via your profile page. You can check your current win probability at any time. The weights for different contributions will evolve over time.
+                        </li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -123,63 +113,59 @@ export default function RandomPayablesPage() {
           {/* Contribution Tab */}
           {activeTab === 'contribute' && (
             <div className="bg-white shadow-sm rounded-lg p-6 border border-gray-200">
-              <h3 className="text-xl font-semibold mb-4">How to Increase Your Win Probability</h3>
-              
               <div className="prose max-w-none">
-                <p>
-                  Your probability of winning in Random Payables is directly proportional to your contributions to 
-                  the RandomPlayables platform. Here are the ways you can contribute and increase your chances:
-                </p>
-
-                <h4>Game Publications</h4>
-                <p>
-                  Getting a game approved and published on the main RandomPlayables platform is one of the most impactful ways to contribute. This is a highly-weighted activity because it provides significant value to the entire community.
-                </p>
-                <ul>
-                  <li>Submit your game for review through your profile page.</li>
-                  <li>Ensure the game is well-documented, functional, and aligns with the platform's mission.</li>
-                  <li>Creative and engaging games are highly encouraged.</li>
-                </ul>
-                
-                <h4>GitHub Repository Contributions</h4>
-                <p>
-                  Submit code improvements, bug fixes, and new features to the official RandomPlayables platform repository. These contributions are weighted highly in the probability calculations.
-                </p>
-                <ul>
-                  <li>Submit pull requests to the platform repositories.</li>
-                  <li>Fix bugs and implement feature requests.</li>
-                  <li>Improve performance and accessibility.</li>
-                </ul>
-                
-                <h4>Content Creation (Other)</h4>
-                <p>
-                  Create and share games, visualizations, and other content on the platform. Quality content that 
-                  engages other users earns contribution points.
-                </p>
-                <ul>
-                  <li>Create new game sketches in GameLab.</li>
-                  <li>Build data visualizations in DataLab.</li>
-                  <li>Design survey instruments in Collect.</li>
-                </ul>
-                
-                <h4>Community Engagement</h4>
-                <p>
-                  Participate actively in the RandomPlayables community. Help others, answer questions, and 
-                  contribute to discussions.
-                </p>
-                <ul>
-                  <li>Answer questions in the Stack.</li>
-                  <li>Provide feedback on other users' content.</li>
-                  <li>Participate in community events and challenges.</li>
-                </ul>
-                
-                <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100 mt-6">
-                  <h5 className="text-emerald-800 font-medium">Point Distribution</h5>
-                  <p className="text-emerald-700 text-sm">
-                    The exact weighting of different contribution types may be adjusted over time to ensure 
-                    fairness and incentivize valuable contributions. You can see the current point breakdown on the "Overview" tab.
+                  <h3 className="text-xl font-semibold mb-4">How to Contribute</h3>
+                  <p>
+                    Your probability of winning in Random Payables is directly proportional to your contributions. Here are the ways you can contribute and increase your chances, ordered by their current importance:
                   </p>
-                </div>
+                  
+                  <div className="space-y-6 mt-6">
+                    <div>
+                      <h4 className="font-bold text-lg">GitHub Platform & Peer Review Contributions</h4>
+                      <p>Improving the platform's core code and reviewing community games are the most impactful ways to contribute and are heavily weighted.</p>
+                      <ul className="list-disc pl-5 mt-2 space-y-1">
+                          <li><strong>Platform Development:</strong> Submit code improvements, bug fixes, and new features to the official RandomPlayables repository: <a href="https://github.com/randomplayables/rp" target="_blank" rel="noopener noreferrer">https://github.com/randomplayables/rp</a>.</li>
+                          <li><strong>Peer Review:</strong> Contribute to approved community games by submitting pull requests to their code repositories. Merged pull requests count as peer review contributions.</li>
+                      </ul>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-bold text-lg">Game Publications</h4>
+                      <p>Getting a game approved and published on the platform is another highly-weighted activity that provides significant value to the community.</p>
+                      <ul className="list-disc pl-5 mt-2 space-y-1">
+                          <li>Submit your game for review through your profile page.</li>
+                          <li>Ensure the game is well-documented, functional, and aligns with the platform's mission.</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-lg">Content Creation</h4>
+                      <p>Create and share original content on the platform to earn contribution points.</p>
+                      <ul className="list-disc pl-5 mt-2 space-y-1">
+                          <li>Create new game sketches in GameLab.</li>
+                          <li>Build data visualizations in DataLab.</li>
+                          <li>Design survey instruments in Collect.</li>
+                      </ul>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-bold text-lg">Community Engagement</h4>
+                      <p>Actively participating in the community helps other users and contributes to discussions.</p>
+                      <ul className="list-disc pl-5 mt-2 space-y-1">
+                          <li>Answer questions and provide feedback in the Stack.</li>
+                          <li>Participate in community events and challenges.</li>
+                      </ul>
+                    </div>
+
+                  </div>
+                
+                  <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100 mt-8">
+                    <h5 className="text-emerald-800 font-medium">Point Distribution</h5>
+                    <p className="text-emerald-700 text-sm">
+                      The exact weighting of different contribution types may be adjusted over time to ensure 
+                      fairness and incentivize valuable contributions. You can see the current point breakdown on the "Overview" tab.
+                    </p>
+                  </div>
               </div>
             </div>
           )}

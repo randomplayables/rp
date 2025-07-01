@@ -321,34 +321,34 @@ export async function fetchGeneralGameLabContext() {
   return {};
 }
 
-export async function fetchMainGameExample(gameName: string): Promise<string | null> {
-    console.log(`[GameLab Helper] INFO: Attempting to fetch main game example for: "${gameName}"`);
+export async function fetchMainGameExample(): Promise<string | null> {
+    console.log(`[GameLab Helper] INFO: Attempting to fetch main game example for RPTS prompt context.`);
     try {
       await connectToMainDatabase();
       console.log("[GameLab Helper] INFO: Connected to MongoDB for fetching game example.");
   
-      const game = await GameModel.findOne({ name: gameName }).lean();
+      const game = await GameModel.findOne({ gameId: 'gotham-loops' }).lean();
       if (!game) {
-        console.warn(`[GameLab Helper] WARNING: Game "${gameName}" not found in Games collection.`);
+        console.warn(`[GameLab Helper] WARNING: Example game with gameId 'gotham-loops' not found in Games collection.`);
         return null;
       }
   
       if (!game.gameId) {
-        console.warn(`[GameLab Helper] WARNING: Game "${gameName}" has no gameId, skipping codebase fetch.`);
+        console.warn(`[GameLab Helper] WARNING: Game "${game.name}" has no gameId, skipping codebase fetch.`);
         return null;
       }
   
       const codebase = await CodeBaseModel.findOne({ gameId: game.gameId }).lean();
       if (!codebase) {
-        console.warn(`[GameLab Helper] WARNING: No codebase found for gameId: ${game.gameId} (${gameName})`);
+        console.warn(`[GameLab Helper] WARNING: No codebase found for gameId: ${game.gameId} (${game.name})`);
         return null;
       }
       
-      console.log(`[GameLab Helper] SUCCESS: Found codebase for game "${gameName}".`);
+      console.log(`[GameLab Helper] SUCCESS: Found codebase for game "${game.name}".`);
       return codebase.codeContent;
   
     } catch (error) {
-      console.error(`[GameLab Helper] ERROR: Error fetching main game example for "${gameName}":`, error);
+      console.error(`[GameLab Helper] ERROR: Error fetching main game example for "gotham-loops":`, error);
       return null;
     }
 }

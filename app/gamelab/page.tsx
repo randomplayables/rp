@@ -222,7 +222,16 @@ function GamelabWorkspace() {
             setCodeError(null);
     
             if (data.language === 'tsx' || data.language === 'rpts') {
-                setSandpackTestData([]); 
+                if (data.language === 'rpts') {
+                    sandpack.resetAllFiles();
+                }
+                setSandpackTestData([]);
+
+                if (data.language === 'rpts' && (!data.files || Object.keys(data.files).length === 0)) {
+                    setCodeError("The AI failed to generate the required project file structure for an RPTS game. Please try a more specific prompt or a different model.");
+                    return;
+                }
+
                 let filesToUpdate: SandpackFiles = {};
                 if (data.files && Object.keys(data.files).length > 0) {
                     filesToUpdate = { ...data.files };
