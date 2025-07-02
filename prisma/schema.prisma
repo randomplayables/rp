@@ -28,6 +28,9 @@ model Profile {
   userId String @unique
   username String @unique
   email String
+  imageUrl String?
+  aboutMe String?
+  links Json?
   subscriptionActive Boolean @default(false)
   subscriptionTier String?  // "basic", "premium", or "premium_plus"
   stripeSubscriptionId String? @unique
