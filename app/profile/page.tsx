@@ -350,7 +350,10 @@ export default function Profile() {
                             card: "shadow-none border border-gray-200",
                             navbar: "hidden",
                             header: "hidden",
-                            rootBox: "w-full"
+                            rootBox: "w-full",
+                            profileSection__danger: { 
+                                display: "none" 
+                            }
                         }
                     }} />
                 </div>

@@ -47,7 +47,7 @@ interface Sketch {
 }
 
 interface Instrument {
-  _id: string;
+  _id:string;
   title: string;
   description: string;
   surveyId: string;
@@ -69,7 +69,10 @@ interface Game {
 }
 
 export default function UserProfilePage() {
-  const { username } = useParams();
+  const { username: usernameFromParams } = useParams();
+  // Ensure username is always a string for simplicity
+  const username = Array.isArray(usernameFromParams) ? usernameFromParams[0] : usernameFromParams;
+
   const { user: currentUser, isLoaded: isUserLoaded } = useUser();
   
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
@@ -86,6 +89,13 @@ export default function UserProfilePage() {
   const isOwnProfile = isUserLoaded && currentUser?.username === username;
   
   useEffect(() => {
+    // Add a guard clause to prevent fetching on Clerk's internal routes
+    const reservedPaths = ['security'];
+    if (username && reservedPaths.includes(username)) {
+        setLoading(false);
+        return;
+    }
+
     async function fetchProfileAndContent() {
       if (!username) return;
       
@@ -155,11 +165,21 @@ export default function UserProfilePage() {
     }
   };
   
-  if (loading || !profileData) {
+  // --- Simplified and Corrected Render Logic ---
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Spinner />
         <span className="ml-2">Loading profile...</span>
+      </div>
+    );
+  }
+
+  if (!profileData) {
+    // This now correctly handles both non-existent users and the "security" path case.
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500">Profile not found.</p>
       </div>
     );
   }
