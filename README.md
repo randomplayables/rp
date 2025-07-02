@@ -66,6 +66,7 @@ To get a local copy up and running, follow these simple steps.
     # CLERK
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
     CLERK_SECRET_KEY=your_clerk_secret_key
+    CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
 
     # STRIPE
     STRIPE_SECRET_KEY=your_stripe_secret_key
