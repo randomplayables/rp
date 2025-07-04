@@ -8,6 +8,7 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    const { id: submissionId } = params; // Fix: Destructure id from params
     try {
         const clerkUser = await currentUser();
         if (!clerkUser || !isAdmin(clerkUser.id, clerkUser.username)) {
@@ -15,15 +16,14 @@ export async function PUT(
         }
 
         const { status } = await request.json();
-        const submissionId = params.id;
-
+        
         if (!submissionId || !status || !['approved', 'rejected'].includes(status)) {
             return NextResponse.json({ error: "Invalid submission ID or status provided." }, { status: 400 });
         }
 
         await connectToDatabase();
 
-        // Update the status for both 'approved' and 'rejected'
+        // This is now only used for rejections from the admin panel
         const updatedSubmission = await GameSubmissionModel.findByIdAndUpdate(
             submissionId,
             { $set: { status: status } },
@@ -38,7 +38,7 @@ export async function PUT(
         return NextResponse.json({ success: true, submission: updatedSubmission });
         
     } catch (error: any) {
-        console.error(`Error updating submission ${params.id}:`, error);
+        console.error(`Error updating submission ${submissionId}:`, error);
         return NextResponse.json({
             error: "Failed to update submission status",
             details: error.message

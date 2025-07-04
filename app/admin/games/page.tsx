@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
+import { useState, useEffect, FormEvent, ChangeEvent, Fragment } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { isAdmin } from '@/lib/auth';
 import { Spinner } from '@/components/spinner';
+import Link from 'next/link';
 
 interface IrlInstruction {
     title: string;
@@ -30,6 +31,7 @@ interface GameSubmission {
     submissionType?: 'initial' | 'update';
     usesAiModels?: boolean;
     tags?: string[];
+    targetGameId?: string;
 }
 
 // Fetcher functions
@@ -76,6 +78,7 @@ export default function GameAdminPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [formData, setFormData] = useState<any>({});
     const [formError, setFormError] = useState<string | null>(null);
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
     const isUserAdmin = isAdmin(user?.id, user?.username);
 
@@ -84,27 +87,19 @@ export default function GameAdminPage() {
         queryFn: () => fetchSubmissions(statusFilter),
         enabled: isUserAdmin,
     });
-
-    const statusMutation = useMutation({
-        mutationFn: updateSubmissionStatus,
-        onSuccess: (data) => {
+    
+    // Mutation for rejecting a submission
+    const rejectionMutation = useMutation({
+        mutationFn: (id: string) => updateSubmissionStatus({ id, status: 'rejected' }),
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['gameSubmissions'] });
-            if (data.submission?.status === 'approved') {
-                setSelectedSubmission(data.submission);
-                // Always open the modal on approval to handle AI details for both new and update submissions
-                setFormData({
-                    gameId: data.submission.submissionType === 'update' 
-                        ? data.submission.targetGameId 
-                        : data.submission.name.toLowerCase().replace(/\s+/g, '-'),
-                    link: '', 
-                    modelType: '',
-                    isPaid: false,
-                });
-                setIsModalOpen(true);
-            }
         },
+        onError: (e: Error) => {
+            alert(`Failed to reject submission: ${e.message}`);
+        }
     });
 
+    // Mutation for approving and promoting a game
     const promotionMutation = useMutation({
         mutationFn: promoteToGame,
         onSuccess: () => {
@@ -117,6 +112,20 @@ export default function GameAdminPage() {
             setFormError(e.message);
         }
     });
+
+    // Handler to open the promotion modal
+    const handleOpenPromotionModal = (submission: GameSubmission) => {
+        setSelectedSubmission(submission);
+        setFormData({
+            gameId: submission.submissionType === 'update' 
+                ? submission.targetGameId 
+                : submission.name.toLowerCase().replace(/\s+/g, '-'),
+            link: '', 
+            modelType: '',
+            isPaid: false,
+        });
+        setIsModalOpen(true);
+    };
 
     const handleFormChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
@@ -137,7 +146,7 @@ export default function GameAdminPage() {
             return;
         }
         setFormError(null);
-        // Pass all data; backend will know whether it's an update or initial promotion
+        
         promotionMutation.mutate({ 
             submissionId: selectedSubmission._id,
             gameId: formData.gameId, 
@@ -161,6 +170,7 @@ export default function GameAdminPage() {
                 <table className="min-w-full bg-white divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
+                            <th className="px-6 py-3 w-12"></th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Game Name</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Author</th>
@@ -173,29 +183,120 @@ export default function GameAdminPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                         {submissions.map(sub => (
-                            <tr key={sub._id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sub.submissionType === 'update' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                                        {sub.submissionType || 'initial'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sub.name}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.authorUsername}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">{sub.usesAiModels ? '✔️' : '❌'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(sub.submittedAt).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sub.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : sub.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{sub.status}</span></td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">{sub.isPeerReviewEnabled ? '✅' : '❌'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    {sub.status === 'pending' && (
-                                        <div className="flex space-x-2">
-                                            <button onClick={() => statusMutation.mutate({ id: sub._id, status: 'approved' })} className="text-green-600 hover:text-green-900 disabled:opacity-50" disabled={statusMutation.isPending || !sub.isPeerReviewEnabled} title={!sub.isPeerReviewEnabled ? 'Peer review must be enabled first' : ''}>
-                                                {sub.submissionType === 'update' ? 'Approve Update' : 'Approve & Promote'}
-                                            </button>
-                                            <button onClick={() => statusMutation.mutate({ id: sub._id, status: 'rejected' })} className="text-red-600 hover:text-red-900 disabled:opacity-50" disabled={statusMutation.isPending}>Reject</button>
-                                        </div>
-                                    )}
-                                </td>
-                            </tr>
+                           <Fragment key={sub._id}>
+                                <tr>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <button 
+                                            onClick={() => setExpandedRow(expandedRow === sub._id ? null : sub._id)}
+                                            className="text-gray-500 hover:text-gray-700"
+                                            title="Show details"
+                                        >
+                                            <svg className={`w-5 h-5 transition-transform duration-200 ${expandedRow === sub._id ? 'transform rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                        </button>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sub.submissionType === 'update' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                            {sub.submissionType || 'initial'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sub.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.authorUsername}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">{sub.usesAiModels ? '✔️' : '❌'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(sub.submittedAt).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sub.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : sub.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{sub.status}</span></td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">{sub.isPeerReviewEnabled ? '✅' : '❌'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        {sub.status === 'pending' && (
+                                            <div className="flex space-x-2">
+                                                <button onClick={() => handleOpenPromotionModal(sub)} className="text-green-600 hover:text-green-900 disabled:opacity-50" disabled={rejectionMutation.isPending || promotionMutation.isPending || !sub.isPeerReviewEnabled} title={!sub.isPeerReviewEnabled ? 'Peer review must be enabled first' : ''}>
+                                                    {sub.submissionType === 'update' ? 'Approve Update' : 'Approve & Promote'}
+                                                </button>
+                                                <button onClick={() => rejectionMutation.mutate(sub._id)} className="text-red-600 hover:text-red-900 disabled:opacity-50" disabled={rejectionMutation.isPending || promotionMutation.isPending}>Reject</button>
+                                            </div>
+                                        )}
+                                    </td>
+                                </tr>
+                                {expandedRow === sub._id && (
+                                    <tr>
+                                        <td colSpan={9} className="p-0 bg-gray-50">
+                                            <div className="p-6">
+                                                <h3 className="text-lg font-semibold mb-4 text-gray-800">Submission Details</h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
+                                                    {/* Column 1: Core Details */}
+                                                    <div className="md:col-span-2 space-y-4">
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">Description</h4>
+                                                            <p className="text-sm text-gray-900 mt-1 prose prose-sm max-w-none">{sub.description || 'No description provided.'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">Code URL</h4>
+                                                            <a href={sub.codeUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-600 hover:underline break-all">{sub.codeUrl}</a>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">IRL Instructions</h4>
+                                                            {(sub.irlInstructions && sub.irlInstructions.length > 0 && sub.irlInstructions.some(i => i.title && i.url)) ? (
+                                                                <ul className="list-disc list-inside space-y-1 mt-1">
+                                                                    {sub.irlInstructions.map((inst, index) => inst.title && inst.url && (
+                                                                        <li key={index} className="text-sm">
+                                                                            <a href={inst.url} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">{inst.title}</a>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            ) : <p className="text-sm text-gray-900 mt-1">None</p>}
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">Tags</h4>
+                                                            <div className="flex flex-wrap gap-2 mt-1">
+                                                                {sub.tags && sub.tags.length > 0 ? sub.tags.map(tag => (
+                                                                    <span key={tag} className="px-2 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">{tag}</span>
+                                                                )) : <p className="text-sm text-gray-900">No tags provided.</p>}
+                                                            </div>
+                                                        </div>
+                                                        {sub.reviewerNotes && (
+                                                            <div>
+                                                                <h4 className="text-sm font-medium text-gray-500">Reviewer Notes</h4>
+                                                                <p className="text-sm text-gray-900 mt-1 bg-yellow-50 p-2 rounded border border-yellow-200">{sub.reviewerNotes}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Column 2: Metadata & Image */}
+                                                    <div className="space-y-4">
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">Image Preview</h4>
+                                                            <Link href={sub.image} target="_blank" rel="noopener noreferrer">
+                                                                <img src={sub.image} alt={sub.name} className="mt-1 w-full h-auto rounded-lg object-cover border" />
+                                                            </Link>
+                                                        </div>
+                                                        <div className='grid grid-cols-2 gap-4'>
+                                                            <div>
+                                                                <h4 className="text-sm font-medium text-gray-500">Version</h4>
+                                                                <p className="text-sm text-gray-900 font-mono">{sub.version}</p>
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="text-sm font-medium text-gray-500">Year</h4>
+                                                                <p className="text-sm text-gray-900">{sub.year}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">Author Email</h4>
+                                                            <p className="text-sm text-gray-900">{sub.authorEmail}</p>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">Submission ID</h4>
+                                                            <p className="text-sm text-gray-900 font-mono">{sub._id}</p>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-500">Submitter User ID</h4>
+                                                            <p className="text-sm text-gray-900 font-mono">{sub.submittedByUserId}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                           </Fragment>
                         ))}
                     </tbody>
                 </table>

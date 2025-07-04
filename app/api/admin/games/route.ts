@@ -27,6 +27,11 @@ export async function POST(request: NextRequest) {
         if (!submission) {
             return NextResponse.json({ error: "Game submission not found." }, { status: 404 });
         }
+        
+        if (submission.status === 'approved') {
+            console.log(`Submission ${submissionId} is already approved. Proceeding with game logic.`);
+        }
+
 
         const { authorUsername } = submission;
 
@@ -74,6 +79,9 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ error: `Game with targetGameId '${submission.targetGameId}' not found for update.` }, { status: 404 });
             }
 
+            // Atomically update submission status on successful game update
+            await GameSubmissionModel.findByIdAndUpdate(submissionId, { status: 'approved' });
+
             if (authorProfile) {
                 await incrementUserContribution(
                     authorProfile.userId,
@@ -116,6 +124,9 @@ export async function POST(request: NextRequest) {
             }
 
             const newGame = await GameModel.create(newGameData);
+
+            // Atomically update submission status on successful game creation
+            await GameSubmissionModel.findByIdAndUpdate(submissionId, { status: 'approved' });
 
             if (authorProfile) {
                 await incrementUserContribution(
