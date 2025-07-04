@@ -13,7 +13,8 @@ import {
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT,
   BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
-  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
 } from "./prompts";
 import { SandpackProvider, useSandpack, SandpackFiles, SandpackCodeEditor, SandpackPreview } from "@codesandbox/sandpack-react";
 import { CodeBlock } from './components/CodeBlock';
@@ -34,9 +35,14 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+interface RptsFile {
+    path: string;
+    description: string;
+}
+
 interface GameLabApiResponse {
   message: string;
-  files?: Record<string, string>;
+  files?: Record<string, string> | RptsFile[];
   originalCode?: string;
   code?: string;
   language?: string;
@@ -134,7 +140,22 @@ async function sendChatMessageToApi(formData: FormData) {
     method: "POST",
     body: formData
   });
-  return response.json();
+
+  const contentType = response.headers.get("content-type");
+  
+  if (formData.get('generationStep') === 'code' && contentType && contentType.includes("text/plain")) {
+      const text = await response.text();
+      if (!response.ok) {
+          throw new Error(text || "Failed to generate file content.");
+      }
+      return { code: text, language: 'rpts-code' };
+  }
+
+  const data = await response.json();
+  if (!response.ok) {
+      throw new Error(data.error || "An API error occurred.");
+  }
+  return data;
 }
 
 function GamelabWorkspace() {
@@ -165,6 +186,12 @@ function GamelabWorkspace() {
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [sandpackTestData, setSandpackTestData] = useState<any[]>([]);
+
+    const [isGeneratingStructure, setIsGeneratingStructure] = useState(false);
+    const [isGeneratingFiles, setIsGeneratingFiles] = useState(false);
+    const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
+    const [fileStructure, setFileStructure] = useState<RptsFile[] | null>(null);
+    const projectDescriptionRef = useRef("");
 
     const suggestedPrompts = {
       tsx: [
@@ -211,6 +238,18 @@ function GamelabWorkspace() {
     const chatMutation = useMutation<GameLabApiResponse, Error, FormData>({
         mutationFn: (formData) => sendChatMessageToApi(formData),
         onSuccess: async (data: GameLabApiResponse) => {
+            if (data.language === 'rpts' && isGeneratingStructure) {
+                setIsGeneratingStructure(false);
+                if (data.error || !Array.isArray(data.files)) {
+                    setCodeError(data.error || "Failed to generate a valid file structure.");
+                    setMessages(prev => [...prev, { role: 'assistant', content: data.error || "An error occurred.", timestamp: new Date() }]);
+                } else {
+                    setMessages(prev => [...prev, { role: 'assistant', content: "File structure generated. Now generating code for each file...", timestamp: new Date() }]);
+                    setFileStructure(data.files);
+                }
+                return;
+            }
+
             const assistantMessage: ChatMessage = { role: 'assistant', content: data.message, timestamp: new Date() };
             setMessages(prev => [...prev, assistantMessage]);
     
@@ -221,19 +260,19 @@ function GamelabWorkspace() {
     
             setCodeError(null);
     
-            if (data.language === 'tsx' || data.language === 'rpts') {
-                if (data.language === 'rpts') {
+            if (data.language === 'tsx' || language === 'rpts') {
+                if (language === 'rpts') {
                     sandpack.resetAllFiles();
                 }
                 setSandpackTestData([]);
 
-                if (data.language === 'rpts' && (!data.files || Object.keys(data.files).length === 0)) {
+                if (language === 'rpts' && (!data.files || Object.keys(data.files).length === 0)) {
                     setCodeError("The AI failed to generate the required project file structure for an RPTS game. Please try a more specific prompt or a different model.");
                     return;
                 }
 
                 let filesToUpdate: SandpackFiles = {};
-                if (data.files && Object.keys(data.files).length > 0) {
+                if (data.files && Object.keys(data.files).length > 0 && !Array.isArray(data.files)) {
                     filesToUpdate = { ...data.files };
                 } else if (data.originalCode) {
                     filesToUpdate['/src/App.tsx'] = { code: data.originalCode };
@@ -339,9 +378,12 @@ function GamelabWorkspace() {
           },
         onError: (error: Error) => {
           setMessages(prev => [...prev, {role: 'assistant', content: `Error: ${error.message}`, timestamp: new Date()}]);
+          setIsGeneratingStructure(false);
+          setIsGeneratingFiles(false);
+          setCodeError(error.message);
         }
     });
-    const isPending = chatMutation.isPending;
+    const isPending = chatMutation.isPending || isGeneratingStructure || isGeneratingFiles;
 
     const initializeSystemPrompts = useCallback(async () => {
         setIsLoadingSystemPrompts(true);
@@ -385,7 +427,7 @@ function GamelabWorkspace() {
         if (language === 'javascript') {
           setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
         } else if (language === 'rpts') {
-            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS);
+            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE);
         } else {
           setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
         }
@@ -477,6 +519,64 @@ function GamelabWorkspace() {
         return () => window.removeEventListener('message', handleMessage);
     }, []);
 
+    useEffect(() => {
+        const generateAllFiles = async (structure: RptsFile[]) => {
+            setIsGeneratingFiles(true);
+            setGenerationProgress({ current: 0, total: structure.length });
+    
+            sandpack.resetAllFiles();
+            const initialFiles: SandpackFiles = {};
+            structure.forEach(file => {
+                initialFiles[file.path] = { code: `// Generating content for ${file.path}...` };
+            });
+            updateFile(initialFiles);
+            
+            for (let i = 0; i < structure.length; i++) {
+                const file = structure[i];
+                setGenerationProgress(prev => ({ ...prev, current: i + 1 }));
+    
+                let success = false;
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        const formData = new FormData();
+                        formData.append('message', `Generate code for ${file.path}`);
+                        formData.append('chatHistory', '[]');
+                        formData.append('language', 'rpts');
+                        formData.append('generationStep', 'code');
+                        formData.append('projectDescription', projectDescriptionRef.current);
+                        formData.append('fileStructure', JSON.stringify(structure));
+                        formData.append('filePath', file.path);
+                        formData.append('fileDescription', file.description);
+
+                        const response: GameLabApiResponse = await sendChatMessageToApi(formData);
+                        let fileContent = response.code || `// AI failed to return code for ${file.path}`;
+                        updateFile(file.path, fileContent);
+                        success = true;
+                        break; 
+                    } catch (error: any) {
+                        console.error(`[RPTS Generation] Attempt ${attempt} failed for ${file.path}. Full Error:`, error);
+                        if (attempt === 2) {
+                            const errorMessage = `// Error: Failed to generate code for this file after ${attempt} attempts.\n// Please check the browser console for details.`;
+                            updateFile(file.path, errorMessage);
+                        } else {
+                            await new Promise(res => setTimeout(res, 500));
+                        }
+                    }
+                }
+            }
+    
+            setIsGeneratingFiles(false);
+            setFileStructure(null); 
+            projectDescriptionRef.current = "";
+            setActiveFile('/src/App.tsx');
+        };
+    
+        if (language === 'rpts' && fileStructure && !isGeneratingFiles) {
+            generateAllFiles(fileStructure);
+        }
+    }, [fileStructure, language, isGeneratingFiles, sandpack, updateFile, setActiveFile]);
+
+
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if (!inputMessage.trim() || isPending) return;
@@ -499,6 +599,12 @@ function GamelabWorkspace() {
         });
       }
 
+      if (language === 'rpts') {
+        formData.append('generationStep', 'structure');
+        projectDescriptionRef.current = inputMessage;
+        setIsGeneratingStructure(true);
+      }
+
       chatMutation.mutate(formData);
 
       setInputMessage("");
@@ -516,7 +622,7 @@ function GamelabWorkspace() {
         if (language === 'javascript') {
           setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
         } else if (language === 'rpts') {
-            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS);
+            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE);
         } else {
           setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
         }
@@ -556,6 +662,16 @@ function GamelabWorkspace() {
 
     const tsxFilesForUpload = prepareTsxFilesForUpload(files);
 
+    const getLoadingMessage = () => {
+        if (isGeneratingStructure) {
+            return "Generating file structure...";
+        }
+        if (isGeneratingFiles) {
+            return `Generating file ${generationProgress.current} of ${generationProgress.total}...`;
+        }
+        return "Processing...";
+    }
+
     return (
         <div className="w-full max-w-7xl h-full flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
             <div className="w-full md:w-1/3 lg:w-1/3 flex flex-col bg-gray-50">
@@ -589,7 +705,7 @@ function GamelabWorkspace() {
                       </div>
                     </div>
                   ))}
-                  {isPending && <div className="flex justify-start"><div className="bg-white border border-gray-200 p-3 rounded-lg shadow-sm"><Spinner /></div></div>}
+                  {isPending && <div className="flex justify-start"><div className="bg-white border border-gray-200 p-3 rounded-lg shadow-sm flex items-center"><Spinner className="mr-2"/><span>{getLoadingMessage()}</span></div></div>}
                   <div ref={messagesEndRef} />
                 </div>
                 <div className="p-4 border-t bg-white overflow-auto flex-shrink-0">
@@ -650,14 +766,21 @@ function GamelabWorkspace() {
                               >
                                   Vanilla JS
                               </button>
-                              <button
-                                  type="button"
-                                  onClick={() => setLanguage('rpts')}
-                                  disabled={isPending}
-                                  className={`relative -ml-px inline-flex items-center justify-center rounded-r-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'rpts' ? 'bg-indigo-600 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                              >
-                                  RPTS
-                              </button>
+                              <div className="relative group">
+                                <button
+                                    type="button"
+                                    onClick={() => setLanguage('rpts')}
+                                    disabled={isPending}
+                                    className={`relative -ml-px inline-flex items-center justify-center w-full rounded-r-md border border-gray-300 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${language === 'rpts' ? 'bg-indigo-600 text-white z-10' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                >
+                                    RPTS
+                                </button>
+                                {language === 'rpts' && (
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-100 transition-opacity z-20">
+                                        Note: This uses multiple API credits.
+                                    </div>
+                                )}
+                              </div>
                           </div>
                       </div>
                       <div>
@@ -689,7 +812,7 @@ function GamelabWorkspace() {
                       <div className="flex justify-end">
                           <button type="submit" disabled={isPending} className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50">
                           {isPending ? <Spinner className="w-4 h-4 inline mr-1"/> : null}
-                          {isPending ? 'Processing...' : 'Send'}
+                          {isPending ? getLoadingMessage() : 'Send'}
                           </button>
                       </div>
                       <div className="mt-1 border-t pt-2">

@@ -11,7 +11,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check subscription
     const subscriptionCheck = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/check-subscription?userId=${clerkUser.id}`);
     const subscriptionData = await subscriptionCheck.json();
     
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Get GitHub integration
     await connectToDatabase();
     const integration = await GitHubIntegrationModel.findOne({ userId: clerkUser.id });
     
@@ -33,7 +31,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "GitHub not connected. Please connect your GitHub account first." }, { status: 400 });
     }
 
-    // Initialize Octokit with user's access token
     const octokit = new Octokit({
       auth: integration.accessToken,
     });
@@ -43,28 +40,21 @@ export async function POST(request: NextRequest) {
       name: repoName,
       description: gameDescription || `${gameTitle} - Created with RandomPlayables GameLab`,
       private: isPrivate,
-      auto_init: true, // Creates repo with an initial commit and README
+      auto_init: false, // *** FIX: Create a completely empty repository ***
     });
 
     const repo = repoResponse.data;
-    
-    // The files are uploaded exactly as they are. No transformation.
     const finalFilesToUpload = { ...files };
 
-    // --- Asset Transformation Logic has been REMOVED as per the requirements ---
-
-    // Upload files to repository by iterating over the processed files
+    // This loop will now succeed because the repository is empty.
     for (const filePath in finalFilesToUpload) {
       let fileContent = finalFilesToUpload[filePath];
-      // Handle Sandpack file object structure which has a 'code' property
       if(typeof fileContent === 'object' && fileContent.code) {
         fileContent = fileContent.code;
       }
       
-      // Ensure we only process string content
       if(typeof fileContent !== 'string') continue;
 
-      // GitHub requires file paths without a leading slash
       const githubPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
 
       await octokit.rest.repos.createOrUpdateFileContents({
@@ -76,7 +66,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update last used timestamp
     await GitHubIntegrationModel.updateOne(
       { userId: clerkUser.id },
       { lastUsed: new Date() }
@@ -92,7 +81,6 @@ export async function POST(request: NextRequest) {
     console.error("GitHub upload error:", error);
     
     if (error.status === 422) {
-      // This error from Octokit often means the repo already exists.
       return NextResponse.json({ error: "Repository name already exists, is invalid, or another issue occurred with GitHub's validation." }, { status: 400 });
     }
     

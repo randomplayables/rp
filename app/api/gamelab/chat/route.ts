@@ -9,7 +9,8 @@ import {
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT, 
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
   BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
-  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
 } from "@/app/gamelab/prompts";
 
 function sanitizeCodeForBrowser(code: string, language: string): string {
@@ -69,16 +70,6 @@ function extractGameLabCodeFromResponse(
       };
     }
 
-    // If language is RPTS and we found no multi-file blocks, it's an error in generation.
-    // Return empty files object so the frontend can handle it gracefully.
-    if (languageHint === 'rpts') {
-        return {
-            files: {},
-            language: languageHint,
-            message_text: message_text || "The AI did not return the expected multi-file format. Please try rephrasing your request."
-        };
-    }
-
     // Fallback to single-file parsing ONLY for non-rpts languages (i.e., tsx sketches)
     const singleFileRegex = /```(javascript|js|tsx|jsx|react)?\n([\s\S]*?)```/;
     const singleMatch = aiResponseContent.match(singleFileRegex);
@@ -115,6 +106,13 @@ export async function POST(request: NextRequest) {
     const useCodeReview = formData.get('useCodeReview') === 'true';
     const selectedCoderModelId = formData.get('selectedCoderModelId') as string | null;
     const selectedReviewerModelId = formData.get('selectedReviewerModelId') as string | null;
+
+    // New parameters for multi-step RPTS generation
+    const generationStep = formData.get('generationStep') as 'structure' | 'code' | null;
+    const projectDescription = formData.get('projectDescription') as string | null;
+    const fileStructure = formData.get('fileStructure') as string | null;
+    const filePath = formData.get('filePath') as string | null;
+    const fileDescription = formData.get('fileDescription') as string | null;
     
     // Handle multiple assets
     const attachedAssets = formData.getAll('assets') as File[];
@@ -152,11 +150,18 @@ export async function POST(request: NextRequest) {
     let coderSystemPromptToUse: string;
 
     if (language === 'rpts') {
-        const gameExampleContent = await fetchMainGameExample();
-        let baseCoderPrompt = coderSystemPrompt && coderSystemPrompt.trim() !== "" ? coderSystemPrompt : BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS;
-        coderSystemPromptToUse = baseCoderPrompt
-            .replace('%%GAMELAB_MAIN_GAME_EXAMPLE%%', gameExampleContent || '/* No game example found. */')
-            .replace('%%GAMELAB_ASSET_CONTEXT%%', assetContext);
+        if (generationStep === 'structure') {
+            coderSystemPromptToUse = BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE
+                .replace('%%USER_GAME_PROMPT%%', userQuery);
+        } else if (generationStep === 'code') {
+            coderSystemPromptToUse = BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
+                .replace('%%PROJECT_DESCRIPTION%%', projectDescription || 'A new game for RandomPlayables.')
+                .replace('%%FILE_STRUCTURE%%', fileStructure || '[]')
+                .replace('%%FILE_PATH%%', filePath || '')
+                .replace('%%FILE_DESCRIPTION%%', fileDescription || '');
+        } else {
+            return NextResponse.json({ error: "Invalid generation step for RPTS." }, { status: 400 });
+        }
     } else {
         const templateStructure = getTemplateStructure();
         const querySpecificGameCodeExamples = await fetchGameCodeExamplesForQuery(userQuery);
@@ -205,7 +210,9 @@ export async function POST(request: NextRequest) {
     } else {
       if (!modelResolution.chatbot1Model) return NextResponse.json({ error: "Failed to resolve model." }, { status: 500 });
       const modelToUse = modelResolution.chatbot1Model;
-      const messagesToAI: ChatCompletionMessageParam[] = [coderSystemMessage, ...initialUserMessages];
+      const messagesToAI: ChatCompletionMessageParam[] = language === 'rpts'
+        ? [coderSystemMessage]
+        : [coderSystemMessage, ...initialUserMessages];
       const response = await callOpenAIChat(modelToUse, messagesToAI);
       finalAiResponseContent = response.choices[0].message.content;
     }
@@ -216,11 +223,48 @@ export async function POST(request: NextRequest) {
         }
     }
 
+    // *** START: NEW ROBUST HANDLING FOR RPTS ***
+    if (language === 'rpts') {
+        if (generationStep === 'structure') {
+            try {
+                if (!finalAiResponseContent) throw new Error("AI returned an empty response.");
+                // The AI might wrap the JSON in markdown, so we extract it.
+                const jsonMatch = finalAiResponseContent.match(/```json\n([\s\S]*?)\n```/);
+                const jsonString = jsonMatch ? jsonMatch[1] : finalAiResponseContent;
+                const parsed = JSON.parse(jsonString);
+
+                if (!parsed.files || !Array.isArray(parsed.files)) {
+                    throw new Error("Valid JSON was returned, but it is missing the required 'files' array.");
+                }
+                
+                // Success case for structure generation
+                return NextResponse.json({
+                    message: "File structure generated successfully.",
+                    files: parsed.files,
+                    language: 'rpts'
+                });
+
+            } catch (e: any) {
+                console.error("RPTS Structure Generation Error - Invalid JSON:", finalAiResponseContent, e);
+                return NextResponse.json({
+                    error: `The AI returned an invalid format for the file structure. Please try again. Error: ${e.message}`,
+                    message: `The AI returned an invalid format for the file structure. Please try again. Error: ${e.message}`
+                }, { status: 400 });
+            }
+        } else if (generationStep === 'code') {
+            // For individual file generation, return raw code
+            return new Response(finalAiResponseContent || "// AI returned empty content.", {
+                headers: { 'Content-Type': 'text/plain' },
+            });
+        }
+    }
+    // *** END: NEW ROBUST HANDLING FOR RPTS ***
+
     const extractionResult = extractGameLabCodeFromResponse(finalAiResponseContent, language);
     
     let finalApiResponse: {
         message: string;
-        files?: Record<string, string>;
+        files?: Record<string, string> | any[]; // Allow array for structure step
         originalCode?: string;
         code?: string;
         language?: string;
@@ -228,8 +272,8 @@ export async function POST(request: NextRequest) {
         error?: string;
         limitReached?: boolean;
       };
-
-    if ((language === 'tsx' || language === 'rpts') && extractionResult.files && Object.keys(extractionResult.files).length > 0) {
+      
+    if ((language === 'tsx' || language === 'rpts') && extractionResult.files && !Array.isArray(extractionResult.files)) {
         finalApiResponse = {
           message: extractionResult.message_text,
           files: extractionResult.files,

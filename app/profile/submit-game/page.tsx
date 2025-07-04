@@ -47,6 +47,7 @@ interface SubmissionSuccessData {
   gameId: string;
   name: string;
   repoUrl: string;
+  version: string; // Add version here for the success message
 }
 
 async function submitGame(gameData: GameSubmissionData) {
@@ -114,6 +115,7 @@ export default function SubmitGamePage() {
           gameId: data.submission._id, 
           name: data.submission.name,
           repoUrl: data.submission.codeUrl,
+          version: data.submission.version, // Pass version to success data
         });
       }
     },
@@ -159,7 +161,7 @@ export default function SubmitGamePage() {
         setVersion(''); // Clear version for user to enter new one
         setCodeUrl(gameToUpdate.codeUrl);
         setIrlInstructions(gameToUpdate.irlInstructions && gameToUpdate.irlInstructions.length > 0 ? gameToUpdate.irlInstructions : [{ title: '', url: '' }]);
-        setTags(gameToUpdate.tags || []);
+        setTags(gameToUpdate.tags || []); // Populate existing tags
     } else {
         resetForm();
     }
@@ -225,7 +227,12 @@ export default function SubmitGamePage() {
   };
 
   if (!isLoaded || !isSignedIn) {
-    return <div className="flex items-center justify-center min-h-screen"><Spinner /><span className="ml-2">Loading...</span></div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner />
+        <span className="ml-2">Loading...</span>
+      </div>
+    );
   }
 
   if (submissionSuccessData) {
@@ -236,9 +243,11 @@ export default function SubmitGamePage() {
                 <h1 className="text-2xl font-bold text-gray-800 mb-2">Submission Received!</h1>
                 <p className="text-gray-600 mb-6">Your game, "{submissionSuccessData.name}", is now pending review.</p>
                 <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-lg">
-                    <h2 className="text-xl font-bold text-emerald-700 mb-3">Final Step: Enable Peer Review</h2>
+                    <h2 className="text-xl font-bold text-emerald-700 mb-3">Final Step: Enable Peer Review & Version Check</h2>
                     <p className="text-gray-600 mb-4">
-                        To be eligible for inclusion on the platform, you must connect your GitHub repository. This allows other developers to submit peer reviews (pull requests).
+                        To be eligible for inclusion on the platform, you must connect your GitHub repository to enable peer reviews (pull requests).
+                        Additionally, please ensure you have created a release in your GitHub repository for version <strong className="font-bold">{submissionSuccessData.version}</strong>.
+                        The version number you entered on this form **must** match the release tag on GitHub for administrative approval.
                     </p>
                     <button onClick={handleConnectRepo} disabled={isConnectingRepo} className="w-full px-6 py-3 bg-gray-800 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 flex items-center justify-center">
                         {isConnectingRepo && <Spinner className="w-5 h-5 mr-2" />}
@@ -293,7 +302,13 @@ export default function SubmitGamePage() {
           <div>
             <label htmlFor="tags" className="block text-sm font-medium text-gray-700">Tags (Optional)</label>
             <p className="text-xs text-gray-500 mb-2">Add relevant mathematical fields or concepts. Press enter or comma to add a tag.</p>
-            <TagsInput initialTags={tags} onChange={setTags} placeholder="e.g. probability, number theory" />
+            {/* The key prop ensures TagsInput re-initializes when selectedGameForUpdate.gameId changes */}
+            <TagsInput 
+              key={selectedGameForUpdate ? selectedGameForUpdate.gameId : 'new-game'} 
+              initialTags={tags} 
+              onChange={setTags} 
+              placeholder="e.g. probability, number theory" 
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -302,9 +317,12 @@ export default function SubmitGamePage() {
               <input type="number" name="year" id="year" required value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
             </div>
             <div>
-              <label htmlFor="version" className="block text-sm font-medium text-gray-700">New Version</label>
-              <input type="text" name="version" id="version" required placeholder="e.g., 1.1.0" value={version} onChange={(e) => setVersion(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 font-bold" />
-              {submissionMode === 'update' && selectedGameForUpdate && <p className="text-xs text-gray-500 mt-1">Previous version: {selectedGameForUpdate.version}</p>}
+                <label htmlFor="version" className="block text-sm font-medium text-gray-700">
+                    New Version
+                    <span className="ml-1 text-gray-400 cursor-help" title="You must create a corresponding release on GitHub with this exact version number.">ⓘ</span>
+                </label>
+                <input type="text" name="version" id="version" required placeholder="e.g., 1.1.0" value={version} onChange={(e) => setVersion(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 font-bold" />
+                {submissionMode === 'update' && selectedGameForUpdate && <p className="text-xs text-gray-500 mt-1">Previous version: {selectedGameForUpdate.version}</p>}
             </div>
           </div>
           
