@@ -21,6 +21,7 @@ interface DataTypeOption {
 
 const AVAILABLE_DATA_TYPES_UI: DataTypeOption[] = [
   { id: "Game", name: "Game Data", description: "Core game activity (sessions, gameplay, game metadata)." },
+  { id: "Game.pointtransfers", name: "Game Point Transfers", description: "Records of point transfers between users." },
   { id: "Survey", name: "Survey Data", description: "User-created surveys and their responses." },
   { id: "Stack", name: "Stack Data", description: "Questions and answers from the Stack section." },
   { id: "Contributions", name: "Contributions Data", description: "User contribution metrics for Random Payables." },
@@ -210,7 +211,8 @@ export default function DataLabPage() {
     "Create a pie chart showing the distribution of games played",
     "Plot the average scores across different games (ensure Game data type is selected)",
     "Show me user contributions (ensure Contributions data type is selected)",
-    "Visualize public sketches count over time (ensure Content data type is selected)"
+    "Visualize public sketches count over time (ensure Content data type is selected)",
+    "Return the full dataset for recent point transfers as a JSON object"
   ];
 
   const initializeSystemPrompts = useCallback(async () => { // Renamed

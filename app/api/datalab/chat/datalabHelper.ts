@@ -8,7 +8,7 @@ import SurveyModel from "@/models/Survey";
 import SurveyResponseModel from "@/models/SurveyResponse";
 import QuestionModel from "@/models/Question";
 import AnswerModel from "@/models/Answer";
-import { UserContributionModel } from "@/models/RandomPayables";
+import { UserContributionModel, PointTransferModel } from "@/models/RandomPayables";
 import UserInstrumentModel from "@/models/UserInstrument";
 import UserSketchModel from "@/models/UserSketch";
 import UserVisualizationModel from "@/models/UserVisualization";
@@ -83,6 +83,7 @@ async function getDynamicSandboxModels() {
 
 export const DATA_TYPES = {
   GAME: "Game",
+  GAME_POINT_TRANSFERS: "Game.pointtransfers",
   SURVEY: "Survey",
   STACK: "Stack",
   CONTRIBUTIONS: "Contributions",
@@ -122,6 +123,10 @@ export async function fetchRelevantData(
           { $project: { _id: 1, count: 1, uniquePlayers: { $size: "$uniquePlayerIds" } } }
         ]);
     }
+  }
+
+  if (effectiveDataTypes.includes(DATA_TYPES.GAME_POINT_TRANSFERS)) {
+    dataContext.pointTransfers = await PointTransferModel.find().sort({ timestamp: -1 }).limit(200).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.SURVEY)) {
