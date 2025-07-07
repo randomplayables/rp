@@ -3,47 +3,8 @@ import { connectToDatabase } from "@/lib/mongodb";
 import mongoose from "mongoose";
 import { currentUser } from "@clerk/nextjs/server";
 import { incrementUserContribution, decrementUserContribution, ContributionType } from "@/lib/contributionUpdater";
-import { SketchGameModel } from "@/models/SketchData"; // Import the new SketchGame model
-
-// Define the schema
-const UserSketchSchema = new mongoose.Schema({
-  userId: { type: String, required: true, index: true },
-  username: { type: String, required: true },
-  title: { type: String, required: true },
-  description: { type: String },
-  files: { type: mongoose.Schema.Types.Mixed, required: true },
-  previewImage: { type: String },
-  gameId: { type: String }, // Use gameId
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-  isPublic: { type: Boolean, default: true }
-});
-
-// Define a type for the model to avoid TypeScript errors
-type UserSketchDocument = mongoose.Document & {
-  userId: string;
-  username: string;
-  title: string;
-  description?: string;
-  files: mongoose.Schema.Types.Mixed;
-  previewImage?: string;
-  gameId?: string; // Use gameId
-  createdAt: Date;
-  updatedAt: Date;
-  isPublic: boolean;
-};
-
-type UserSketchModelType = mongoose.Model<UserSketchDocument>;
-
-// Get or create the model
-let UserSketchModel: UserSketchModelType;
-try {
-  UserSketchModel = mongoose.models.UserSketch as UserSketchModelType || 
-    mongoose.model<UserSketchDocument>("UserSketch", UserSketchSchema);
-} catch (error) {
-  console.error("Error with sketch model definition:", error);
-  UserSketchModel = mongoose.model<UserSketchDocument>("UserSketch", UserSketchSchema);
-}
+import { SketchGameModel, SketchGameSessionModel, SketchGameDataModel } from "@/models/SketchData";
+import UserSketchModel from "@/models/UserSketch";
 
 export async function GET(request: NextRequest) {
   try {
@@ -107,13 +68,13 @@ export async function POST(request: NextRequest) {
     
     const sketch = await UserSketchModel.create({
       userId: clerkUser.id,
-      username: clerkUser.username,
+      username: clerkUser.username || "unknown",
       title,
       description,
       files,
       previewImage,
       isPublic: isPublic !== undefined ? isPublic : true,
-      gameId: newGameId, // Link to the new sketch_games entry
+      gameId: newGameId,
     });
 
     await incrementUserContribution(
@@ -163,9 +124,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Sketch not found or not owned by user" }, { status: 404 });
     }
 
-    // Also delete from sketch_games, sketch_gamesessions, and sketch_gamedata
     if (sketch.gameId) {
-      const { SketchGameSessionModel, SketchGameDataModel } = await import('@/models/SketchData');
       const sessions = await SketchGameSessionModel.find({ gameId: sketch.gameId });
       const sessionIds = sessions.map(s => s.sessionId);
       
