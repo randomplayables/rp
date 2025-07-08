@@ -34,7 +34,7 @@ export async function callOpenAIChat(
   customMaxTokens?: number
 ) {
   // Determine max_tokens, o4-mini models generally support larger context/responses
-  const max_tokens = customMaxTokens ?? (modelName.includes('o4-mini') ? 4000 : 2000);
+  // const max_tokens = customMaxTokens ?? (modelName.includes('o4-mini') ? 4000 : 2000);
 
   // Format messages for API compatibility (especially for text-only vs. multimodal models)
   const messagesForApi = messages.map(msg => {
@@ -59,7 +59,7 @@ export async function callOpenAIChat(
     model: modelName,
     messages: messagesForApi as any, // Cast to any if OpenAI types cause issues with specific structures
     temperature: 0.7,
-    max_tokens: max_tokens,
+    // max_tokens has been removed to allow the model to use its full capacity
   });
 }
 

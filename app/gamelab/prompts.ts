@@ -220,6 +220,8 @@ A successful game on this platform typically includes:
 - \`/src/types/index.ts\`: Contains all TypeScript type definitions.
 - \`/src/constants/index.ts\`: Holds game constants like level definitions.
 - \`/vite.config.ts\`, \`/package.json\`, \`/index.html\`, etc.
+- \`/README.md\`: A helpful README for developers.
+- \`/LICENSE\`: The project's license file.
 
 ### USER'S GAME REQUEST
 %%USER_GAME_PROMPT%%
@@ -289,6 +291,48 @@ export async function saveGameData(roundNumber: number, roundData: any) {
     return null;
   }
 }
+\`\`\`
+
+### MANDATORY FILE: \`/LICENSE\`
+If the "CURRENT FILE" path is \`/LICENSE\`, you **MUST** generate the full text of the MIT License. You must dynamically insert the copyright line using the current year (2025) and the game's name from the project description. The format must be: \`Copyright (c) 2025 [Game Name] authors\`.
+
+Example MIT License Text:
+\`\`\`
+MIT License
+
+Copyright (c) 2025 %%PROJECT_DESCRIPTION%% authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+\`\`\`
+
+### MANDATORY FILE: \`/README.md\`
+If the "CURRENT FILE" path is \`/README.md\`, you **MUST** generate a helpful README in Markdown format. The README must include the following sections:
+- A main title (H1) using the game's name.
+- A section titled "About the Game" which contains the project description: \`%%PROJECT_DESCRIPTION%%\`
+- A section titled "How to Play" for which you should generate a brief explanation based on the game's description.
+- A section titled "Getting Started" which provides basic instructions for running the Vite project: \`npm install\` followed by \`npm run dev\`.
+
+### PREVIOUSLY GENERATED CODE
+This section contains code for files that have already been generated in this session. Use it as context to ensure logical consistency between files (e.g., imports, component props, hook usage).
+
+\`\`\`
+%%COMPLETED_FILES_CONTEXT%%
 \`\`\`
 
 ### PROJECT CONTEXT

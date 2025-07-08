@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
     const fileStructure = formData.get('fileStructure') as string | null;
     const filePath = formData.get('filePath') as string | null;
     const fileDescription = formData.get('fileDescription') as string | null;
+    const completedFilesContext = formData.get('completedFilesContext') as string | null;
     
     // Handle multiple assets
     const attachedAssets = formData.getAll('assets') as File[];
@@ -158,7 +159,8 @@ export async function POST(request: NextRequest) {
                 .replace('%%PROJECT_DESCRIPTION%%', projectDescription || 'A new game for RandomPlayables.')
                 .replace('%%FILE_STRUCTURE%%', fileStructure || '[]')
                 .replace('%%FILE_PATH%%', filePath || '')
-                .replace('%%FILE_DESCRIPTION%%', fileDescription || '');
+                .replace('%%FILE_DESCRIPTION%%', fileDescription || '')
+                .replace('%%COMPLETED_FILES_CONTEXT%%', completedFilesContext || '/* No files have been generated yet. This is the first file. */');
         } else {
             return NextResponse.json({ error: "Invalid generation step for RPTS." }, { status: 400 });
         }

@@ -524,6 +524,8 @@ function GamelabWorkspace() {
             setIsGeneratingFiles(true);
             setGenerationProgress({ current: 0, total: structure.length });
     
+            let completedFilesContext = ""; // New variable to hold context
+    
             sandpack.resetAllFiles();
             const initialFiles: SandpackFiles = {};
             structure.forEach(file => {
@@ -547,10 +549,17 @@ function GamelabWorkspace() {
                         formData.append('fileStructure', JSON.stringify(structure));
                         formData.append('filePath', file.path);
                         formData.append('fileDescription', file.description);
+                        
+                        // Add the completed files context to the form data
+                        formData.append('completedFilesContext', completedFilesContext);
 
                         const response: GameLabApiResponse = await sendChatMessageToApi(formData);
                         let fileContent = response.code || `// AI failed to return code for ${file.path}`;
                         updateFile(file.path, fileContent);
+
+                        // Append the newly generated file to the context for the next iteration
+                        completedFilesContext += `\n\n---\n\nFile: ${file.path}\n\n\`\`\`\n${fileContent}\n\`\`\`\n`;
+                        
                         success = true;
                         break; 
                     } catch (error: any) {
