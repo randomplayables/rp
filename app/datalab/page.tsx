@@ -207,12 +207,10 @@ export default function DataLabPage() {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   const suggestedPrompts = [
-    "Show me a bar chart of game sessions by date for the last 30 days",
-    "Create a pie chart showing the distribution of games played",
-    "Plot the average scores across different games (ensure Game data type is selected)",
+    "Return the full dataset for recent point transfers as a JSON object (ensure Point Transfers data type is selected)",
+    "Return the full dataset for recent game sessions as a JSON object (ensure Game Data data type is selected)",
     "Show me user contributions (ensure Contributions data type is selected)",
-    "Visualize public sketches count over time (ensure Content data type is selected)",
-    "Return the full dataset for recent point transfers as a JSON object"
+    "Plot the number of Stack questions and answers by date (ensure Stack Data data type is selected)",
   ];
 
   const initializeSystemPrompts = useCallback(async () => { // Renamed

@@ -194,22 +194,23 @@ function GamelabWorkspace() {
     const projectDescriptionRef = useRef("");
 
     const suggestedPrompts = {
-      tsx: [
-        "Create a number guessing game as a React/TSX sketch",
-        "I want a simple grid-based puzzle game in React/TSX for the sandbox",
-        "Help me design a memory matching game (React/TSX sketch)",
-      ],
-      javascript: [
-          "Create a simple clicker game with Vanilla JS",
-          "Make a Vanilla JS game where a circle avoids the mouse cursor",
-          "Build a basic 'Whack-a-Mole' game using plain JavaScript and CSS",
-      ],
-      rpts: [
-        "Create a game like GothamLoops but with a different scoring mechanic",
-        "Generate a complete project structure for a grid-based puzzle game",
-        "Build a game that uses the apiService to save player moves each turn"
-      ]
-    };
+        tsx: [
+          "Create a number guessing game as a React/TSX sketch",
+          "Build a grid-based magic square puzzle game in React/TSX",
+          "Help me design a memory matching game in React/TSX that pairs arithmetic problems with their solutions",
+        ],
+        javascript: [
+          "Create a timed addition clicker game with Vanilla JS where players click correct sums",
+          "Make a Vanilla JS game where a circle moves to collect prime numbers and avoid composite numbers",
+          "Build a 'Whack-a-Mole' style game in plain JavaScript and CSS where players hit multiples of a chosen number",
+        ],
+        rpts: [
+          "Create a prime number guessing game",
+          "Create a game that illustrates the gambler's ruin",
+          "Build a game where players have to guess the next number in a sequence",
+        ]
+      };
+      
 
     const prepareTsxFilesForUpload = (originalFiles: SandpackFiles): SandpackFiles => {
         const cleanedFiles: SandpackFiles = { ...originalFiles };
@@ -524,20 +525,15 @@ function GamelabWorkspace() {
             setIsGeneratingFiles(true);
             setGenerationProgress({ current: 0, total: structure.length });
     
-            let completedFilesContext = ""; // New variable to hold context
+            const newFiles: SandpackFiles = {};
+            let completedFilesContext = "";
     
-            sandpack.resetAllFiles();
-            const initialFiles: SandpackFiles = {};
-            structure.forEach(file => {
-                initialFiles[file.path] = { code: `// Generating content for ${file.path}...` };
-            });
-            updateFile(initialFiles);
-            
             for (let i = 0; i < structure.length; i++) {
                 const file = structure[i];
                 setGenerationProgress(prev => ({ ...prev, current: i + 1 }));
     
-                let success = false;
+                let fileContent = `// Error: Failed to generate code for ${file.path}.`;
+                
                 for (let attempt = 1; attempt <= 2; attempt++) {
                     try {
                         const formData = new FormData();
@@ -549,30 +545,27 @@ function GamelabWorkspace() {
                         formData.append('fileStructure', JSON.stringify(structure));
                         formData.append('filePath', file.path);
                         formData.append('fileDescription', file.description);
-                        
-                        // Add the completed files context to the form data
                         formData.append('completedFilesContext', completedFilesContext);
-
+    
                         const response: GameLabApiResponse = await sendChatMessageToApi(formData);
-                        let fileContent = response.code || `// AI failed to return code for ${file.path}`;
-                        updateFile(file.path, fileContent);
-
-                        // Append the newly generated file to the context for the next iteration
-                        completedFilesContext += `\n\n---\n\nFile: ${file.path}\n\n\`\`\`\n${fileContent}\n\`\`\`\n`;
-                        
-                        success = true;
+                        fileContent = response.code || `// AI failed to return code for ${file.path}`;
                         break; 
                     } catch (error: any) {
                         console.error(`[RPTS Generation] Attempt ${attempt} failed for ${file.path}. Full Error:`, error);
                         if (attempt === 2) {
-                            const errorMessage = `// Error: Failed to generate code for this file after ${attempt} attempts.\n// Please check the browser console for details.`;
-                            updateFile(file.path, errorMessage);
+                            fileContent = `// Error: Failed to generate code for this file after ${attempt} attempts.\n// Please check the browser console for details.`;
                         } else {
                             await new Promise(res => setTimeout(res, 500));
                         }
                     }
                 }
+                
+                newFiles[file.path] = { code: fileContent };
+    
+                completedFilesContext += `\n\n---\n\nFile: ${file.path}\n\n\`\`\`\n${fileContent}\n\`\`\`\n`;
             }
+    
+            updateFile(newFiles);
     
             setIsGeneratingFiles(false);
             setFileStructure(null); 
