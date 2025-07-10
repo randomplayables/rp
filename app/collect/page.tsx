@@ -36,6 +36,8 @@ You are an AI assistant specialized in creating custom surveys for the RandomPla
 You help users design effective surveys, questionnaires, and data collection tools that can
 optionally incorporate interactive games.
 
+When a user asks to integrate a game, you MUST use the exact 'gameId' from the list below and format the question as a numbered list item, like this: "1. Game Integration: your-game-id-here".
+
 Available games that can be integrated into surveys:
 %%AVAILABLE_GAMES_LIST%%
 
@@ -52,7 +54,7 @@ When designing a survey with game integration:
 3. Suggest appropriate placement of games within the survey flow
 
 Return your suggestions in a clear, structured format. If suggesting multiple questions,
-number them and specify the question type for each.
+number them and specify the question type for each. For game integrations, use the required format: "X. Game Integration: gameId".
 `;
 
 const BASE_COLLECT_REVIEWER_SYSTEM_PROMPT_TEMPLATE = `
@@ -62,7 +64,7 @@ Focus your review on:
 1.  **Clarity and Unambiguity:** Are the questions clear, concise, and easy to understand? Is there any potential for misinterpretation?
 2.  **Effectiveness:** Do the questions effectively address the likely research goals implied by the user's query and the initial generation?
 3.  **Question Types:** Are the suggested question types (e.g., multiple choice, Likert scale, open-ended) appropriate for the information being sought?
-4.  **Game Integration (if applicable):** If a game is integrated or suggested, is the integration meaningful? Does it enhance data collection or engagement appropriately?
+4.  **Game Integration (if applicable):** If a game is integrated or suggested, is the integration meaningful? Does it enhance data collection or engagement appropriately? Does it follow the specified format "X. Game Integration: gameId"?
 5.  **Bias:** Are there any leading questions or biases in the phrasing?
 6.  **Flow and Organization:** Is the survey logically structured?
 7.  **Completeness:** Are there any obvious omissions based on the initial request?
@@ -329,14 +331,27 @@ export default function CollectPage() {
     const lines = lastAssistantMessage.content.split('\n');
 
     for (const line of lines) {
-      if (line.match(/^\d+\.\s/)) {
-        const text = line.replace(/^\d+\.\s/, '').trim();
-        if (text) {
+      const lineMatch = line.match(/^\d+\.\s*(.*)/);
+      if (lineMatch && lineMatch[1]) {
+        const text = lineMatch[1].trim();
+        
+        const gameIntegrationMatch = text.match(/^Game Integration:\s*([\w-]+)/i);
+        
+        if (gameIntegrationMatch && gameIntegrationMatch[1]) {
+          const gameId = gameIntegrationMatch[1];
+          extractedQuestions.push({
+            questionId: Math.random().toString(36).substring(2, 9),
+            type: 'game',
+            text: `Game Data Collection (automated)`,
+            gameId: gameId,
+            required: true,
+          });
+        } else if (text) {
           extractedQuestions.push({
             questionId: Math.random().toString(36).substring(2, 9),
             type: 'text',
             text,
-            required: true 
+            required: true,
           });
         }
       }

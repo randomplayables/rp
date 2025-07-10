@@ -294,13 +294,13 @@ export async function saveGameData(roundNumber: number, roundData: any) {
 \`\`\`
 
 ### MANDATORY FILE: \`/LICENSE\`
-If the "CURRENT FILE" path is \`/LICENSE\`, you **MUST** generate the full text of the MIT License. You must dynamically insert the copyright line using the current year (2025) and the game's name from the project description. The format must be: \`Copyright (c) 2025 [Game Name] authors\`.
+If the "CURRENT FILE" path is \`/LICENSE\`, you **MUST** generate the full text of the MIT License. The copyright line must be: \`Copyright (c) 2025 The Authors of This Code Repository\`.
 
 Example MIT License Text:
 \`\`\`
 MIT License
 
-Copyright (c) 2025 %%PROJECT_DESCRIPTION%% authors
+Copyright (c) 2025 The Authors of This Code Repository
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

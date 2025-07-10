@@ -3,12 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { debounce } from 'lodash';
-
-interface Game {
-  id: number;
-  name: string;
-  description: string;
-}
+import { IGame } from '@/types/Game';
 
 interface QuestionEditorProps {
   questionId: string;
@@ -42,7 +37,7 @@ export default function QuestionEditor({
   const [error, setError] = useState<string | null>(null);
 
   // Fetch available games
-  const { data: games } = useQuery<Game[]>({
+  const { data: games } = useQuery<IGame[]>({
     queryKey: ['availableGames'],
     queryFn: fetchGames
   });
@@ -265,7 +260,7 @@ export default function QuestionEditor({
           >
             <option value="">-- Select a game --</option>
             {games?.map((game) => (
-              <option key={game.id} value={game.id.toString()}>
+              <option key={game.gameId} value={game.gameId}>
                 {game.name}
               </option>
             ))}

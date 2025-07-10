@@ -43,22 +43,25 @@ const isCredentialedApiRoute = createRouteMatcher([
 // Apply CORS headers to all responses
 function applyCorsHeaders(response: NextResponse, request: Request) {
   const origin = request.headers.get('origin');
-  
-  // If the origin is in our allowed list, set it specifically
-  if (origin && allowedOrigins.includes(origin)) {
+  let isAllowed = false;
+
+  if (origin) {
+    if (allowedOrigins.includes(origin)) {
+        isAllowed = true;
+    } else if (process.env.NODE_ENV === 'development' && origin.endsWith('.loca.lt')) {
+        isAllowed = true;
+    }
+  }
+
+  if (isAllowed && origin) {
     response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
   } else {
-    // For other origins, use a wildcard
     response.headers.set('Access-Control-Allow-Origin', '*');
   }
   
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  // Only set Allow-Credentials for specific origins
-  if (origin && origin !== '*') {
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
-  }
   
   return response;
 }
