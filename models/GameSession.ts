@@ -10,6 +10,8 @@ interface IGameSession extends Document {
   ipAddress?: string;
   userAgent?: string;
   isGuest: boolean;
+  surveyMode?: boolean;
+  surveyQuestionId?: string;
 }
 
 const GameSessionSchema = new mongoose.Schema({
@@ -21,12 +23,15 @@ const GameSessionSchema = new mongoose.Schema({
   startTime: { type: Date, default: Date.now },
   ipAddress: String,
   userAgent: String,
-  isGuest: { type: Boolean, default: false }
+  isGuest: { type: Boolean, default: false },
+  surveyMode: { type: Boolean, default: false },
+  surveyQuestionId: { type: String },
 });
 
 // Add index for faster lookups
 GameSessionSchema.index({ userId: 1, gameId: 1 });
 GameSessionSchema.index({ username: 1 }); // Add index for username lookups
+GameSessionSchema.index({ surveyQuestionId: 1 }); // Index for survey lookups
 
 const GameSessionModel: Model<IGameSession> =
   mongoose.models.GameSession || mongoose.model("GameSession", GameSessionSchema);

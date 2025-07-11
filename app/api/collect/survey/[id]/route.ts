@@ -4,13 +4,13 @@ import SurveyModel from "@/models/Survey";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params: { id } }: { params: { id: string } }
 ) {
   try {
     await connectToDatabase();
     
     // Find survey by the unique ID in the shareable link
-    const uniqueId = params.id;
+    const uniqueId = id;
     const survey = await SurveyModel.findOne({ 
       shareableLink: { $regex: uniqueId }
     });

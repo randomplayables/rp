@@ -42,7 +42,7 @@ export default function SurveyResponsePage() {
   
   const [currentGameUrl, setCurrentGameUrl] = useState<string | null>(null);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
-  const [gameSessionIds, setGameSessionIds] = useState<Record<string, string>>({});
+  const [gameSessionIds, setGameSessionIds] = useState<Record<string, string[]>>({});
   const [submissionComplete, setSubmissionComplete] = useState(false);
 
   const { user, isSignedIn } = useUser();
@@ -79,6 +79,32 @@ export default function SurveyResponsePage() {
     if (id) fetchSurvey();
   }, [id]);
 
+  useEffect(() => {
+    const handleGameMessage = (event: MessageEvent) => {
+      // In a production environment, you should verify event.origin for security.
+      if (event.data?.type === 'GAME_SESSION_CREATED') {
+        const { surveyQuestionId: questionId, sessionId } = event.data.payload;
+        if (questionId && sessionId) {
+          console.log(`Survey page received session ID ${sessionId} for question ${questionId}`);
+          setGameSessionIds(prev => {
+            const existingSessions = prev[questionId] || [];
+            if (existingSessions.includes(sessionId)) {
+              return prev;
+            }
+            return {
+              ...prev,
+              [questionId]: [...existingSessions, sessionId],
+            };
+          });
+        }
+      }
+    };
+    window.addEventListener('message', handleGameMessage);
+    return () => {
+      window.removeEventListener('message', handleGameMessage);
+    };
+  }, []);
+
   const handlePlayGame = async (question: SurveyQuestion) => {
     if (!games || !question.gameId) {
       setError("Game information is not available yet.");
@@ -90,10 +116,10 @@ export default function SurveyResponsePage() {
       setError("This game is not available to play.");
       return;
     }
-
-    // Set the active question ID before launching the game
+    
     setActiveQuestionId(question.questionId);
 
+    // The game itself is now responsible for creating its session and posting a message back.
     let finalUrl = gameToPlay.link;
     const separator = finalUrl.includes('?') ? '&' : '?';
     finalUrl += `${separator}surveyMode=true&questionId=${question.questionId}`;
@@ -112,9 +138,6 @@ export default function SurveyResponsePage() {
 
   const handleReturnToSurvey = () => {
     if (activeQuestionId) {
-      // This is the fix: Mark the game as 'played' to pass validation.
-      // A more robust solution would involve the game sending a completion message,
-      // but this ensures the survey can be submitted.
       setResponses(prev => ({ ...prev, [activeQuestionId]: 'game_played' }));
     }
     setCurrentGameUrl(null);
@@ -131,7 +154,7 @@ export default function SurveyResponsePage() {
           responses: Object.entries(responses).map(([questionId, answer]) => ({
             questionId,
             answer,
-            gameSessionId: gameSessionIds[questionId]
+            gameSessionIds: gameSessionIds[questionId] || []
           }))
         })
       });
@@ -323,7 +346,7 @@ export default function SurveyResponsePage() {
                       </p>
                       <p className="text-sm text-emerald-600">
                         {responses[question.questionId] 
-                          ? '✓ Game completed' 
+                          ? `✓ Game played ${gameSessionIds[question.questionId]?.length || 0} time(s)`
                           : 'Play the game to answer this question'}
                       </p>
                     </div>

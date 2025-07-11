@@ -6,7 +6,7 @@ interface ISurveyResponse extends Document {
   responses: {
     questionId: string;
     answer: any; // Could be string, number, array, or gameData object
-    gameSessionId?: string; // Only present for game questions
+    gameSessionIds?: string[]; // Only present for game questions
   }[];
   metadata: {
     userAgent: string;
@@ -20,9 +20,10 @@ const SurveyResponseSchema = new mongoose.Schema({
   surveyId: { type: String, required: true },
   respondentId: { type: String },
   responses: [{
+    _id: false,
     questionId: { type: String, required: true },
     answer: mongoose.Schema.Types.Mixed,
-    gameSessionId: String
+    gameSessionIds: [String]
   }],
   metadata: {
     userAgent: String,

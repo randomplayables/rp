@@ -252,28 +252,43 @@ const GAME_ID = import.meta.env.VITE_GAME_ID;
 
 export async function initGameSession() {
   try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const surveyMode = urlParams.get('surveyMode') === 'true';
+    const questionId = urlParams.get('questionId');
+
     const response = await fetch(\`\${API_BASE_URL}/game-session\`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId: GAME_ID }),
+      body: JSON.stringify({ 
+          gameId: GAME_ID,
+          surveyMode: surveyMode,
+          surveyQuestionId: questionId
+      }),
     });
     if (!response.ok) {
       throw new Error('Failed to initialize game session');
     }
-    return response.json();
+    
+    const sessionData = await response.json();
+
+    // If in survey mode, send the newly created session ID to the parent window
+    if (surveyMode && window.parent) {
+        console.log('Game is in survey mode. Posting session data to parent window.');
+        window.parent.postMessage({ type: 'GAME_SESSION_CREATED', payload: sessionData }, '*');
+    }
+    
+    return sessionData;
+
   } catch (error) {
     console.error('Error initializing game session:', error);
     return { sessionId: 'local-session' };
   }
 }
 
-export async function saveGameData(roundNumber: number, roundData: any) {
+export async function saveGameData(sessionId: string, roundNumber: number, roundData: any) {
   try {
-    const sessionData = JSON.parse(localStorage.getItem('gameSession') || '{}');
-    const sessionId = sessionData.sessionId;
-
     if (!sessionId) {
-      console.error('No session ID found for saving game data');
+      console.error('No session ID provided for saving game data');
       return;
     }
 
