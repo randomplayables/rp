@@ -8,6 +8,7 @@ import QuestionEditor from "./components/QuestionEditor";
 import SaveInstrumentButton from './components/SaveInstrumentButton';
 import { useUser } from "@clerk/nextjs";
 import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
+import { IGame } from "@/types/Game";
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -22,6 +23,8 @@ interface SurveyQuestion {
   options?: string[];
   gameId?: string;
   required: boolean;
+  scaleMinLabel?: string;
+  scaleMaxLabel?: string;
 }
 
 interface CollectResponse {
@@ -137,16 +140,13 @@ export default function CollectPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
-  // Rename currentSystemPrompt to currentCoderSystemPrompt for clarity
   const [currentCoderSystemPrompt, setCurrentCoderSystemPrompt] = useState<string | null>(null);
-  // Add state for reviewer system prompt
   const [currentReviewerSystemPrompt, setCurrentReviewerSystemPrompt] = useState<string | null>(null);
   
   const [baseCoderTemplateWithContext, setBaseCoderTemplateWithContext] = useState<string | null>(null);
-  // Add state for base reviewer template
   const [baseReviewerTemplateWithContext, setBaseReviewerTemplateWithContext] = useState<string | null>(null);
   
-  const [isLoadingSystemPrompts, setIsLoadingSystemPrompts] = useState(true); // Combined loading state
+  const [isLoadingSystemPrompts, setIsLoadingSystemPrompts] = useState(true);
   const [useCodeReview, setUseCodeReview] = useState<boolean>(false);
 
   const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
@@ -154,6 +154,7 @@ export default function CollectPage() {
   const [selectedReviewerModel, setSelectedReviewerModel] = useState<string>("");
   const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [availableGamesForParsing, setAvailableGamesForParsing] = useState<IGame[]>([]);
 
   const initializeSystemPrompts = useCallback(async () => {
     setIsLoadingSystemPrompts(true);
@@ -161,11 +162,13 @@ export default function CollectPage() {
       const contextData = await fetchCollectContextData();
       const gamesListString = JSON.stringify(contextData.games || [], null, 2);
       
+      setAvailableGamesForParsing(contextData.games || []);
+      
       const initialCoderPrompt = BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', gamesListString);
       setCurrentCoderSystemPrompt(initialCoderPrompt);
       setBaseCoderTemplateWithContext(initialCoderPrompt);
 
-      const initialReviewerPrompt = BASE_COLLECT_REVIEWER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', gamesListString); // Also replace for reviewer
+      const initialReviewerPrompt = BASE_COLLECT_REVIEWER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', gamesListString);
       setCurrentReviewerSystemPrompt(initialReviewerPrompt);
       setBaseReviewerTemplateWithContext(initialReviewerPrompt);
 
@@ -320,61 +323,120 @@ export default function CollectPage() {
     }));
   }, []);
 
-  const extractQuestions = () => {
-    const lastAssistantMessage = messages
-      .filter(m => m.role === 'assistant')
-      .pop();
-
+  const handleExtract = () => {
+    const lastAssistantMessage = messages.filter(m => m.role === 'assistant').pop();
     if (!lastAssistantMessage) return;
 
-    const extractedQuestions: SurveyQuestion[] = [];
-    const lines = lastAssistantMessage.content.split('\n');
+    let content = lastAssistantMessage.content;
+    let newTitle = surveyData.title;
+    let newDescription = surveyData.description;
 
-    for (const line of lines) {
-      const lineMatch = line.match(/^\d+\.\s*(.*)/);
-      if (lineMatch && lineMatch[1]) {
-        const text = lineMatch[1].trim();
-        
-        const gameIntegrationMatch = text.match(/^Game Integration:\s*([\w-]+)/i);
-        
-        if (gameIntegrationMatch && gameIntegrationMatch[1]) {
-          const gameId = gameIntegrationMatch[1];
-          extractedQuestions.push({
-            questionId: Math.random().toString(36).substring(2, 9),
-            type: 'game',
-            text: `Game Data Collection (automated)`,
-            gameId: gameId,
-            required: true,
-          });
-        } else if (text) {
-          extractedQuestions.push({
-            questionId: Math.random().toString(36).substring(2, 9),
-            type: 'text',
-            text,
-            required: true,
-          });
-        }
-      }
+    // Extract Title
+    const titleMatch = content.match(/^(Survey Title|Title):\s*(.*)/im);
+    if (titleMatch && titleMatch[2]) {
+        newTitle = titleMatch[2].trim();
+        content = content.replace(titleMatch[0], '');
     }
 
+    // Isolate the main "Questions" or "Questionnaire" section to prevent parsing footer notes
+    const questionsSectionMatch = content.match(/^(Questions|Questionnaire)[\s\S]*/im);
+    const questionsText = questionsSectionMatch ? questionsSectionMatch[0] : '';
+    
+    // Extract metadata from the text *before* the questions section
+    const metadataText = questionsSectionMatch ? content.substring(0, questionsSectionMatch.index) : content;
+    const metadataSections = ['Objective', 'Target Audience', 'Overview', 'Purpose', 'Rationale', 'Survey Flow'];
+    let descriptionParts: string[] = [];
+    metadataSections.forEach(section => {
+        const regex = new RegExp(`^(${section}[\\s\\S]*?)(?=\\n\\n|$)`, "im");
+        const match = metadataText.match(regex);
+        if (match && match[1]) {
+            descriptionParts.push(match[1].trim());
+        }
+    });
+    if (descriptionParts.length > 0) {
+        newDescription = descriptionParts.join('\n\n');
+    }
+    
+    if (!questionsText) {
+        const assistantMessage: ChatMessage = { role: 'assistant', content: `I couldn't find a "Questions:" section in my last response to extract.`, timestamp: new Date() };
+        setMessages(prev => [...prev, assistantMessage]);
+        return;
+    }
+
+    const questionBlocks = questionsText.split(/\n(?=\s*\d+\.\s)/).filter(b => b.trim() && /^\s*\d+\.\s/.test(b));
+    const extractedQuestions: SurveyQuestion[] = [];
+
+    questionBlocks.forEach((block, index) => {
+        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length === 0) return;
+
+        const firstLine = lines[0].replace(/^\d+\.\s*/, '').trim();
+        let question: Partial<SurveyQuestion> = {
+            questionId: `q_${Date.now()}_${index}`,
+            type: 'text',
+            text: firstLine,
+            required: true,
+        };
+        
+        const quotedTextMatch = block.match(/“([^”]*)”/);
+        if (quotedTextMatch && quotedTextMatch[1]) {
+            question.text = quotedTextMatch[1];
+        }
+
+        if (block.toLowerCase().includes('likert scale')) {
+            question.type = 'scale';
+            const scaleLabelsMatch = block.match(/\(\s*1\s*=\s*([^,;]+?)\s*[,;…]\s*5\s*=\s*([^\)]+?)\s*\)/i);
+            if (scaleLabelsMatch) {
+                question.scaleMinLabel = scaleLabelsMatch[1]?.trim();
+                question.scaleMaxLabel = scaleLabelsMatch[2]?.trim();
+            }
+        } else if (block.toLowerCase().includes('multiple-choice') || block.toLowerCase().includes('multiple choice')) {
+            question.type = 'multiple-choice';
+            question.options = [];
+            lines.forEach(line => {
+                const optionMatch = line.match(/^\s*(?:[a-e][\.\)]|[•-])\s*(.*)/i);
+                if (optionMatch && optionMatch[1] && !optionMatch[1].toLowerCase().startsWith('question type:')) {
+                    question.options?.push(optionMatch[1].trim());
+                }
+            });
+        } else if (block.toLowerCase().includes('open-ended')) {
+            question.type = 'text';
+        }
+
+        if (firstLine.toLowerCase().startsWith('game integration:')) {
+            question.type = 'game';
+            question.text = 'Game Data Collection (automated)';
+            const gameIdentifier = firstLine.substring(firstLine.indexOf(':') + 1).trim();
+            let game = availableGamesForParsing.find(g => g?.gameId?.toLowerCase() === gameIdentifier.toLowerCase());
+            if (!game) {
+                game = availableGamesForParsing.find(g => g?.name?.toLowerCase() === gameIdentifier.toLowerCase());
+            }
+            question.gameId = game?.gameId || gameIdentifier;
+        }
+        
+        extractedQuestions.push(question as SurveyQuestion);
+    });
+
     if (extractedQuestions.length > 0) {
-      setSurveyData(prev => ({
-        ...prev,
-        questions: [...prev.questions, ...extractedQuestions]
-      }));
-       const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: `Extracted ${extractedQuestions.length} question(s). You can now edit them in the Survey Builder.`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+        setSurveyData(prev => ({
+            ...prev,
+            title: newTitle,
+            description: newDescription,
+            questions: [...prev.questions, ...extractedQuestions]
+        }));
+         const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `Extracted ${extractedQuestions.length} question(s). You can now edit them in the Survey Builder.`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
     } else {
-       const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: `I couldn't find any numbered questions in my last response to extract.`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+         const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `I couldn't find any numbered questions in my last response to extract.`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
     }
   };
   
@@ -393,7 +455,6 @@ export default function CollectPage() {
       initializeSystemPrompts();
     }
   };
-
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -618,7 +679,7 @@ export default function CollectPage() {
                 <h2 className="text-2xl font-bold text-emerald-700">Survey Builder</h2>
                 <div className="space-x-2">
                   <button
-                    onClick={extractQuestions}
+                    onClick={handleExtract}
                     className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
                     title="Extract numbered questions from the last AI response"
                   >

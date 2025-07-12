@@ -12,6 +12,8 @@ interface ISurvey extends Document {
     options?: string[];
     gameId?: string; // Optional game integration
     required: boolean;
+    scaleMinLabel?: string; // NEW
+    scaleMaxLabel?: string; // NEW
   }[];
   status: 'draft' | 'active' | 'closed';
   createdAt: Date;
@@ -31,6 +33,8 @@ const SurveySchema = new mongoose.Schema({
     options: [String],
     gameId: String,
     required: { type: Boolean, default: true },
+    scaleMinLabel: String, // NEW
+    scaleMaxLabel: String, // NEW
   }],
   status: { type: String, default: 'draft' },
   createdAt: { type: Date, default: Date.now },

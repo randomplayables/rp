@@ -14,6 +14,8 @@ interface SurveyQuestion {
   options?: string[];
   gameId?: string;
   required: boolean;
+  scaleMinLabel?: string;
+  scaleMaxLabel?: string;
 }
 
 interface Survey {
@@ -119,7 +121,6 @@ export default function SurveyResponsePage() {
     
     setActiveQuestionId(question.questionId);
 
-    // The game itself is now responsible for creating its session and posting a message back.
     let finalUrl = gameToPlay.link;
     const separator = finalUrl.includes('?') ? '&' : '?';
     finalUrl += `${separator}surveyMode=true&questionId=${question.questionId}`;
@@ -311,29 +312,28 @@ export default function SurveyResponsePage() {
               )}
               
               {question.type === 'scale' && (
-                <div className="flex justify-between items-center py-2">
-                  {[1, 2, 3, 4, 5].map((num) => (
-                    <div key={num} className="flex flex-col items-center">
-                      <input
-                        type="radio"
-                        name={`question_${question.questionId}`}
-                        id={`scale_${question.questionId}_${num}`}
-                        value={num}
-                        checked={responses[question.questionId] === num}
-                        onChange={() => setResponses(prev => ({
-                          ...prev,
-                          [question.questionId]: num
-                        }))}
-                        required={question.required}
-                      />
-                      <label 
-                        htmlFor={`scale_${question.questionId}_${num}`}
-                        className="text-sm mt-1"
-                      >
-                        {num}
-                      </label>
+                <div>
+                    <div className="flex justify-between items-center py-2">
+                        {[1, 2, 3, 4, 5].map((num) => (
+                            <div key={num} className="flex flex-col items-center">
+                            <input
+                                type="radio"
+                                name={`question_${question.questionId}`}
+                                id={`scale_${question.questionId}_${num}`}
+                                value={num}
+                                checked={responses[question.questionId] === num}
+                                onChange={() => setResponses(prev => ({ ...prev, [question.questionId]: num }))}
+                                required={question.required}
+                                className="h-4 w-4"
+                            />
+                            <label htmlFor={`scale_${question.questionId}_${num}`} className="text-sm mt-1">{num}</label>
+                            </div>
+                        ))}
                     </div>
-                  ))}
+                    <div className="flex justify-between text-xs text-gray-500 px-1">
+                        <span>{question.scaleMinLabel || 'Strongly Disagree'}</span>
+                        <span>{question.scaleMaxLabel || 'Strongly Agree'}</span>
+                    </div>
                 </div>
               )}
               

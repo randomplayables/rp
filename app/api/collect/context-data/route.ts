@@ -6,7 +6,7 @@ import GameModel from "@/models/Game";
 async function fetchCollectContextGames() {
   await connectToDatabase();
   const games = await GameModel.find({}, {
-    id: 1, name: 1, description: 1, _id: 0
+    gameId: 1, name: 1, description: 1, _id: 0
   }).limit(10).lean();
   return games;
 }
