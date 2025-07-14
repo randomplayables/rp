@@ -107,80 +107,41 @@ export async function fetchRelevantData(
                              : [DATA_TYPES.GAME]; // Default to Game if nothing selected
 
   if (effectiveDataTypes.includes(DATA_TYPES.GAME)) {
-    if (userId) {
-      dataContext.userSessions = await GameSessionModel.find({ userId }).limit(100).lean();
-    }
-    dataContext.recentSessions = await GameSessionModel.find().sort({ startTime: -1 }).limit(100).lean();
-    dataContext.games = await GameModel.find().limit(200).lean();
-    dataContext.gameDataStats = await GameDataModel.aggregate([
-      { $group: { _id: "$gameId", totalRounds: { $sum: 1 }, averageScore: { $avg: "$roundData.finalScore" }, playerUserIds: { $addToSet: "$userId" } } },
-      { $project: { _id: 1, totalRounds: 1, averageScore: 1, playerCount: { $size: "$playerUserIds" } } }
-    ]);
-    if (query.toLowerCase().includes('time') || query.toLowerCase().includes('date') || query.toLowerCase().includes('day')) {
-        dataContext.sessionsByDate = await GameSessionModel.aggregate([
-          { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$startTime" } }, count: { $sum: 1 }, uniquePlayerIds: { $addToSet: "$userId" } } },
-          { $sort: { "_id": -1 } }, { $limit: 30 },
-          { $project: { _id: 1, count: 1, uniquePlayers: { $size: "$uniquePlayerIds" } } }
-        ]);
-    }
+    dataContext.gameSessions = await GameSessionModel.find({}).sort({ startTime: -1 }).lean();
+    dataContext.games = await GameModel.find({}).lean();
+    dataContext.gameData = await GameDataModel.find({}).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.GAME_POINT_TRANSFERS)) {
-    dataContext.pointTransfers = await PointTransferModel.find().sort({ timestamp: -1 }).limit(200).lean();
+    dataContext.pointTransfers = await PointTransferModel.find().sort({ timestamp: -1 }).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.SURVEY)) {
-    if (userId) {
-      dataContext.userSurveys = await SurveyModel.find({ userId }).limit(50).lean();
-      const surveyIdsForResponses = dataContext.userSurveys?.map((s: any) => s._id.toString()) || [];
-      if (surveyIdsForResponses.length > 0) {
-        dataContext.surveyResponses = await SurveyResponseModel.find({ surveyId: { $in: surveyIdsForResponses } }).limit(200).lean();
-        dataContext.surveyStats = await SurveyResponseModel.aggregate([
-          { $match: { surveyId: { $in: surveyIdsForResponses } } },
-          { $group: { _id: "$surveyId", responseCount: { $sum: 1 }, averageCompletionTime: { $avg: { $subtract: ["$metadata.endTime", "$metadata.startTime"] } } } }
-        ]);
-      }
-    } else { // Provide some public survey info if no user or no user-specific surveys
-        dataContext.publicSurveys = await SurveyModel.find({ /* criteria for public if any */ }).limit(20).lean();
-    }
+    dataContext.surveys = await SurveyModel.find({}).lean();
+    dataContext.surveyResponses = await SurveyResponseModel.find({}).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.STACK)) {
-    if (userId) {
-      dataContext.userQuestions = await QuestionModel.find({ userId }).limit(20).lean();
-      dataContext.userAnswers = await AnswerModel.find({ userId }).limit(50).lean();
-    }
-    dataContext.recentQuestions = await QuestionModel.find().sort({ createdAt: -1 }).limit(20).lean();
-    dataContext.recentAnswers = await AnswerModel.find().sort({ createdAt: -1 }).limit(50).lean();
-    dataContext.questionStats = await QuestionModel.aggregate([
-        { $group: { _id: "$userId", count: { $sum: 1 } } }, { $sort: { count: -1 } }, { $limit: 10 }
-    ]);
+    dataContext.questions = await QuestionModel.find({}).sort({ createdAt: -1 }).lean();
+    dataContext.answers = await AnswerModel.find({}).sort({ createdAt: -1 }).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.CONTRIBUTIONS)) {
-    if (userId) {
-      dataContext.userContributions = await UserContributionModel.findOne({ userId }).lean();
-    }
-    dataContext.topContributors = await UserContributionModel.find().sort({ 'metrics.totalPoints': -1 }).limit(10).select('username metrics.totalPoints winCount').lean();
+    dataContext.userContributions = await UserContributionModel.find({}).sort({ 'metrics.totalPoints': -1 }).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.CONTENT)) {
-    if (userId) {
-      dataContext.userInstruments = await UserInstrumentModel.find({ userId }).limit(20).lean();
-      dataContext.userSketches = await UserSketchModel.find({ userId }).limit(20).lean();
-      dataContext.userVisualizations = await UserVisualizationModel.find({ userId }).limit(20).lean();
-    }
-    dataContext.publicInstruments = await UserInstrumentModel.find({ isPublic: true }).sort({ createdAt: -1 }).limit(10).lean();
-    dataContext.publicSketches = await UserSketchModel.find({ isPublic: true }).sort({ createdAt: -1 }).limit(10).lean();
-    dataContext.publicVisualizations = await UserVisualizationModel.find({ isPublic: true }).sort({ createdAt: -1 }).limit(10).lean();
+    dataContext.userInstruments = await UserInstrumentModel.find({}).lean();
+    dataContext.userSketches = await UserSketchModel.find({}).lean();
+    dataContext.userVisualizations = await UserVisualizationModel.find({}).lean();
   }
   
   if (effectiveDataTypes.includes(DATA_TYPES.SANDBOX)) {
     try {
       const { SandboxGame, SandboxGameSession, SandboxGameData } = await getDynamicSandboxModels();
-      dataContext.sandboxGames = await SandboxGame.find({ isTestGame: true }).limit(20).lean();
-      dataContext.sandboxSessions = await SandboxGameSession.find({ isTestSession: true }).sort({ startTime: -1 }).limit(50).lean();
-      dataContext.sandboxGameData = await SandboxGameData.find({ isTestData: true }).sort({ timestamp: -1 }).limit(100).lean();
+      dataContext.sandboxGames = await SandboxGame.find({ isTestGame: true }).lean();
+      dataContext.sandboxSessions = await SandboxGameSession.find({ isTestSession: true }).sort({ startTime: -1 }).lean();
+      dataContext.sandboxGameData = await SandboxGameData.find({ isTestData: true }).sort({ timestamp: -1 }).lean();
     } catch (sandboxError: any) {
       console.error("DataLab Helper: Error fetching Sandbox data:", sandboxError.message);
       dataContext.sandboxFetchError = "Could not fetch Sandbox data: " + sandboxError.message;
@@ -188,17 +149,17 @@ export async function fetchRelevantData(
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.SKETCH)) {
-    dataContext.sketchGames = await SketchGameModel.find({}).limit(100).lean();
-    dataContext.sketchGameSessions = await SketchGameSessionModel.find({}).sort({ startTime: -1 }).limit(200).lean();
-    dataContext.sketchGameData = await SketchGameDataModel.find({}).sort({ timestamp: -1 }).limit(500).lean();
+    dataContext.sketchGames = await SketchGameModel.find({}).lean();
+    dataContext.sketchGameSessions = await SketchGameSessionModel.find({}).sort({ startTime: -1 }).lean();
+    dataContext.sketchGameData = await SketchGameDataModel.find({}).sort({ timestamp: -1 }).lean();
   }
   
   if (effectiveDataTypes.includes(DATA_TYPES.PEER_REVIEWS)) {
-    dataContext.peerReviews = await PeerReviewModel.find().sort({ mergedAt: -1 }).limit(200).lean();
+    dataContext.peerReviews = await PeerReviewModel.find().sort({ mergedAt: -1 }).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.CODEBASES)) {
-    dataContext.codebases = await CodeBaseModel.find().sort({ lastUpdated: -1 }).limit(100).lean();
+    dataContext.codebases = await CodeBaseModel.find().sort({ lastUpdated: -1 }).lean();
   }
 
   if (userId && (query.toLowerCase().includes('user') || query.toLowerCase().includes('player'))) {
