@@ -20,6 +20,7 @@ interface IGameSubmission extends Document {
   targetGameId?: string; // gameId of the game being updated
   previousVersion?: string;
   usesAiModels: boolean;
+  isGauntlet: boolean; // New field
   tags?: string[];
 }
 
@@ -59,6 +60,7 @@ const GameSubmissionSchema = new Schema({
     type: String,
   },
   usesAiModels: { type: Boolean, default: false },
+  isGauntlet: { type: Boolean, default: false }, // New field
   tags: { type: [String], default: [] },
 });
 

@@ -30,6 +30,7 @@ interface GameSubmission {
     reviewerNotes?: string;
     submissionType?: 'initial' | 'update';
     usesAiModels?: boolean;
+    isGauntlet?: boolean; // Fix: Added missing field
     tags?: string[];
     targetGameId?: string;
 }
@@ -115,6 +116,9 @@ export default function GameAdminPage() {
 
     // Handler to open the promotion modal
     const handleOpenPromotionModal = (submission: GameSubmission) => {
+        // Debugging log to inspect the received submission object
+        console.log("Opening promotion modal for submission:", submission);
+
         setSelectedSubmission(submission);
         setFormData({
             gameId: submission.submissionType === 'update' 
@@ -123,6 +127,7 @@ export default function GameAdminPage() {
             link: '', 
             modelType: '',
             isPaid: false,
+            isGauntlet: submission.isGauntlet || false, // Pre-fill from submission
         });
         setIsModalOpen(true);
     };
@@ -153,6 +158,7 @@ export default function GameAdminPage() {
             link: formData.link,
             modelType: formData.modelType,
             isPaid: formData.isPaid,
+            isGauntlet: formData.isGauntlet,
             tags: selectedSubmission.tags,
         });
     };
@@ -354,6 +360,14 @@ export default function GameAdminPage() {
                                     </div>
                                 </div>
                             )}
+
+                            <div className="p-4 bg-blue-50 border-l-4 border-blue-400">
+                                <label className="flex items-center">
+                                    <input type="checkbox" name="isGauntlet" checked={formData.isGauntlet} onChange={handleFormChange} className="mr-2 h-4 w-4"/>
+                                    <span className="text-sm font-medium text-gray-700">Is this a Gauntlet-enabled game?</span>
+                                </label>
+                                <p className="text-xs text-gray-600 mt-1">Check this if the game is designed to support the Gauntlet challenge mode.</p>
+                            </div>
 
                             {formError && <p className="text-red-500 text-sm">{formError}</p>}
                             <div className="flex justify-end space-x-4 pt-4">

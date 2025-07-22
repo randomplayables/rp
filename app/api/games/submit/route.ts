@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
       targetGameId,
       previousVersion,
       usesAiModels,
+      isGauntlet, // New field
       tags
     } = body;
 
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
       targetGameId,
       previousVersion,
       usesAiModels,
+      isGauntlet, // New field
       tags: tags || [],
       // Set the flag based on our check for updates, otherwise it defaults to false for initial submissions.
       isPeerReviewEnabled: isPeerReviewEnabledForUpdate, 

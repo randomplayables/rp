@@ -19,6 +19,7 @@ const GameSchema = new mongoose.Schema({
   codeUrl: String,
   authorUsername: String,
   tags: { type: [String], default: [] },
+  isGauntlet: { type: Boolean, default: false }, // New Flag
   aiUsageDetails: {
     type: {
       modelType: {

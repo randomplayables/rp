@@ -40,6 +40,7 @@ interface GameSubmissionData {
   targetGameId?: string;
   previousVersion?: string;
   usesAiModels: boolean;
+  isGauntlet: boolean; // New field
   tags: string[];
 }
 
@@ -91,6 +92,7 @@ export default function SubmitGamePage() {
   const [codeUrl, setCodeUrl] = useState('');
   const [irlInstructions, setIrlInstructions] = useState<IrlInstruction[]>([{ title: '', url: '' }]);
   const [usesAiModels, setUsesAiModels] = useState(false);
+  const [isGauntlet, setIsGauntlet] = useState(false); // New state
   const [tags, setTags] = useState<string[]>([]);
   
   // UI/Flow State
@@ -140,6 +142,7 @@ export default function SubmitGamePage() {
     setIrlInstructions([{ title: '', url: '' }]);
     setSelectedGameForUpdate(null);
     setUsesAiModels(false);
+    setIsGauntlet(false); // Reset new state
     setTags([]);
   };
   
@@ -196,8 +199,11 @@ export default function SubmitGamePage() {
         targetGameId: selectedGameForUpdate?.gameId,
         previousVersion: selectedGameForUpdate?.version,
         usesAiModels,
+        isGauntlet, // New field
         tags
     };
+    // DEBUGGING: Log the payload to the browser console before sending
+    console.log("Submitting payload to /api/games/submit:", payload);
     mutation.mutate(payload);
   };
 
@@ -348,18 +354,39 @@ export default function SubmitGamePage() {
             <button type="button" onClick={addInstruction} className="text-sm text-emerald-600 hover:text-emerald-700"> + Add Another Instruction </button>
           </div>
           
-          <div className="flex items-center">
-              <input
-                  type="checkbox"
-                  id="usesAiModels"
-                  name="usesAiModels"
-                  checked={usesAiModels}
-                  onChange={(e) => setUsesAiModels(e.target.checked)}
-                  className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-              />
-              <label htmlFor="usesAiModels" className="ml-2 block text-sm text-gray-900">
-                  This game uses AI models that may consume a player's API credits.
-              </label>
+          <div className="space-y-3 pt-2">
+            <div className="flex items-start">
+                <input
+                    type="checkbox"
+                    id="usesAiModels"
+                    name="usesAiModels"
+                    checked={usesAiModels}
+                    onChange={(e) => setUsesAiModels(e.target.checked)}
+                    className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 mt-1"
+                />
+                <div className="ml-2">
+                    <label htmlFor="usesAiModels" className="block text-sm font-medium text-gray-900">
+                        This game uses AI models.
+                    </label>
+                    <p className="text-xs text-gray-500">Check this if your game may consume a player's API credits.</p>
+                </div>
+            </div>
+             <div className="flex items-start">
+                <input
+                    type="checkbox"
+                    id="isGauntlet"
+                    name="isGauntlet"
+                    checked={isGauntlet}
+                    onChange={(e) => setIsGauntlet(e.target.checked)}
+                    className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 mt-1"
+                />
+                 <div className="ml-2">
+                    <label htmlFor="isGauntlet" className="block text-sm font-medium text-gray-900">
+                        This is a Gauntlet-enabled game.
+                    </label>
+                     <p className="text-xs text-gray-500">Check this if your game is designed to support the Gauntlet challenge mode.</p>
+                </div>
+            </div>
           </div>
 
           <div className="flex justify-end pt-4 border-t">

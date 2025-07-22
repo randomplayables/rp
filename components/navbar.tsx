@@ -8,6 +8,12 @@
 // export default function NavBar() {
 //     const { isLoaded, isSignedIn, user } = useUser()
 //     const [isSubscribed, setIsSubscribed] = useState(true) // Default to true to avoid flash
+//     const [isClient, setIsClient] = useState(false)
+
+//     useEffect(() => {
+//         // This effect runs only on the client, after initial render
+//         setIsClient(true)
+//     }, [])
 
 //     useEffect(() => {
 //         // Check subscription status when user is loaded
@@ -24,8 +30,23 @@
 //         }
 //     }, [isLoaded, isSignedIn, user?.id])
 
-//     if (!isLoaded) return <p>Loading...</p>
+//     // On the server or during initial client hydration, render a skeleton UI
+//     // to prevent mismatch.
+//     if (!isClient || !isLoaded) {
+//         return (
+//             <nav className="fixed top-0 left-0 w-full bg-white shadow-sm z-50">
+//                 <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+//                      <Link href="/">
+//                         <Image className="text-xl font-bold text-emerald-700 cursor-pointer"
+//                         src="/RPLogo2.png" width={60} height={60} alt="Logo"/>
+//                     </Link>
+//                     <div className="h-10 w-24 bg-gray-200 rounded animate-pulse"></div>
+//                 </div>
+//             </nav>
+//         )
+//     }
 
+//     // After hydration, render the actual content
 //     return (
 //         <nav className="fixed top-0 left-0 w-full bg-white shadow-sm z-50">
 //             {" "}
@@ -106,7 +127,6 @@
 
 
 
-
 "use client"
 
 import Image from "next/image"
@@ -171,6 +191,11 @@ export default function NavBar() {
                         href='/rp'
                         className="text-gray-700 hover:text-emerald-500 transition-colors">
                         RP
+                    </Link>
+                    <Link 
+                        href='/gauntlet'
+                        className="text-gray-700 hover:text-emerald-500 transition-colors">
+                        Gauntlet
                     </Link>
                     <Link 
                         href='/stack'

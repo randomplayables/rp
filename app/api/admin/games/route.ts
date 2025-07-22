@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { submissionId, gameId, link, modelType, isPaid, tags } = body;
+        const { submissionId, gameId, link, modelType, isPaid, isGauntlet, tags } = body;
 
         if (!submissionId) {
             return NextResponse.json({ error: "Missing required field: submissionId is required." }, { status: 400 });
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
                     image: submission.image,
                     version: submission.version,
                     irlInstructions: submission.irlInstructions,
+                    isGauntlet: isGauntlet || false, // New field
                     tags: tags || submission.tags || []
                 }
             };
@@ -113,6 +114,7 @@ export async function POST(request: NextRequest) {
                 codeUrl: submission.codeUrl,
                 irlInstructions: submission.irlInstructions,
                 authorUsername: submission.authorUsername,
+                isGauntlet: isGauntlet || false, // New field
                 tags: tags || submission.tags || []
             };
 

@@ -10,6 +10,7 @@ export interface IGame {
   codeUrl?: string;
   authorUsername?: string;
   tags?: string[];
+  isGauntlet?: boolean; // New Flag
   aiUsageDetails?: {
     modelType: string;
     isPaid: boolean;
