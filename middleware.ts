@@ -15,6 +15,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/game-session(.*)",
   "/api/game-data(.*)",
   "/api/games(.*)",
+  "/api/gauntlet/challenges(.*)", // This line is the fix
   "/datalab(.*)",
   "/api/datalab(.*)",
   "/api/github/webhook(.*)" // UPDATED

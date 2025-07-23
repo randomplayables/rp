@@ -2,11 +2,12 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useUser } from '@clerk/nextjs';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { Spinner } from '@/components/spinner';
 import { IGauntletChallenge } from '@/models/Gauntlet';
 import { IGame } from '@/types/Game';
 import toast, { Toaster } from 'react-hot-toast';
+import { useState } from 'react';
 
 async function fetchChallenge(id: string): Promise<{ challenge: IGauntletChallenge }> {
     const response = await fetch(`/api/gauntlet/challenges/${id}`);
@@ -20,7 +21,6 @@ async function acceptChallenge(id: string): Promise<any> {
     const response = await fetch(`/api/gauntlet/challenges/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // We can pass the opponent's setup config here in the future
         body: JSON.stringify({}), 
     });
     const data = await response.json();
@@ -30,7 +30,6 @@ async function acceptChallenge(id: string): Promise<any> {
     return data;
 }
 
-// New function to fetch all games
 async function fetchGames(): Promise<IGame[]> {
     const response = await fetch('/api/games');
     if (!response.ok) {
@@ -45,6 +44,8 @@ export default function GauntletChallengePage() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const { user } = useUser();
+    const { getToken } = useAuth(); // Clerk hook to get auth token
+    const [isLaunching, setIsLaunching] = useState(false);
     const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
     const { data, isLoading, error } = useQuery({
@@ -53,7 +54,6 @@ export default function GauntletChallengePage() {
         enabled: !!id,
     });
 
-    // Fetch all games to find the link for the current challenge's game
     const { data: games, isLoading: isLoadingGames } = useQuery({
         queryKey: ['allGames'],
         queryFn: fetchGames,
@@ -62,15 +62,44 @@ export default function GauntletChallengePage() {
     const mutation = useMutation({
         mutationFn: () => acceptChallenge(id!),
         onSuccess: () => {
-            toast.success('Challenge accepted! Starting game...');
+            toast.success('Challenge accepted! The game is now active.');
             queryClient.invalidateQueries({ queryKey: ['gauntletChallenge', id] });
-            // Later, we will redirect to the actual game play page
-            // For now, let's just refresh the data.
         },
         onError: (err: Error) => {
             toast.error(`Error: ${err.message}`);
         }
     });
+
+    const handlePlayGame = async () => {
+        if (!games || !data?.challenge || !user) return;
+        
+        setIsLaunching(true);
+        toast.loading("Preparing game...");
+        
+        const gameForChallenge = games.find(g => g.gameId === data.challenge.gameId);
+        if (!gameForChallenge) {
+            toast.error("Game data not found.");
+            setIsLaunching(false);
+            return;
+        }
+
+        try {
+            const token = await getToken();
+            let finalUrl = gameForChallenge.link;
+            const separator = finalUrl.includes('?') ? '&' : '?';
+            
+            finalUrl += `${separator}gauntlet_mode=play&gauntletId=${id}`;
+            finalUrl += `&authToken=${token}&userId=${user.id}&username=${encodeURIComponent(user.username || '')}`;
+            
+            toast.dismiss();
+            window.open(finalUrl, '_blank');
+        } catch (error) {
+            toast.error("Could not get authentication token. Please try again.");
+            console.error("Failed to get auth token:", error);
+        } finally {
+            setIsLaunching(false);
+        }
+    };
 
     if (!id) {
         return <div className="text-center p-10 text-red-500">Challenge ID not found in URL.</div>;
@@ -81,9 +110,6 @@ export default function GauntletChallengePage() {
 
     const challenge = data?.challenge;
     const isChallenger = user?.id === challenge?.challenger.userId;
-    const gameForChallenge = games?.find(g => g.gameId === challenge?.gameId);
-
-    const playGameUrl = gameForChallenge ? `${gameForChallenge.link}?gauntlet_mode=play&gauntletId=${id}` : '#';
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -102,7 +128,7 @@ export default function GauntletChallengePage() {
                     <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="text-sm text-gray-500">Opponent</p>
                         <p className="text-xl font-bold">{challenge?.opponent?.username || 'Waiting...'}</p>
-                        <p className="text-2xl font-bold text-red-600">{challenge?.opponent?.wager} pts</p>
+                        <p className="text-2xl font-bold text-red-600">{challenge?.opponent?.wager || challenge?.opponentWager} pts</p>
                     </div>
                 </div>
 
@@ -127,14 +153,13 @@ export default function GauntletChallengePage() {
                         <p className="text-gray-600">Waiting for an opponent to accept your challenge.</p>
                     )}
                      {challenge?.status === 'active' && (
-                        <a 
-                            href={playGameUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block px-8 py-3 bg-green-500 text-white rounded-md text-lg font-semibold hover:bg-green-600"
+                        <button 
+                            onClick={handlePlayGame}
+                            disabled={isLaunching}
+                            className="inline-block px-8 py-3 bg-green-500 text-white rounded-md text-lg font-semibold hover:bg-green-600 disabled:opacity-50"
                         >
-                            Play Game
-                        </a>
+                            {isLaunching ? "Launching..." : "Play Game"}
+                        </button>
                     )}
                 </div>
             </div>
