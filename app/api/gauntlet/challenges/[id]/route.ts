@@ -60,6 +60,12 @@ export async function POST(
         if (!id) {
             return NextResponse.json({ error: "Challenge ID not found in URL" }, { status: 400, headers: corsHeaders });
         }
+
+        const { opponentSetupConfig } = await request.json();
+        if (!opponentSetupConfig) {
+            return NextResponse.json({ error: "Opponent setup configuration is required." }, { status: 400, headers: corsHeaders });
+        }
+
         const clerkUser = await currentUser();
         if (!clerkUser || !clerkUser.id || !clerkUser.username) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
@@ -95,7 +101,8 @@ export async function POST(
             username: clerkUser.username,
             team: challenge.challenger.team === 'A' ? 'B' : 'A',
             wager: opponentWager,
-            hasSetup: false,
+            setupConfig: opponentSetupConfig,
+            hasSetup: true,
         } as IGauntletParticipant;
         challenge.status = 'active';
         
