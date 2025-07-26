@@ -15,6 +15,7 @@ import UserVisualizationModel from "@/models/UserVisualization";
 import { SketchGameModel, SketchGameSessionModel, SketchGameDataModel } from "@/models/SketchData";
 import PeerReviewModel from "@/models/PeerReview";
 import CodeBaseModel from "@/models/CodeBase";
+import { GauntletChallengeModel } from "@/models/Gauntlet";
 
 // --- Sandbox Model Schemas ---
 const SandboxGameSchemaInternal = new mongoose.Schema({
@@ -84,6 +85,7 @@ async function getDynamicSandboxModels() {
 export const DATA_TYPES = {
   GAME: "Game",
   GAME_POINT_TRANSFERS: "Game.pointtransfers",
+  GAUNTLET: "Gauntlet",
   SURVEY: "Survey",
   STACK: "Stack",
   CONTRIBUTIONS: "Contributions",
@@ -114,6 +116,10 @@ export async function fetchRelevantData(
 
   if (effectiveDataTypes.includes(DATA_TYPES.GAME_POINT_TRANSFERS)) {
     dataContext.pointTransfers = await PointTransferModel.find().sort({ timestamp: -1 }).lean();
+  }
+
+  if (effectiveDataTypes.includes(DATA_TYPES.GAUNTLET)) {
+    dataContext.gauntletChallenges = await GauntletChallengeModel.find({}).sort({ createdAt: -1 }).lean();
   }
 
   if (effectiveDataTypes.includes(DATA_TYPES.SURVEY)) {

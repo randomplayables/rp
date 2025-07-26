@@ -22,6 +22,7 @@ interface DataTypeOption {
 const AVAILABLE_DATA_TYPES_UI: DataTypeOption[] = [
   { id: "Game", name: "Game Data", description: "Core game activity (sessions, gameplay, game metadata)." },
   { id: "Game.pointtransfers", name: "Game Point Transfers", description: "Records of point transfers between users." },
+  { id: "Gauntlet", name: "Gauntlet Data", description: "Data from player-vs-player Gauntlet matches." },
   { id: "Survey", name: "Survey Data", description: "User-created surveys and their responses." },
   { id: "Stack", name: "Stack Data", description: "Questions and answers from the Stack section." },
   { id: "Contributions", name: "Contributions Data", description: "User contribution metrics for Random Payables." },
