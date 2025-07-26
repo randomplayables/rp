@@ -30,6 +30,17 @@ async function acceptChallenge(payload: { id: string; opponentSetupConfig: any }
     return data;
 }
 
+async function cancelChallenge(id: string): Promise<any> {
+    const response = await fetch(`/api/gauntlet/challenges/${id}/cancel`, {
+        method: 'POST',
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Failed to cancel challenge.');
+    }
+    return data;
+}
+
 async function fetchGames(): Promise<IGame[]> {
     const response = await fetch('/api/games');
     if (!response.ok) {
@@ -53,7 +64,6 @@ export default function GauntletChallengePage() {
         queryKey: ['gauntletChallenge', id],
         queryFn: () => fetchChallenge(id!),
         enabled: !!id,
-        // Poll for status changes only when a game is in progress
         refetchInterval: (query) => query.state.data?.challenge.status === 'in_progress' ? 5000 : false,
     });
 
@@ -62,11 +72,22 @@ export default function GauntletChallengePage() {
         queryFn: fetchGames,
     });
 
-    const mutation = useMutation({
+    const acceptMutation = useMutation({
         mutationFn: (config: any) => acceptChallenge({ id: id!, opponentSetupConfig: config }),
         onSuccess: () => {
             toast.success('Challenge accepted! The game is now active.');
             refetch();
+        },
+        onError: (err: Error) => {
+            toast.error(`Error: ${err.message}`);
+        }
+    });
+
+    const cancelMutation = useMutation({
+        mutationFn: () => cancelChallenge(id!),
+        onSuccess: () => {
+            toast.success('Challenge cancelled and wager refunded.');
+            refetch(); // Refetch to update the status to 'cancelled'
         },
         onError: (err: Error) => {
             toast.error(`Error: ${err.message}`);
@@ -125,6 +146,8 @@ export default function GauntletChallengePage() {
             
             finalUrl += `${separator}gauntlet_mode=play&gauntletId=${id}`;
             finalUrl += `&authToken=${token}&userId=${user.id}&username=${encodeURIComponent(user.username || '')}`;
+            finalUrl += `&challengerWager=${data.challenge.challenger.wager}&opponentWager=${data.challenge.opponentWager}`;
+
             
             toast.dismiss();
             window.open(finalUrl, '_blank');
@@ -173,11 +196,11 @@ export default function GauntletChallengePage() {
                     </div>
                     <div className="mt-8 text-center">
                         <button
-                            onClick={() => mutation.mutate(opponentSetupConfig)}
-                            disabled={!opponentSetupConfig || mutation.isPending}
+                            onClick={() => acceptMutation.mutate(opponentSetupConfig)}
+                            disabled={!opponentSetupConfig || acceptMutation.isPending}
                             className="px-8 py-3 bg-emerald-500 text-white rounded-md text-lg font-semibold hover:bg-emerald-600 disabled:opacity-50"
                         >
-                            {mutation.isPending ? 'Accepting...' : 'Accept Challenge'}
+                            {acceptMutation.isPending ? 'Accepting...' : 'Accept Challenge'}
                         </button>
                     </div>
                 </>
@@ -202,7 +225,16 @@ export default function GauntletChallengePage() {
                 )}
                 <div className="mt-8 text-center">
                     {challenge.status === 'pending' && isChallenger && (
-                        <p className="text-gray-600">Waiting for an opponent to accept your challenge.</p>
+                        <div className="p-4 bg-gray-100 rounded-lg">
+                           <p className="text-gray-600 mb-3">Waiting for an opponent to accept your challenge.</p>
+                           <button
+                                onClick={() => cancelMutation.mutate()}
+                                disabled={cancelMutation.isPending}
+                                className="px-6 py-2 bg-red-500 text-white rounded-md text-sm font-semibold hover:bg-red-600 disabled:opacity-50"
+                           >
+                               {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Challenge'}
+                           </button>
+                        </div>
                     )}
                     {challenge.status === 'active' && isPlayer && (
                         <button 
@@ -227,6 +259,12 @@ export default function GauntletChallengePage() {
                             <p className="mt-2 text-gray-700">
                                 The winner is: <strong className="text-emerald-600">{challenge.winner === challenge.challenger.team ? challenge.challenger.username : challenge.opponent?.username}</strong>!
                             </p>
+                        </div>
+                    )}
+                     {challenge.status === 'cancelled' && (
+                        <div className="p-4 bg-red-50 border-red-200 border rounded-lg">
+                            <h3 className="text-xl font-bold text-red-700">Challenge Cancelled</h3>
+                            <p className="mt-2 text-gray-700">This challenge was cancelled by the creator.</p>
                         </div>
                     )}
                 </div>
