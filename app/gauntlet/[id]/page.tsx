@@ -41,6 +41,18 @@ async function cancelChallenge(id: string): Promise<any> {
     return data;
 }
 
+// New function for reporting abandonment
+async function reportAbandonment(id: string): Promise<any> {
+    const response = await fetch(`/api/gauntlet/challenges/${id}/abandon`, {
+        method: 'POST',
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.message || 'Failed to report abandonment.');
+    }
+    return data;
+}
+
 async function fetchGames(): Promise<IGame[]> {
     const response = await fetch('/api/games');
     if (!response.ok) {
@@ -48,6 +60,8 @@ async function fetchGames(): Promise<IGame[]> {
     }
     return response.json();
 }
+
+const GRACE_PERIOD_MS = 60 * 60 * 1000; // 60 minutes
 
 export default function GauntletChallengePage() {
     const params = useParams();
@@ -59,18 +73,44 @@ export default function GauntletChallengePage() {
     const [opponentSetupConfig, setOpponentSetupConfig] = useState<any | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const id = Array.isArray(params.id) ? params.id[0] : params.id;
+    const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['gauntletChallenge', id],
         queryFn: () => fetchChallenge(id!),
         enabled: !!id,
-        refetchInterval: (query) => query.state.data?.challenge.status === 'in_progress' ? 5000 : false,
+        refetchInterval: (query) => {
+            const status = query.state.data?.challenge.status;
+            // Refetch every 5 seconds if in progress to check for completion, or if started to check grace period
+            return status === 'in_progress' || (status === 'active' && query.state.data?.challenge.startedAt) ? 5000 : false;
+        },
     });
 
     const { data: games, isLoading: isLoadingGames } = useQuery({
         queryKey: ['allGames'],
         queryFn: fetchGames,
     });
+    
+    // Timer effect for grace period
+    useEffect(() => {
+        const challenge = data?.challenge;
+        if (challenge?.status === 'in_progress' && challenge.startedAt) {
+            const gracePeriodEnd = new Date(challenge.startedAt).getTime() + GRACE_PERIOD_MS;
+            
+            const updateTimer = () => {
+                const now = Date.now();
+                const remaining = gracePeriodEnd - now;
+                setTimeRemaining(remaining > 0 ? remaining : 0);
+            };
+            
+            updateTimer();
+            const interval = setInterval(updateTimer, 1000);
+            return () => clearInterval(interval);
+        } else {
+            setTimeRemaining(null);
+        }
+    }, [data?.challenge]);
+
 
     const acceptMutation = useMutation({
         mutationFn: (config: any) => acceptChallenge({ id: id!, opponentSetupConfig: config }),
@@ -88,6 +128,17 @@ export default function GauntletChallengePage() {
         onSuccess: () => {
             toast.success('Challenge cancelled and wager refunded.');
             refetch(); // Refetch to update the status to 'cancelled'
+        },
+        onError: (err: Error) => {
+            toast.error(`Error: ${err.message}`);
+        }
+    });
+
+    const abandonMutation = useMutation({
+        mutationFn: () => reportAbandonment(id!),
+        onSuccess: (data) => {
+            toast.success(data.message || 'Abandonment reported successfully!');
+            refetch();
         },
         onError: (err: Error) => {
             toast.error(`Error: ${err.message}`);
@@ -167,6 +218,7 @@ export default function GauntletChallengePage() {
 
     const challenge = data?.challenge;
     const isPlayer = user?.id === challenge?.challenger.userId || user?.id === challenge?.opponent?.userId;
+    const isStarter = user?.id === challenge?.startedByUserId;
     const gameForChallenge = games?.find(g => g.gameId === challenge?.gameId);
 
     const renderContent = () => {
@@ -240,12 +292,31 @@ export default function GauntletChallengePage() {
                         <button 
                             onClick={handlePlayGame}
                             disabled={isLaunching}
+                            title="By clicking, you become the 'starter' and are responsible for the game's completion. If you abandon the match, your opponent may claim victory after a grace period."
                             className="inline-block px-8 py-3 bg-green-500 text-white rounded-md text-lg font-semibold hover:bg-green-600 disabled:opacity-50"
                         >
                             {isLaunching ? "Starting..." : "Play Game"}
                         </button>
                     )}
-                    {challenge.status === 'in_progress' && isPlayer && (
+                    {challenge.status === 'in_progress' && isPlayer && !isStarter && (
+                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <h3 className="text-lg font-medium text-yellow-800">Match in Progress</h3>
+                            <p className="text-sm text-yellow-700 mt-2 mb-4">The game was started by {challenge.startedByUserId === challenge.challenger.userId ? challenge.challenger.username : challenge.opponent?.username}. If they have abandoned the match, you can report it after the grace period.</p>
+                            <button
+                                onClick={() => abandonMutation.mutate()}
+                                disabled={abandonMutation.isPending || (timeRemaining !== null && timeRemaining > 0)}
+                                className="px-6 py-2 bg-orange-500 text-white rounded-md text-sm font-semibold hover:bg-orange-600 disabled:opacity-50"
+                            >
+                                {abandonMutation.isPending ? 'Reporting...' : 'Report Abandonment'}
+                            </button>
+                            {timeRemaining !== null && timeRemaining > 0 && (
+                                <p className="text-xs text-gray-500 mt-2">
+                                    You can report in: {Math.ceil(timeRemaining / 60000)} minutes
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {challenge.status === 'in_progress' && isStarter && (
                         <button 
                             disabled={true}
                             className="inline-block px-8 py-3 bg-yellow-500 text-white rounded-md text-lg font-semibold cursor-not-allowed"

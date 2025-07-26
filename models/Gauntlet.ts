@@ -31,6 +31,8 @@ export interface IGauntletChallenge extends Document {
   lockedSettings?: string[]; // To store which settings the challenger cannot change
   createdAt: Date;
   completedAt?: Date;
+  startedByUserId?: string; // New field to track who started the match
+  startedAt?: Date;         // New field to track when the match was started
 }
 
 const GauntletChallengeSchema = new Schema({
@@ -48,6 +50,8 @@ const GauntletChallengeSchema = new Schema({
   lockedSettings: [{ type: String }],
   createdAt: { type: Date, default: Date.now },
   completedAt: { type: Date },
+  startedByUserId: { type: String }, // New field
+  startedAt: { type: Date },         // New field
 });
 
 export const GauntletChallengeModel: Model<IGauntletChallenge> = 

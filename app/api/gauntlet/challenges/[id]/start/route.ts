@@ -42,7 +42,13 @@ export async function POST(
         // Atomically find and update the challenge IF its status is 'active'
         const updatedChallenge = await GauntletChallengeModel.findOneAndUpdate(
             { _id: id, status: 'active' },
-            { $set: { status: 'in_progress' } },
+            { 
+                $set: { 
+                    status: 'in_progress',
+                    startedByUserId: clerkUser.id, // Record the starter
+                    startedAt: new Date()         // Record the start time
+                } 
+            },
             { new: true } // Return the updated document
         );
         
