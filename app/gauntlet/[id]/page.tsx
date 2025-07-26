@@ -53,6 +53,8 @@ export default function GauntletChallengePage() {
         queryKey: ['gauntletChallenge', id],
         queryFn: () => fetchChallenge(id!),
         enabled: !!id,
+        // Poll for status changes only when a game is in progress
+        refetchInterval: (query) => query.state.data?.challenge.status === 'in_progress' ? 5000 : false,
     });
 
     const { data: games, isLoading: isLoadingGames } = useQuery({
@@ -100,16 +102,23 @@ export default function GauntletChallengePage() {
         if (!games || !data?.challenge || !user) return;
         
         setIsLaunching(true);
-        toast.loading("Preparing game...");
+        toast.loading("Starting match...");
         
-        const gameForChallenge = games.find(g => g.gameId === data.challenge.gameId);
-        if (!gameForChallenge) {
-            toast.error("Game data not found.");
-            setIsLaunching(false);
-            return;
-        }
-
         try {
+            const startResponse = await fetch(`/api/gauntlet/challenges/${id}/start`, { method: 'POST' });
+            const startData = await startResponse.json();
+
+            if (!startResponse.ok && startData.error) {
+                throw new Error(startData.error);
+            }
+            
+            await refetch();
+
+            const gameForChallenge = games.find(g => g.gameId === data.challenge.gameId);
+            if (!gameForChallenge) {
+                throw new Error("Game data not found.");
+            }
+
             const token = await getToken();
             let finalUrl = gameForChallenge.link;
             const separator = finalUrl.includes('?') ? '&' : '?';
@@ -119,9 +128,11 @@ export default function GauntletChallengePage() {
             
             toast.dismiss();
             window.open(finalUrl, '_blank');
-        } catch (error) {
-            toast.error("Could not get authentication token. Please try again.");
-            console.error("Failed to get auth token:", error);
+
+        } catch (error: any) {
+            toast.dismiss();
+            toast.error(error.message || "Could not start the game.");
+            console.error("Failed to start or launch game:", error);
         } finally {
             setIsLaunching(false);
         }
@@ -132,13 +143,12 @@ export default function GauntletChallengePage() {
     if (error) return <div className="text-center p-10 text-red-500">{error.message}</div>;
 
     const challenge = data?.challenge;
-    const isChallenger = user?.id === challenge?.challenger.userId;
+    const isPlayer = user?.id === challenge?.challenger.userId || user?.id === challenge?.opponent?.userId;
     const gameForChallenge = games?.find(g => g.gameId === challenge?.gameId);
 
     const renderContent = () => {
-        if (!challenge) {
-            return <p>Challenge could not be loaded.</p>;
-        }
+        if (!challenge) return <p>Challenge could not be loaded.</p>;
+        const isChallenger = user?.id === challenge.challenger.userId;
 
         if (challenge.status === 'pending' && !isChallenger && gameForChallenge) {
             return (
@@ -194,14 +204,30 @@ export default function GauntletChallengePage() {
                     {challenge.status === 'pending' && isChallenger && (
                         <p className="text-gray-600">Waiting for an opponent to accept your challenge.</p>
                     )}
-                    {challenge.status === 'active' && (
+                    {challenge.status === 'active' && isPlayer && (
                         <button 
                             onClick={handlePlayGame}
                             disabled={isLaunching}
                             className="inline-block px-8 py-3 bg-green-500 text-white rounded-md text-lg font-semibold hover:bg-green-600 disabled:opacity-50"
                         >
-                            {isLaunching ? "Launching..." : "Play Game"}
+                            {isLaunching ? "Starting..." : "Play Game"}
                         </button>
+                    )}
+                    {challenge.status === 'in_progress' && isPlayer && (
+                        <button 
+                            disabled={true}
+                            className="inline-block px-8 py-3 bg-yellow-500 text-white rounded-md text-lg font-semibold cursor-not-allowed"
+                        >
+                            Game in Progress
+                        </button>
+                    )}
+                    {challenge.status === 'completed' && (
+                        <div className="p-4 bg-gray-100 rounded-lg">
+                            <h3 className="text-xl font-bold text-gray-800">Game Over</h3>
+                            <p className="mt-2 text-gray-700">
+                                The winner is: <strong className="text-emerald-600">{challenge.winner === challenge.challenger.team ? challenge.challenger.username : challenge.opponent?.username}</strong>!
+                            </p>
+                        </div>
                     )}
                 </div>
             </>

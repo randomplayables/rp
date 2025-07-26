@@ -23,7 +23,7 @@ const GauntletParticipantSchema = new Schema({
 
 export interface IGauntletChallenge extends Document {
   gameId: string; // The type of game, e.g., 'gowap'
-  status: 'pending' | 'active' | 'completed' | 'cancelled';
+  status: 'pending' | 'active' | 'in_progress' | 'completed' | 'cancelled';
   challenger: IGauntletParticipant;
   opponent?: IGauntletParticipant;
   opponentWager: number; // New field to store wager before opponent joins
@@ -37,7 +37,7 @@ const GauntletChallengeSchema = new Schema({
   gameId: { type: String, required: true, index: true },
   status: { 
     type: String, 
-    enum: ['pending', 'active', 'completed', 'cancelled'], 
+    enum: ['pending', 'active', 'in_progress', 'completed', 'cancelled'], 
     default: 'pending', 
     index: true 
   },
