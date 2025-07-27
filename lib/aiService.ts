@@ -1,8 +1,6 @@
 import OpenAI from "openai";
 import {
   ChatCompletionMessageParam,
-  ChatCompletionMessage,
-  ChatCompletionSystemMessageParam
 } from "openai/resources/chat/completions";
 
 // Client for OpenRouter (for chat completions)
@@ -61,71 +59,6 @@ export async function callOpenAIChat(
     temperature: 0.7,
     // max_tokens has been removed to allow the model to use its full capacity
   });
-}
-
-/**
- * Interface for the raw outputs from the AI review cycle.
- */
-export interface AiReviewCycleRawOutputs {
-  chatbot1InitialResponse: ChatCompletionMessage;
-  chatbot2ReviewResponse: ChatCompletionMessage;
-  chatbot1RevisionResponse: ChatCompletionMessage;
-}
-
-/**
- * Orchestrates a dual-chatbot review cycle.
- * Chatbot1 generates initial content, Chatbot2 reviews it, and Chatbot1 revises.
- *
- * @param chatbot1Model - Model for the primary AI.
- * @param systemMessageForChatbot1 - System prompt for the primary AI.
- * @param userMessagesForChatbot1 - Initial user messages for the primary AI's first generation.
- * @param chatbot2Model - Model for the reviewer AI.
- * @param systemMessageForChatbot2 - System prompt for the reviewer AI (Chatbot2).
- * @param createReviewerUserMessageContent - Function to generate the user message content for the reviewer AI.
- * It takes the initial generation content from Chatbot1.
- * @param createRevisionUserMessageContent - Function to generate the user message content for the primary AI's revision pass.
- * It takes the initial generation content and the review content.
- * @returns A promise resolving to an object containing the raw responses from each step of the cycle.
- */
-export async function performAiReviewCycle(
-  chatbot1Model: string,
-  systemMessageForChatbot1: ChatCompletionSystemMessageParam,
-  userMessagesForChatbot1: ChatCompletionMessageParam[],
-  chatbot2Model: string,
-  systemMessageForChatbot2: ChatCompletionSystemMessageParam | null, // <<< MODIFIED: Added this parameter
-  createReviewerUserMessageContent: (initialGenerationContent: string | null) => string,
-  createRevisionUserMessageContent: (initialGenerationContent: string | null, reviewContent: string | null) => string,
-): Promise<AiReviewCycleRawOutputs> {
-
-  // 1. Chatbot1 generates initial content
-  const messagesToChatbot1Initial = [systemMessageForChatbot1, ...userMessagesForChatbot1];
-  const response1 = await callOpenAIChat(chatbot1Model, messagesToChatbot1Initial);
-  const chatbot1InitialResponse = response1.choices[0].message;
-
-  // 2. Chatbot2 reviews the content
-  const reviewUserMessageContent = createReviewerUserMessageContent(chatbot1InitialResponse.content);
-  const messagesToChatbot2: ChatCompletionMessageParam[] = [];
-  if (systemMessageForChatbot2) { // <<< MODIFIED: Add system prompt for Chatbot2 if provided
-    messagesToChatbot2.push(systemMessageForChatbot2);
-  }
-  messagesToChatbot2.push({ role: "user", content: reviewUserMessageContent });
-  const response2 = await callOpenAIChat(chatbot2Model, messagesToChatbot2);
-  const chatbot2ReviewResponse = response2.choices[0].message;
-
-  // 3. Chatbot1 revises the content
-  const revisionUserMessageContent = createRevisionUserMessageContent(chatbot1InitialResponse.content, chatbot2ReviewResponse.content);
-  const messagesToChatbot1Revision: ChatCompletionMessageParam[] = [
-    systemMessageForChatbot1, // Chatbot1 uses its original system prompt for revision context
-    { role: "user", content: revisionUserMessageContent }
-  ];
-  const response3 = await callOpenAIChat(chatbot1Model, messagesToChatbot1Revision);
-  const chatbot1RevisionResponse = response3.choices[0].message;
-
-  return {
-    chatbot1InitialResponse,
-    chatbot2ReviewResponse,
-    chatbot1RevisionResponse,
-  };
 }
 
 /**

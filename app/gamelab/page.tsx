@@ -11,7 +11,6 @@ import { useUser } from "@clerk/nextjs";
 import { ModelDefinition, getAvailableModelsForUser } from "@/lib/modelConfig";
 import {
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT,
-  BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
@@ -166,13 +165,9 @@ function GamelabWorkspace() {
     const [language, setLanguage] = useState('tsx');
     const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
     const [currentCoderSystemPrompt, setCurrentCoderSystemPrompt] = useState<string | null>(null);
-    const [currentReviewerSystemPrompt, setCurrentReviewerSystemPrompt] = useState<string | null>(null);
     const [baseCoderTemplateWithContext, setBaseCoderTemplateWithContext] = useState<string | null>(null);
-    const [baseReviewerTemplateWithContext, setBaseReviewerTemplateWithContext] = useState<string | null>(null);
     const [isLoadingSystemPrompts, setIsLoadingSystemPrompts] = useState(true);
-    const [useCodeReview, setUseCodeReview] = useState<boolean>(false);
     const [selectedCoderModel, setSelectedCoderModel] = useState<string>("");
-    const [selectedReviewerModel, setSelectedReviewerModel] = useState<string>("");
     const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
     const [isLoadingModels, setIsLoadingModels] = useState(true);
     const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
@@ -391,7 +386,6 @@ function GamelabWorkspace() {
         try {
           const contextData = await fetchGamelabContextData();
           let populatedCoderPrompt = BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT;
-          let populatedReviewerPrompt = BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT;
     
           const templateStructuresString = JSON.stringify(contextData.templateStructure || {}, null, 2);
           const querySpecificExamplesString = '(Code examples related to your query will be injected here by the AI if relevant)';
@@ -400,14 +394,8 @@ function GamelabWorkspace() {
             .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
             .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', querySpecificExamplesString);
     
-          populatedReviewerPrompt = populatedReviewerPrompt
-            .replace('%%GAMELAB_TEMPLATE_STRUCTURES%%', templateStructuresString)
-            .replace('%%GAMELAB_QUERY_SPECIFIC_CODE_EXAMPLES%%', querySpecificExamplesString);
-    
           setCurrentCoderSystemPrompt(populatedCoderPrompt);
           setBaseCoderTemplateWithContext(populatedCoderPrompt);
-          setCurrentReviewerSystemPrompt(populatedReviewerPrompt);
-          setBaseReviewerTemplateWithContext(populatedReviewerPrompt);
     
         } catch (err) {
           console.error("Error initializing GameLab system prompts:", err);
@@ -417,8 +405,6 @@ function GamelabWorkspace() {
     
           setCurrentCoderSystemPrompt(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT));
           setBaseCoderTemplateWithContext(errorPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT));
-          setCurrentReviewerSystemPrompt(errorPrompt(BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT));
-          setBaseReviewerTemplateWithContext(errorPrompt(BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT));
         } finally {
           setIsLoadingSystemPrompts(false);
         }
@@ -590,10 +576,7 @@ function GamelabWorkspace() {
       formData.append('chatHistory', JSON.stringify(messages.map(m => ({ role: m.role, content: m.content }))));
       formData.append('language', language);
       if (currentCoderSystemPrompt) formData.append('coderSystemPrompt', currentCoderSystemPrompt);
-      if (currentReviewerSystemPrompt) formData.append('reviewerSystemPrompt', currentReviewerSystemPrompt);
-      formData.append('useCodeReview', String(useCodeReview));
       if (selectedCoderModel) formData.append('selectedCoderModelId', selectedCoderModel);
-      if (selectedReviewerModel) formData.append('selectedReviewerModelId', selectedReviewerModel);
       
       if (attachedFiles.length > 0) {
         attachedFiles.forEach(file => {
@@ -628,14 +611,6 @@ function GamelabWorkspace() {
         } else {
           setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
         }
-    };
-    
-    const handleResetReviewerSystemPrompt = () => { 
-        if (baseReviewerTemplateWithContext) { 
-            setCurrentReviewerSystemPrompt(baseReviewerTemplateWithContext); 
-        } else { 
-            initializeSystemPrompts(); 
-        } 
     };
 
     const getJsFilesForUpload = (): SandpackFiles => {
@@ -786,30 +761,13 @@ function GamelabWorkspace() {
                           </div>
                       </div>
                       <div>
-                          <label htmlFor="modelSelectorCoderGameLab" className="block text-xs font-medium text-gray-600">{useCodeReview ? "Coder Model" : "AI Model"} (Optional)</label>
+                          <label htmlFor="modelSelectorCoderGameLab" className="block text-xs font-medium text-gray-600">AI Model (Optional)</label>
                           <select id="modelSelectorCoderGameLab" value={selectedCoderModel} onChange={(e) => setSelectedCoderModel(e.target.value)} disabled={isLoadingModels || isPending}
                           className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs text-gray-900"
                           >
                           <option value="">-- Use Default --</option>
                           {isLoadingModels ? <option disabled>Loading models...</option> : availableModels.length === 0 ? <option disabled>No models available.</option> : availableModels.map(model => (<option key={model.id} value={model.id}>{model.name}</option>))}
                           </select>
-                      </div>
-                      {useCodeReview && (
-                          <div>
-                          <label htmlFor="modelSelectorReviewerGameLab" className="block text-xs font-medium text-gray-600">Reviewer Model (Optional)</label>
-                          <select id="modelSelectorReviewerGameLab" value={selectedReviewerModel} onChange={(e) => setSelectedReviewerModel(e.target.value)} disabled={isLoadingModels || isPending}
-                              className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs text-gray-900"
-                          >
-                              <option value="">-- Use Default Peer --</option>
-                              {isLoadingModels ? <option disabled>Loading models...</option> : availableModels.length === 0 ? <option disabled>No models available.</option> : availableModels.map(model => (<option key={model.id + "-reviewer"} value={model.id}>{model.name}</option>))}
-                          </select>
-                          </div>
-                      )}
-                      <div className="flex items-center">
-                          <input type="checkbox" id="useCodeReviewGameLab" checked={useCodeReview} onChange={(e) => { setUseCodeReview(e.target.checked); setSelectedCoderModel(""); setSelectedReviewerModel("");}}
-                          className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                          />
-                          <label htmlFor="useCodeReviewGameLab" className="ml-2 text-sm text-gray-700">Enable AI Code Review (experimental)</label>
                       </div>
                       <div className="flex justify-end">
                           <button type="submit" disabled={isPending} className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50">
@@ -819,35 +777,23 @@ function GamelabWorkspace() {
                       </div>
                       <div className="mt-1 border-t pt-2">
                         <button type="button" onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)} className="text-xs text-gray-500 hover:text-emerald-600">
-                            {showSystemPromptEditor ? "Hide System Prompts" : "Show System Prompts"}
+                            {showSystemPromptEditor ? "Hide System Prompt" : "Show System Prompt"}
                         </button>
                         {showSystemPromptEditor && (
                             <div className="mt-2 space-y-2">
                             {isLoadingSystemPrompts ? <div className="flex items-center text-xs text-gray-500"><Spinner className="w-3 h-3 mr-1" /> Loading...</div> : (<>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">{useCodeReview ? "Coder System Prompt:" : "System Prompt:"}</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">System Prompt:</label>
                                     <textarea value={currentCoderSystemPrompt || ""} onChange={(e) => setCurrentCoderSystemPrompt(e.target.value)}
                                     className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900" placeholder="Coder system prompt..."
                                     />
                                     <div className="flex justify-end mt-1">
                                         <button type="button" onClick={handleResetCoderSystemPrompt} disabled={isLoadingSystemPrompts}
                                         className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
-                                        >Reset Coder</button>
+                                        >Reset Prompt</button>
                                     </div>
                                 </div>
-                                {useCodeReview && (
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Reviewer System Prompt:</label>
-                                        <textarea value={currentReviewerSystemPrompt || ""} onChange={(e) => setCurrentReviewerSystemPrompt(e.target.value)}
-                                        className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900" placeholder="Reviewer system prompt..."
-                                        />
-                                        <div className="flex justify-end mt-1">
-                                            <button type="button" onClick={handleResetReviewerSystemPrompt} disabled={isLoadingSystemPrompts || !baseReviewerTemplateWithContext}
-                                            className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
-                                            >Reset Reviewer</button>
-                                        </div>
-                                    </div>
-                                )}</>
+                                </>
                             )}
                             </div>
                         )}

@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_MODELS,
   getAvailableModelsForUser,
-  getCodeReviewPeer,
   isModelFree, 
   ModelDefinition, // Make sure ModelDefinition is exported from modelConfig.ts
 } from "./modelConfig";
@@ -71,11 +70,10 @@ export interface ResolvedModelsResult {
 export async function resolveModelsForChat(
   userId: string,
   isUserSubscribed: boolean,
-  useCodeReview: boolean,
+  useCodeReview: boolean, // This parameter is no longer used but kept for compatibility during transition
   selectedCoderModelId?: string | null,
-  selectedReviewerModelId?: string | null
+  selectedReviewerModelId?: string | null // This parameter is no longer used
 ): Promise<ResolvedModelsResult> {
-  // Corrected destructuring and error handling
   const usageDetails = await getUserSubscriptionAndUsage(userId);
 
   if (!usageDetails.canUseApi) {
@@ -89,8 +87,6 @@ export async function resolveModelsForChat(
   }
 
   let chatbot1Model: string;
-  let chatbot2Model: string | undefined;
-
   const availableToUser = getAvailableModelsForUser(isUserSubscribed);
 
   const validateModel = (selectedId: string | null | undefined): string | null => {
@@ -103,35 +99,16 @@ export async function resolveModelsForChat(
     return selectedId;
   };
 
-  if (useCodeReview) {
-    const validCoderModel = validateModel(selectedCoderModelId);
-    const validReviewerModel = validateModel(selectedReviewerModelId);
-
-    if (validCoderModel && validReviewerModel) {
-      chatbot1Model = validCoderModel;
-      chatbot2Model = validReviewerModel;
-    } else if (validCoderModel) {
-      chatbot1Model = validCoderModel;
-      chatbot2Model = getCodeReviewPeer(validCoderModel, isUserSubscribed);
-    } else if (validReviewerModel) {
-      chatbot2Model = validReviewerModel;
-      chatbot1Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.codeReview.chatbot1 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot1;
-    } else {
-      chatbot1Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.codeReview.chatbot1 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot1;
-      chatbot2Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.codeReview.chatbot2 : DEFAULT_MODELS.nonSubscribed.codeReview.chatbot2;
-    }
+  const validCoderModel = validateModel(selectedCoderModelId);
+  if (validCoderModel) {
+    chatbot1Model = validCoderModel;
   } else {
-    const validCoderModel = validateModel(selectedCoderModelId);
-    if (validCoderModel) {
-      chatbot1Model = validCoderModel;
-    } else {
-      chatbot1Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.noCodeReview : DEFAULT_MODELS.nonSubscribed.noCodeReview;
-    }
+    chatbot1Model = isUserSubscribed ? DEFAULT_MODELS.subscribed.noCodeReview : DEFAULT_MODELS.nonSubscribed.noCodeReview;
   }
+
   return { 
     chatbot1Model, 
-    chatbot2Model, 
-    canUseApi: true, // Changed from usageDetails.canUseApi as we already checked it
+    canUseApi: true,
     remainingRequests: usageDetails.remainingRequests 
   };
 }
@@ -139,32 +116,21 @@ export async function resolveModelsForChat(
 export interface IncrementApiUsageParams {
   userId: string;
   isSubscribed: boolean;
-  useCodeReview: boolean;
+  useCodeReview: boolean; // No longer used, kept for compatibility
   coderModelId?: string | null;
-  reviewerModelId?: string | null;
+  reviewerModelId?: string | null; // No longer used
 }
 
 export async function incrementApiUsage(params: IncrementApiUsageParams): Promise<void> {
-  const { userId, isSubscribed, useCodeReview, coderModelId, reviewerModelId } = params;
+  const { userId, isSubscribed, coderModelId } = params;
 
   let requestsToCharge = 0;
 
   if (!isSubscribed) {
     requestsToCharge = 1;
   } else {
-    if (!useCodeReview) {
-      if (coderModelId && !isModelFree(coderModelId)) {
-        requestsToCharge = 1;
-      } else {
-        requestsToCharge = 0;
-      }
-    } else {
-      if (coderModelId && !isModelFree(coderModelId)) {
-        requestsToCharge += 2; 
-      }
-      if (reviewerModelId && !isModelFree(reviewerModelId)) {
-        requestsToCharge += 1; 
-      }
+    if (coderModelId && !isModelFree(coderModelId)) {
+      requestsToCharge = 1;
     }
   }
 

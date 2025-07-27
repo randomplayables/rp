@@ -3,12 +3,11 @@ import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { resolveModelsForChat, incrementApiUsage, IncrementApiUsageParams } from "@/lib/modelSelection";
 import { getTemplateStructure, fetchGameCodeExamplesForQuery, fetchMainGameExample } from "./gamelabHelper";
-import { callOpenAIChat, performAiReviewCycle, AiReviewCycleRawOutputs } from "@/lib/aiService";
+import { callOpenAIChat } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
 import { 
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT, 
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
-  BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
 } from "@/app/gamelab/prompts";
@@ -102,10 +101,7 @@ export async function POST(request: NextRequest) {
     const chatHistory = JSON.parse(formData.get('chatHistory') as string || '[]');
     const language = formData.get('language') as string;
     const coderSystemPrompt = formData.get('coderSystemPrompt') as string | null;
-    const reviewerSystemPrompt = formData.get('reviewerSystemPrompt') as string | null;
-    const useCodeReview = formData.get('useCodeReview') === 'true';
     const selectedCoderModelId = formData.get('selectedCoderModelId') as string | null;
-    const selectedReviewerModelId = formData.get('selectedReviewerModelId') as string | null;
 
     // New parameters for multi-step RPTS generation
     const generationStep = formData.get('generationStep') as 'structure' | 'code' | null;
@@ -191,33 +187,17 @@ export async function POST(request: NextRequest) {
     const initialUserMessages: ChatCompletionMessageParam[] = [...(chatHistory.map((msg: any) => ({ role: msg.role, content: msg.content })) as ChatCompletionMessageParam[]), { role: "user", content: userQuery }];
     const coderSystemMessage: ChatCompletionSystemMessageParam = { role: "system", content: coderSystemPromptToUse };
     
-    const modelResolution = await resolveModelsForChat(clerkUser.id, isSubscribed, useCodeReview, selectedCoderModelId, selectedReviewerModelId);
+    const modelResolution = await resolveModelsForChat(clerkUser.id, isSubscribed, false, selectedCoderModelId, null);
     if (!modelResolution.canUseApi) return NextResponse.json({ error: modelResolution.error || "Monthly API limit reached.", limitReached: true }, { status: 403 });
     if (modelResolution.error) return NextResponse.json({ error: modelResolution.error }, { status: 400 });
 
-    if (useCodeReview) {
-      if (!modelResolution.chatbot1Model || !modelResolution.chatbot2Model) {
-        return NextResponse.json({ error: "Failed to resolve models for code review." }, { status: 500 });
-      }
-      const baseReviewerPrompt = (reviewerSystemPrompt && reviewerSystemPrompt.trim() !== "") ? reviewerSystemPrompt : BASE_GAMELAB_REVIEWER_SYSTEM_PROMPT;
-      const reviewerSystemPromptToUse = baseReviewerPrompt;
-      const reviewerSystemMessage: ChatCompletionSystemMessageParam = { role: "system", content: reviewerSystemPromptToUse };
-      
-      const createReviewerPrompt = (initialGen: string | null) => `Review the following code based on your instructions. Initial code:\n\n${initialGen || 'No code generated.'}`;
-      const createRevisionPrompt = (initialGen: string | null, review: string | null) => `Revise your initial code based on the following review. Initial code:\n\n${initialGen || 'No code.'}\n\nReview:\n${review || 'No review.'}\n\nReturn only the revised, complete code.`;
-
-      const reviewCycleOutputs = await performAiReviewCycle(modelResolution.chatbot1Model, coderSystemMessage, initialUserMessages, modelResolution.chatbot2Model, reviewerSystemMessage, createReviewerPrompt, createRevisionPrompt);
-      finalAiResponseContent = reviewCycleOutputs.chatbot1RevisionResponse.content;
-
-    } else {
-      if (!modelResolution.chatbot1Model) return NextResponse.json({ error: "Failed to resolve model." }, { status: 500 });
-      const modelToUse = modelResolution.chatbot1Model;
-      const messagesToAI: ChatCompletionMessageParam[] = language === 'rpts'
-        ? [coderSystemMessage]
-        : [coderSystemMessage, ...initialUserMessages];
-      const response = await callOpenAIChat(modelToUse, messagesToAI);
-      finalAiResponseContent = response.choices[0].message.content;
-    }
+    if (!modelResolution.chatbot1Model) return NextResponse.json({ error: "Failed to resolve model." }, { status: 500 });
+    const modelToUse = modelResolution.chatbot1Model;
+    const messagesToAI: ChatCompletionMessageParam[] = language === 'rpts'
+      ? [coderSystemMessage]
+      : [coderSystemMessage, ...initialUserMessages];
+    const response = await callOpenAIChat(modelToUse, messagesToAI);
+    finalAiResponseContent = response.choices[0].message.content;
     
     if (assetDataPlaceholders.length > 0 && finalAiResponseContent) {
         for (const { placeholder, dataUri } of assetDataPlaceholders) {
@@ -292,7 +272,7 @@ export async function POST(request: NextRequest) {
         };
     }
 
-    const incrementParams: IncrementApiUsageParams = { userId: clerkUser.id, isSubscribed, useCodeReview, coderModelId: modelResolution.chatbot1Model, reviewerModelId: useCodeReview ? modelResolution.chatbot2Model : null };
+    const incrementParams: IncrementApiUsageParams = { userId: clerkUser.id, isSubscribed, useCodeReview: false, coderModelId: modelResolution.chatbot1Model, reviewerModelId: null };
     await incrementApiUsage(incrementParams);
     const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
     finalApiResponse.remainingRequests = usageData ? Math.max(0, usageData.monthlyLimit - usageData.usageCount) : getMonthlyLimitForTier(profile?.subscriptionTier);
