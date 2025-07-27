@@ -44,7 +44,7 @@ export async function callOpenAIChat(
     // For user messages, ensure content is in the correct format
     if (typeof msg.content === 'string') {
         // Models like Llama and Deepseek prefer simple string content for user role
-        if (modelName.startsWith("meta-llama/") || modelName.startsWith("deepseek/")) {
+        if (modelName.startsWith("meta-llama/") || modelName.startsWith("deepseek/") || modelName.startsWith("qwen/")) {
             return { role: msg.role, content: msg.content };
         }
         // Other models, especially multimodal ones, expect content as an array of parts
