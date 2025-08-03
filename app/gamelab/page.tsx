@@ -13,7 +13,9 @@ import {
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE,
-  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_1_STRUCTURE,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_2_CODE
 } from "./prompts";
 import { SandpackProvider, useSandpack, SandpackFiles, SandpackCodeEditor, SandpackPreview } from "@codesandbox/sandpack-react";
 import { CodeBlock } from './components/CodeBlock';
@@ -187,6 +189,7 @@ function GamelabWorkspace() {
     const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
     const [fileStructure, setFileStructure] = useState<RptsFile[] | null>(null);
     const projectDescriptionRef = useRef("");
+    const [isGauntletEnabled, setIsGauntletEnabled] = useState(false);
 
     const suggestedPrompts = {
         tsx: [
@@ -414,11 +417,15 @@ function GamelabWorkspace() {
         if (language === 'javascript') {
           setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
         } else if (language === 'rpts') {
-            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE);
+            if (isGauntletEnabled) {
+                setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_1_STRUCTURE);
+            } else {
+                setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE);
+            }
         } else {
           setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
         }
-    }, [language, baseCoderTemplateWithContext]);
+    }, [language, baseCoderTemplateWithContext, isGauntletEnabled]);
 
 
     useEffect(() => {
@@ -532,6 +539,7 @@ function GamelabWorkspace() {
                         formData.append('filePath', file.path);
                         formData.append('fileDescription', file.description);
                         formData.append('completedFilesContext', completedFilesContext);
+                        formData.append('isGauntletEnabled', isGauntletEnabled.toString());
     
                         const response: GameLabApiResponse = await sendChatMessageToApi(formData);
                         fileContent = response.code || `// AI failed to return code for ${file.path}`;
@@ -562,7 +570,7 @@ function GamelabWorkspace() {
         if (language === 'rpts' && fileStructure && !isGeneratingFiles) {
             generateAllFiles(fileStructure);
         }
-    }, [fileStructure, language, isGeneratingFiles, sandpack, updateFile, setActiveFile]);
+    }, [fileStructure, language, isGeneratingFiles, sandpack, updateFile, setActiveFile, isGauntletEnabled]);
 
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -586,6 +594,7 @@ function GamelabWorkspace() {
 
       if (language === 'rpts') {
         formData.append('generationStep', 'structure');
+        formData.append('isGauntletEnabled', isGauntletEnabled.toString());
         projectDescriptionRef.current = inputMessage;
         setIsGeneratingStructure(true);
       }
@@ -607,7 +616,7 @@ function GamelabWorkspace() {
         if (language === 'javascript') {
           setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS);
         } else if (language === 'rpts') {
-            setCurrentCoderSystemPrompt(BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE);
+            setCurrentCoderSystemPrompt(isGauntletEnabled ? BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_1_STRUCTURE : BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE);
         } else {
           setCurrentCoderSystemPrompt(baseCoderTemplateWithContext || BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT);
         }
@@ -760,6 +769,20 @@ function GamelabWorkspace() {
                               </div>
                           </div>
                       </div>
+                      {language === 'rpts' && (
+                        <div className="pt-2">
+                          <label className="flex items-center text-sm font-medium text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={isGauntletEnabled}
+                              onChange={(e) => setIsGauntletEnabled(e.target.checked)}
+                              disabled={isPending}
+                              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mr-2"
+                            />
+                            Generate Gauntlet-enabled game
+                          </label>
+                        </div>
+                      )}
                       <div>
                           <label htmlFor="modelSelectorCoderGameLab" className="block text-xs font-medium text-gray-600">AI Model (Optional)</label>
                           <select id="modelSelectorCoderGameLab" value={selectedCoderModel} onChange={(e) => setSelectedCoderModel(e.target.value)} disabled={isLoadingModels || isPending}

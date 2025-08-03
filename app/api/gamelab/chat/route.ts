@@ -9,7 +9,9 @@ import {
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_REACT, 
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_JS,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE,
-  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_1_STRUCTURE,
+  BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_2_CODE
 } from "@/app/gamelab/prompts";
 
 function sanitizeCodeForBrowser(code: string, language: string): string {
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest) {
     const filePath = formData.get('filePath') as string | null;
     const fileDescription = formData.get('fileDescription') as string | null;
     const completedFilesContext = formData.get('completedFilesContext') as string | null;
+    const isGauntletEnabled = formData.get('isGauntletEnabled') === 'true';
     
     // Handle multiple assets
     const attachedAssets = formData.getAll('assets') as File[];
@@ -148,10 +151,10 @@ export async function POST(request: NextRequest) {
 
     if (language === 'rpts') {
         if (generationStep === 'structure') {
-            coderSystemPromptToUse = BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE
+            coderSystemPromptToUse = (isGauntletEnabled ? BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_1_STRUCTURE : BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_1_STRUCTURE)
                 .replace('%%USER_GAME_PROMPT%%', userQuery);
         } else if (generationStep === 'code') {
-            coderSystemPromptToUse = BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE
+            coderSystemPromptToUse = (isGauntletEnabled ? BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_2_CODE : BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_STEP_2_CODE)
                 .replace('%%PROJECT_DESCRIPTION%%', projectDescription || 'A new game for RandomPlayables.')
                 .replace('%%FILE_STRUCTURE%%', fileStructure || '[]')
                 .replace('%%FILE_PATH%%', filePath || '')
@@ -197,6 +200,12 @@ export async function POST(request: NextRequest) {
       ? [coderSystemMessage]
       : [coderSystemMessage, ...initialUserMessages];
     const response = await callOpenAIChat(modelToUse, messagesToAI);
+    
+    // **FIX START**: Increment API usage immediately after the AI call for all languages.
+    const incrementParams: IncrementApiUsageParams = { userId: clerkUser.id, isSubscribed, useCodeReview: false, coderModelId: modelResolution.chatbot1Model, reviewerModelId: null };
+    await incrementApiUsage(incrementParams);
+    // **FIX END**
+
     finalAiResponseContent = response.choices[0].message.content;
     
     if (assetDataPlaceholders.length > 0 && finalAiResponseContent) {
@@ -272,8 +281,6 @@ export async function POST(request: NextRequest) {
         };
     }
 
-    const incrementParams: IncrementApiUsageParams = { userId: clerkUser.id, isSubscribed, useCodeReview: false, coderModelId: modelResolution.chatbot1Model, reviewerModelId: null };
-    await incrementApiUsage(incrementParams);
     const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
     finalApiResponse.remainingRequests = usageData ? Math.max(0, usageData.monthlyLimit - usageData.usageCount) : getMonthlyLimitForTier(profile?.subscriptionTier);
 
