@@ -6,6 +6,5 @@ export const allowedOrigins = [
     'http://52.53.213.53:5173',      // EC2 public IP Vite dev server
     'http://52.53.213.53:3000',      // EC2 public IP Next.js dev server
     'https://randomplayables.com',
-    'https://gothamloops.randomplayables.com',
-    "https://all-baboons-check.loca.lt"
+    'https://gothamloops.randomplayables.com'
   ];
