@@ -6,15 +6,16 @@ import { isAdmin } from "@/lib/auth";
 
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    context: { params: { id: string } }
 ) {
-    const submissionId = params.id; // This line is the fix
+    const submissionId = context.params.id;
     try {
         const clerkUser = await currentUser();
         if (!clerkUser || !isAdmin(clerkUser.id, clerkUser.username)) {
             return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
         }
 
+        // FIX: Await the request body *before* using the params in logic
         const { status } = await request.json();
         
         if (!submissionId || !status || !['approved', 'rejected'].includes(status)) {
