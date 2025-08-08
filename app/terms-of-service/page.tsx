@@ -12,7 +12,7 @@ export default function TermsOfServicePage() {
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Terms of Service</h1>
       <p className="mb-4 text-gray-600">Last updated: August 07, 2025</p>
 
-      <div className="prose prose-lg max-w-none">
+      <div className="prose prose-lg max-w-none space-y-4">
         <p>
           Please read these Terms of Service (&quot;Terms&quot;) carefully before using the <Link href="/">randomplayables.com</Link> website and its subdomains (the &quot;Service&quot;) operated by randomplayables (&quot;us&quot;, &quot;we&quot;, or &quot;our&quot;). This privacy policy was written by Gemini 2.5 Pro.
         </p>

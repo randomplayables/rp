@@ -18,7 +18,9 @@ const isPublicRoute = createRouteMatcher([
   "/api/gauntlet/challenges(.*)", // This line is the fix
   "/datalab(.*)",
   "/api/datalab(.*)",
-  "/api/github/webhook(.*)" // UPDATED
+  "/api/github/webhook(.*)", // UPDATED
+  "/privacy-policy(.*)",
+  "/terms-of-service(.*)"
 ])
 
 const isSignUpRoute = createRouteMatcher(["/sign-up(.*)"])

@@ -12,7 +12,7 @@ export default function PrivacyPolicyPage() {
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Privacy Policy</h1>
       <p className="mb-4 text-gray-600">Last updated: August 07, 2025</p>
 
-      <div className="prose prose-lg max-w-none">
+      <div className="prose prose-lg max-w-none space-y-4">
         <p>
           Welcome to randomplayables (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;). We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website <Link href="/">randomplayables.com</Link> and our related subdomains (the &quot;Site&quot;). Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site. This privacy policy was written by Gemini 2.5 Pro.
         </p>
