@@ -4,21 +4,23 @@ import SurveyModel from "@/models/Survey";
 
 export async function GET(
   request: NextRequest,
-  { params: { id } }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
-    
-    // Find survey by the unique ID in the shareable link
+
+    const { id } = await context.params;
     const uniqueId = id;
-    const survey = await SurveyModel.findOne({ 
+
+    // Find survey by the unique ID in the shareable link
+    const survey = await SurveyModel.findOne({
       shareableLink: { $regex: uniqueId }
     });
-    
+
     if (!survey) {
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
-    
+
     return NextResponse.json({ survey });
   } catch (error: any) {
     console.error("Error fetching survey:", error);
