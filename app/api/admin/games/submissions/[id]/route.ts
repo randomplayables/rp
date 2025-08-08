@@ -8,7 +8,7 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
-    const { id: submissionId } = params; // Fix: Destructure id from params
+    const submissionId = params.id; // This line is the fix
     try {
         const clerkUser = await currentUser();
         if (!clerkUser || !isAdmin(clerkUser.id, clerkUser.username)) {
