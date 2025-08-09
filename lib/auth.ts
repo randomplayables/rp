@@ -1,6 +1,6 @@
 export function isAdminUser(userId?: string | null): boolean {
-  // Read the admin user ID from environment variables for security
-  const adminId = process.env.ADMIN_USER_ID;
+  // Read the admin user ID from a PUBLIC environment variable
+  const adminId = process.env.NEXT_PUBLIC_ADMIN_USER_ID;
 
   // Check if the adminId is configured and if the provided userId matches
   return !!adminId && userId === adminId;
