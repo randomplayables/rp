@@ -1,118 +1,116 @@
-// components/stack/Pagination.tsx
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
+type ExtraQuery = Record<string, string> | undefined;
+
 interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
+  // Preferred props (current API)
+  currentPage?: number;
+  totalPages?: number;
+
+  // Legacy/alternate props (to keep existing calls type-safe)
+  total?: number;   // total item count
+  page?: number;    // current page index (1-based)
+  limit?: number;   // page size
+  pages?: number;   // total pages
+  basePath?: string; // optional base path override (unused—router handles path)
+  extraQuery?: ExtraQuery; // optional extra query (unused—searchParams covers this)
 }
 
-const Pagination = ({ currentPage, totalPages }: PaginationProps) => {
+const Pagination = (props: PaginationProps) => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  
+
+  // Normalize inputs so both signatures are supported
+  const normalizedCurrentPage =
+    props.currentPage ??
+    props.page ??
+    1;
+
+  const normalizedTotalPages =
+    props.totalPages ??
+    props.pages ??
+    // Fallback compute from total+limit if provided; otherwise 1
+    (props.total != null && props.limit ? Math.max(1, Math.ceil(props.total / props.limit)) : 1);
+
   const createPageUrl = (page: number) => {
     const params = new URLSearchParams(searchParams);
     params.set('page', page.toString());
     return `${pathname}?${params.toString()}`;
   };
-  
+
   const goToPage = (page: number) => {
-    if (page < 1 || page > totalPages) return;
+    if (page < 1 || page > normalizedTotalPages) return;
     router.push(createPageUrl(page));
   };
-  
+
   // Generate page numbers to display
   const getPageNumbers = () => {
-    const pages = [];
+    const pages: Array<number | '.'> = [];
     const maxPagesToShow = 7; // Show at most 7 page numbers
-    
-    if (totalPages <= maxPagesToShow) {
-      // If total pages is less than max, show all pages
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
+
+    if (normalizedTotalPages <= maxPagesToShow) {
+      for (let i = 1; i <= normalizedTotalPages; i++) pages.push(i);
     } else {
-      // Always include first and last page
       pages.push(1);
-      
-      // Add pages around current page
+
       const leftSide = Math.floor(maxPagesToShow / 2);
       const rightSide = maxPagesToShow - leftSide - 1;
-      
-      // Determine start and end pages
-      let startPage = Math.max(2, currentPage - leftSide);
-      let endPage = Math.min(totalPages - 1, currentPage + rightSide);
-      
-      // Adjust if we're close to start or end
-      if (startPage <= 2) {
-        endPage = Math.min(totalPages - 1, maxPagesToShow - 1);
-      }
-      if (endPage >= totalPages - 1) {
-        startPage = Math.max(2, totalPages - maxPagesToShow + 1);
-      }
-      
-      // Add ellipsis at start if needed
-      if (startPage > 2) {
-        pages.push('...');
-      }
-      
-      // Add middle pages
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-      
-      // Add ellipsis at end if needed
-      if (endPage < totalPages - 1) {
-        pages.push('...');
-      }
-      
-      // Add last page if not already added
-      if (!pages.includes(totalPages)) {
-        pages.push(totalPages);
-      }
+
+      let startPage = Math.max(2, normalizedCurrentPage - leftSide);
+      let endPage = Math.min(normalizedTotalPages - 1, normalizedCurrentPage + rightSide);
+
+      if (startPage <= 2) endPage = Math.min(normalizedTotalPages - 1, maxPagesToShow - 1);
+      if (endPage >= normalizedTotalPages - 1) startPage = Math.max(2, normalizedTotalPages - maxPagesToShow + 1);
+
+      if (startPage > 2) pages.push('.');
+      for (let i = startPage; i <= endPage; i++) pages.push(i);
+      if (endPage < normalizedTotalPages - 1) pages.push('.');
+      if (!pages.includes(normalizedTotalPages)) pages.push(normalizedTotalPages);
     }
-    
+
     return pages;
   };
-  
-  if (totalPages <= 1) return null;
-  
+
+  if (normalizedTotalPages <= 1) return null;
+
   return (
     <div className="flex justify-center items-center space-x-1 mt-4">
       <button
-        onClick={() => goToPage(currentPage - 1)}
-        disabled={currentPage === 1}
+        onClick={() => goToPage(normalizedCurrentPage - 1)}
+        disabled={normalizedCurrentPage === 1}
         className="px-3 py-1 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Previous
       </button>
-      
+
       <div className="flex space-x-1">
-        {getPageNumbers().map((page, index) => (
-          page === '...' ? (
-            <span key={`ellipsis-${index}`} className="px-3 py-1">...</span>
+        {getPageNumbers().map((page, index) =>
+          page === '.' ? (
+            <span key={`ellipsis-${index}`} className="px-3 py-1">
+              ...
+            </span>
           ) : (
             <button
               key={`page-${page}`}
               onClick={() => goToPage(page as number)}
               className={`px-3 py-1 rounded ${
-                currentPage === page
+                normalizedCurrentPage === page
                   ? 'bg-emerald-500 text-white'
                   : 'border border-gray-300 hover:bg-gray-50'
               }`}
             >
               {page}
             </button>
-          )
-        ))}
+          ),
+        )}
       </div>
-      
+
       <button
-        onClick={() => goToPage(currentPage + 1)}
-        disabled={currentPage === totalPages}
+        onClick={() => goToPage(normalizedCurrentPage + 1)}
+        disabled={normalizedCurrentPage === normalizedTotalPages}
         className="px-3 py-1 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Next
