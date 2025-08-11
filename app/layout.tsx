@@ -17,11 +17,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// export const metadata: Metadata = {
-//   title: "Random Playables",
-//   description: "Turn math ponderings into citizen science games",
-// };
-
 export const metadata: Metadata = {
   title: "Random Playables",
   description: "Turn math ponderings into citizen science games",
