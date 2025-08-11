@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   title: "Random Playables",
   description: "Turn math ponderings into citizen science games",
   icons: {
-    icon: "/RPLogo2.png", // This points to public/RPLogo2.png
+    icon: "/favicon.ico",
   },
 };
 
