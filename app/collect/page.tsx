@@ -822,9 +822,13 @@ export default function CollectPage() {
       setBaseCoderTemplateWithContext(initialCoderPrompt);
 
     } catch (err) {
-      console.error("Error initializing Collect system prompts:", err);
-      setCurrentCoderSystemPrompt(BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', '[]'));
-      setBaseCoderTemplateWithContext(BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', '[]'));
+      console.error("Error fetching initial system prompt context:", err);
+      const errorPromptText = 'Error: Could not load game list.';
+      
+      const errorCoderPrompt = BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', errorPromptText);
+      setCurrentCoderSystemPrompt(errorCoderPrompt);
+      setBaseCoderTemplateWithContext(errorCoderPrompt);
+
     } finally {
       setIsLoadingSystemPrompts(false);
     }
@@ -899,15 +903,13 @@ export default function CollectPage() {
           content: `✅ Survey created successfully!\n\nShare this link with participants: ${data.survey.shareableLink}\n\nClick "Save to Profile" to add this survey to your instruments collection.`,
           timestamp: new Date()
         };
-        // FIX #4
         setMessages(prev => [...prev, assistantMessage]);
-        // FIX #5
         setSurveyData(prev => ({
           ...prev,
           savedId: data.survey.id, 
         }));
       } else {
-        const assistantMessage: ChatMessage = {
+         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: `⚠️ Error creating survey: ${data.error || 'Unknown error'}`,
           timestamp: new Date()
@@ -916,16 +918,16 @@ export default function CollectPage() {
       }
     },
     onError: (error: Error) => {
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: `⚠️ Error creating survey: ${error.message}`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+       const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `⚠️ Error creating survey: ${error.message}`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
     }
   });
 
-  // Prevent auto-scroll on initial render; only scroll when new messages are appended.
+  // NEW: Prevent auto-scroll on initial render; only scroll when new messages are appended.
   const isFirstRender = useRef(true);
   const prevMessageCount = useRef(0);
   useEffect(() => {
@@ -1124,7 +1126,7 @@ export default function CollectPage() {
                     <button
                       key={idx}
                       onClick={() => setInputMessage(prompt)}
-                      className="block w/full text-left text-xs bg-white p-2 mb-1 rounded border hover:bg-gray-100"
+                      className="block w-full text-left text-xs bg-white p-2 mb-1 rounded border hover:bg-gray-100"
                     >
                       {prompt}
                     </button>
@@ -1134,40 +1136,62 @@ export default function CollectPage() {
             )}
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[80%] p-3 rounded-lg ${
-                    msg.role === 'user'
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
-                  <div className="text-[10px] opacity-70 mt-1">
-                    {msg.timestamp.toLocaleString()}
-                  </div>
+                <div className={`max-w-[80%] p-3 rounded-lg ${
+                  msg.role === 'user'
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-white border border-gray-200'
+                }`}>
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  <p className="text-xs mt-1 opacity-70">
+                    {msg.timestamp.toLocaleTimeString()}
+                  </p>
                 </div>
               </div>
             ))}
+            {chatMutation.isPending && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-gray-200 p-3 rounded-lg">
+                  <Spinner />
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-4 border-t bg-white">
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Coder Model</label>
+          <form onSubmit={handleSubmit} className="p-4 border-t bg-white overflow-auto">
+            <div className="flex flex-col space-y-2">
+              <textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!chatMutation.isPending && inputMessage.trim()) handleSubmit(e);
+                  }
+                }}
+                placeholder="Describe your survey needs..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y min-h-[60px]"
+                disabled={chatMutation.isPending}
+              />
+              
+              <div className="mt-2">
+                <label htmlFor="modelSelectorCoderCollect" className="block text-xs font-medium text-gray-600">
+                  AI Model (Optional)
+                </label>
                 <select
+                  id="modelSelectorCoderCollect"
                   value={selectedCoderModel}
                   onChange={(e) => setSelectedCoderModel(e.target.value)}
                   disabled={isLoadingModels || chatMutation.isPending}
                   className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
                 >
-                  <option value="">Auto</option>
+                  <option value="">-- Use Default --</option>
                   {isLoadingModels ? (
                     <option disabled>Loading models...</option>
                   ) : availableModels.length === 0 ? (
-                    <option disabled>No models available.</option>
+                     <option disabled>No models available.</option>
                   ) : (
-                    availableModels.map((model) => (
+                    availableModels.map(model => (
                       <option key={model.id} value={model.id}>
                         {model.name}
                       </option>
@@ -1176,169 +1200,149 @@ export default function CollectPage() {
                 </select>
               </div>
 
-              <textarea
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Describe your survey or ask for question ideas:"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                rows={3}
-              />
-
-              <div className="flex items-center justify-between">
-                <div className="space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)}
-                    className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
-                  >
-                    {showSystemPromptEditor ? "Hide Prompt" : "Edit Prompt"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetCoderSystemPrompt}
-                    disabled={isLoadingSystemPrompts || !baseCoderTemplateWithContext}
-                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
-                  >
-                    Reset Prompt
-                  </button>
-                </div>
+              <div className="flex justify-end">
                 <button
                   type="submit"
                   disabled={chatMutation.isPending}
                   className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
                 >
-                  {chatMutation.isPending ? <Spinner className="w-4 h-4 inline mr-1" /> : null}
-                  {chatMutation.isPending ? "Sending..." : "Send"}
+                  {chatMutation.isPending ? <Spinner className="w-4 h-4 inline mr-1"/> : null}
+                  Send
                 </button>
               </div>
+            </div>
+
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)}
+                className="text-xs text-gray-500 hover:text-emerald-600"
+              >
+                {showSystemPromptEditor ? "Hide System Prompts" : "Show System Prompts"}
+              </button>
 
               {showSystemPromptEditor && (
-                <div className="mt-2">
+                <div className="mt-2 space-y-3">
                   {isLoadingSystemPrompts ? (
                     <div className="flex items-center text-xs text-gray-500">
-                      <Spinner className="w-3 h-3 mr-1" /> Loading.
+                      <Spinner className="w-3 h-3 mr-1" /> Loading default prompts...
                     </div>
                   ) : (
                     <>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        System Prompt:
-                      </label>
-                      <textarea
-                        value={currentCoderSystemPrompt || ""}
-                        onChange={(e) => setCurrentCoderSystemPrompt(e.target.value)}
-                        className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900"
-                        placeholder="Coder system prompt."
-                      />
-                      <div className="flex justify-end mt-1">
-                        <button
-                          type="button"
-                          onClick={handleResetCoderSystemPrompt}
-                          disabled={isLoadingSystemPrompts}
-                          className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
-                        >
-                          Reset Prompt
-                        </button>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          System Prompt:
+                        </label>
+                        <textarea
+                          value={currentCoderSystemPrompt || ""}
+                          onChange={(e) => setCurrentCoderSystemPrompt(e.target.value)}
+                          className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          placeholder="Coder system prompt..."
+                        />
+                         <div className="flex justify-end mt-1">
+                            <button
+                            type="button"
+                            onClick={handleResetCoderSystemPrompt}
+                            disabled={isLoadingSystemPrompts || !baseCoderTemplateWithContext}
+                            className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+                            >
+                            Reset Prompt
+                            </button>
+                        </div>
                       </div>
                     </>
                   )}
                 </div>
               )}
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
-
         <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-emerald-700">Survey Builder</h2>
-            <div className="space-x-2">
-              <button
-                onClick={handleExtract}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
-                title="Extract numbered questions from the last AI response"
-              >
-                Extract Questions
-              </button>
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
-              >
-                {showPreview ? 'Edit Survey' : 'Preview Survey'}
-              </button>
-              <button
-                onClick={() => {
-                  if (!surveyData.title.trim()) {
-                    alert("Survey title is required before saving.");
-                    return;
-                  }
-                  createSurveyMutation.mutate(surveyData);
-                }}
-                disabled={surveyData.questions.length === 0 || !surveyData.title.trim() || createSurveyMutation.isPending}
-                className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 text-sm"
-              >
-                {createSurveyMutation.isPending ? 'Saving...' : 'Save & Share Survey'}
-              </button>
-              {surveyData.savedId && <SaveInstrumentButton surveyId={surveyData.savedId} />}
+             <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-emerald-700">Survey Builder</h2>
+                <div className="space-x-2">
+                  <button
+                    onClick={handleExtract}
+                    className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                    title="Extract numbered questions from the last AI response"
+                  >
+                    Extract Questions
+                  </button>
+                  <button
+                    onClick={() => setShowPreview(!showPreview)}
+                    className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                  >
+                    {showPreview ? 'Edit Survey' : 'Preview Survey'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!surveyData.title.trim()) {
+                        alert("Survey title is required before saving.");
+                        return;
+                      }
+                      createSurveyMutation.mutate(surveyData);
+                    }}
+                    disabled={surveyData.questions.length === 0 || !surveyData.title.trim() || createSurveyMutation.isPending}
+                    className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 text-sm"
+                  >
+                    {createSurveyMutation.isPending ? 'Saving...' : 'Save & Share Survey'}
+                  </button>
+                  {surveyData.savedId && <SaveInstrumentButton surveyId={surveyData.savedId} />}
+                </div>
             </div>
-          </div>
-
-          {showPreview ? (
-            <SurveyPreview survey={surveyData} />
-          ) : (
-            <div className="bg-gray-50 rounded-lg p-4 max-h-[600px] overflow-y-auto">
-              <div className="mb-4">
-                <input
-                  type="text"
-                  value={surveyData.title}
-                  // FIX #1
-                  onChange={(e) => setSurveyData(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Survey Title (Required)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
-                />
-                <textarea
-                  value={surveyData.description}
-                  // FIX #2
-                  onChange={(e) => setSurveyData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Survey Description (Optional)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-4">
-                {surveyData.questions.map((question, idx) => (
-                  <QuestionEditor
-                    key={question.questionId}
-                    questionId={question.questionId}
-                    initialData={question}
-                    onUpdate={handleQuestionUpdate}
-                    onDelete={handleQuestionDelete}
-                    index={idx}
-                  />
-                ))}
-
-                <button
-                  onClick={() => {
-                    const newQuestion: SurveyQuestion = {
-                      questionId: Math.random().toString(36).substring(2, 9),
-                      type: 'text',
-                      text: '',
-                      options: [],
-                      gameId: '',
-                      required: true
-                    };
-                    // FIX #3
-                    setSurveyData(prev => ({
-                      ...prev,
-                      questions: [...prev.questions, newQuestion]
-                    }));
-                  }}
-                  className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-100"
-                >
-                  + Add Question
-                </button>
-              </div>
-            </div>
-          )}
+            {showPreview ? (
+              <SurveyPreview survey={surveyData} />
+            ) : (
+                <div className="bg-gray-50 rounded-lg p-4 max-h-[600px] overflow-y-auto">
+                    <div className="mb-4">
+                        <input
+                          type="text"
+                          value={surveyData.title}
+                          onChange={(e) => setSurveyData(prev => ({...prev, title: e.target.value}))}
+                          placeholder="Survey Title (Required)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
+                        />
+                        <textarea
+                          value={surveyData.description}
+                          onChange={(e) => setSurveyData(prev => ({...prev, description: e.target.value}))}
+                          placeholder="Survey Description (Optional)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          rows={3}
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        {surveyData.questions.map((question, idx) => (
+                            <QuestionEditor
+                              key={question.questionId}
+                              questionId={question.questionId}
+                              initialData={question}
+                              onUpdate={handleQuestionUpdate}
+                              onDelete={handleQuestionDelete}
+                              index={idx}
+                            />
+                        ))}
+                        <button
+                          onClick={() => {
+                            const newQuestion: SurveyQuestion = {
+                              questionId: Math.random().toString(36).substring(2, 9),
+                              type: 'text',
+                              text: '',
+                              options: [],
+                              gameId: '',
+                              required: true
+                            };
+                            setSurveyData(prev => ({
+                              ...prev,
+                              questions: [...prev.questions, newQuestion]
+                            }));
+                          }}
+                          className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-100"
+                        >
+                          + Add Question
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
       </div>
     </div>
