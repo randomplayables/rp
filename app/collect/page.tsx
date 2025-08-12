@@ -740,10 +740,10 @@ number them and specify the question type for each. For game integrations, use t
 `;
 
 async function sendChatMessageToApi(
-  message: string,
-  chatHistory: ChatMessage[],
-  coderSystemPrompt: string | null,
-  selectedCoderModelId?: string
+    message: string,
+    chatHistory: ChatMessage[],
+    coderSystemPrompt: string | null,
+    selectedCoderModelId?: string
 ) {
   const response = await fetch("/api/collect/chat", {
     method: "POST",
@@ -752,7 +752,7 @@ async function sendChatMessageToApi(
       message,
       chatHistory: chatHistory.map((m: ChatMessage) => ({ role: m.role, content: m.content })),
       coderSystemPrompt, // Pass coder prompt
-      selectedCoderModelId,
+      selectedCoderModelId, 
     })
   });
   return response.json();
@@ -798,11 +798,13 @@ export default function CollectPage() {
 
   const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(false);
   const [currentCoderSystemPrompt, setCurrentCoderSystemPrompt] = useState<string | null>(null);
+  
   const [baseCoderTemplateWithContext, setBaseCoderTemplateWithContext] = useState<string | null>(null);
+  
   const [isLoadingSystemPrompts, setIsLoadingSystemPrompts] = useState(true);
 
   const { user, isSignedIn, isLoaded: isUserLoaded } = useUser();
-  const [selectedCoderModel, setSelectedCoderModel] = useState<string>("");
+  const [selectedCoderModel, setSelectedCoderModel] = useState<string>(""); 
   const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [availableGamesForParsing, setAvailableGamesForParsing] = useState<IGame[]>([]);
@@ -812,21 +814,17 @@ export default function CollectPage() {
     try {
       const contextData = await fetchCollectContextData();
       const gamesListString = JSON.stringify(contextData.games || [], null, 2);
-
+      
       setAvailableGamesForParsing(contextData.games || []);
-
+      
       const initialCoderPrompt = BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', gamesListString);
       setCurrentCoderSystemPrompt(initialCoderPrompt);
       setBaseCoderTemplateWithContext(initialCoderPrompt);
 
     } catch (err) {
-      console.error("Error fetching initial system prompt context:", err);
-      const errorPromptText = 'Error: Could not load game list.';
-
-      const errorCoderPrompt = BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', errorPromptText);
-      setCurrentCoderSystemPrompt(errorCoderPrompt);
-      setBaseCoderTemplateWithContext(errorCoderPrompt);
-
+      console.error("Error initializing Collect system prompts:", err);
+      setCurrentCoderSystemPrompt(BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', '[]'));
+      setBaseCoderTemplateWithContext(BASE_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE.replace('%%AVAILABLE_GAMES_LIST%%', '[]'));
     } finally {
       setIsLoadingSystemPrompts(false);
     }
@@ -901,10 +899,12 @@ export default function CollectPage() {
           content: `✅ Survey created successfully!\n\nShare this link with participants: ${data.survey.shareableLink}\n\nClick "Save to Profile" to add this survey to your instruments collection.`,
           timestamp: new Date()
         };
+        // FIX #4
         setMessages(prev => [...prev, assistantMessage]);
+        // FIX #5
         setSurveyData(prev => ({
           ...prev,
-          savedId: data.survey.id,
+          savedId: data.survey.id, 
         }));
       } else {
         const assistantMessage: ChatMessage = {
@@ -925,7 +925,7 @@ export default function CollectPage() {
     }
   });
 
-  // Prevent auto-scroll on initial render; only scroll when new messages append.
+  // Prevent auto-scroll on initial render; only scroll when new messages are appended.
   const isFirstRender = useRef(true);
   const prevMessageCount = useRef(0);
   useEffect(() => {
@@ -955,9 +955,9 @@ export default function CollectPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
-    chatMutation.mutate({
-      message: inputMessage,
-      selectedCoderModelId: selectedCoderModel || undefined,
+    chatMutation.mutate({ 
+        message: inputMessage, 
+        selectedCoderModelId: selectedCoderModel || undefined,
     });
     setInputMessage("");
   };
@@ -991,181 +991,128 @@ export default function CollectPage() {
     // Extract Title
     const titleMatch = content.match(/^(Survey Title|Title):\s*(.*)/im);
     if (titleMatch && titleMatch[2]) {
-      newTitle = titleMatch[2].trim();
-      content = content.replace(titleMatch[0], '');
+        newTitle = titleMatch[2].trim();
+        content = content.replace(titleMatch[0], '');
     }
 
     // Isolate the main "Questions" or "Questionnaire" section to prevent parsing footer notes
     const questionsSectionMatch = content.match(/^(Questions|Questionnaire)[\s\S]*/im);
     const questionsText = questionsSectionMatch ? questionsSectionMatch[0] : '';
-
+    
     // Extract metadata from the text *before* the questions section
-    const metadataText = questionsSectionMatch ? content.substring(0, questionsSectionMatch.index!) : content;
+    const metadataText = questionsSectionMatch ? content.substring(0, questionsSectionMatch.index) : content;
     const metadataSections = ['Objective', 'Target Audience', 'Overview', 'Purpose', 'Rationale', 'Survey Flow'];
     let descriptionParts: string[] = [];
     metadataSections.forEach(section => {
-      const regex = new RegExp(`^(${section}[\\s\\S]*?)(?=\\n\\n|$)`, "im");
-      const match = metadataText.match(regex);
-      if (match && match[1]) {
-        descriptionParts.push(match[1].trim());
-      }
+        const regex = new RegExp(`^(${section}[\\s\\S]*?)(?=\\n\\n|$)`, "im");
+        const match = metadataText.match(regex);
+        if (match && match[1]) {
+            descriptionParts.push(match[1].trim());
+        }
     });
     if (descriptionParts.length > 0) {
-      newDescription = descriptionParts.join('\n\n');
+        newDescription = descriptionParts.join('\n\n');
     }
-
+    
     if (!questionsText) {
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: `I couldn't find a "Questions:" section in my last response to extract.`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
-      return;
+        const assistantMessage: ChatMessage = { role: 'assistant', content: `I couldn't find a "Questions:" section in my last response to extract.`, timestamp: new Date() };
+        setMessages(prev => [...prev, assistantMessage]);
+        return;
     }
 
-    const questionBlocks = questionsText
-      .split(/\n(?=\s*\d+\.\s)/)
-      .filter(b => b.trim() && /^\s*\d+\.\s/.test(b));
-
+    const questionBlocks = questionsText.split(/\n(?=\s*\d+\.\s)/).filter(b => b.trim() && /^\s*\d+\.\s/.test(b));
     const extractedQuestions: SurveyQuestion[] = [];
 
     questionBlocks.forEach((block, index) => {
-      const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length === 0) return;
+        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length === 0) return;
 
-      const firstLine = lines[0].replace(/^\d+\.\s*/, '').trim();
-      let question: Partial<SurveyQuestion> = {
-        questionId: `q_${Date.now()}_${index}`,
-        type: 'text',
-        text: firstLine,
-        required: true,
-      };
-
-      // If the question uses “quoted” text, prefer that as the label
-      const quotedTextMatch = block.match(/“([^”]*)”/);
-      if (quotedTextMatch && quotedTextMatch[1]) {
-        question.text = quotedTextMatch[1];
-      }
-
-      // Infer type + options
-      if (block.toLowerCase().includes('likert scale')) {
-        question.type = 'scale';
-        const scaleLabelsMatch = block.match(/\(\s*1\s*=\s*([^,;]+?)\s*[,;…]\s*5\s*=\s*([^\)]+?)\s*\)/i);
-        if (scaleLabelsMatch) {
-          question.scaleMinLabel = scaleLabelsMatch[1]?.trim();
-          question.scaleMaxLabel = scaleLabelsMatch[2]?.trim();
+        const firstLine = lines[0].replace(/^\d+\.\s*/, '').trim();
+        let question: Partial<SurveyQuestion> = {
+            questionId: `q_${Date.now()}_${index}`,
+            type: 'text',
+            text: firstLine,
+            required: true,
+        };
+        
+        const quotedTextMatch = block.match(/“([^”]*)”/);
+        if (quotedTextMatch && quotedTextMatch[1]) {
+            question.text = quotedTextMatch[1];
         }
-      } else if (block.toLowerCase().includes('multiple-choice') || block.toLowerCase().includes('multiple choice')) {
-        question.type = 'multiple-choice';
-        question.options = [];
-        lines.forEach(line => {
-          const optionMatch = line.match(/^\s*(?:[a-e][\.\)]|[•-])\s*(.*)/i);
-          if (optionMatch && optionMatch[1] && !optionMatch[1].toLowerCase().startsWith('question type:')) {
-            question.options!.push(optionMatch[1].trim());
-          }
-        });
-      } else if (block.toLowerCase().includes('open-ended')) {
-        question.type = 'text';
-      }
 
-      // Game integration: "X. Game Integration: <id or name>"
-      if (firstLine.toLowerCase().startsWith('game integration:')) {
-        question.type = 'game';
-        question.text = 'Game Data Collection (automated)';
-        const gameIdentifier = firstLine.substring(firstLine.indexOf(':') + 1).trim();
-        let game = availableGamesForParsing.find(g => g?.gameId?.toLowerCase() === gameIdentifier.toLowerCase());
-        if (!game) {
-          game = availableGamesForParsing.find(g => g?.name?.toLowerCase() === gameIdentifier.toLowerCase());
+        if (block.toLowerCase().includes('likert scale')) {
+            question.type = 'scale';
+            const scaleLabelsMatch = block.match(/\(\s*1\s*=\s*([^,;]+?)\s*[,;…]\s*5\s*=\s*([^\)]+?)\s*\)/i);
+            if (scaleLabelsMatch) {
+                question.scaleMinLabel = scaleLabelsMatch[1]?.trim();
+                question.scaleMaxLabel = scaleLabelsMatch[2]?.trim();
+            }
+        } else if (block.toLowerCase().includes('multiple-choice') || block.toLowerCase().includes('multiple choice')) {
+            question.type = 'multiple-choice';
+            question.options = [];
+            lines.forEach(line => {
+                const optionMatch = line.match(/^\s*(?:[a-e][\.\)]|[•-])\s*(.*)/i);
+                if (optionMatch && optionMatch[1] && !optionMatch[1].toLowerCase().startsWith('question type:')) {
+                    question.options?.push(optionMatch[1].trim());
+                }
+            });
+        } else if (block.toLowerCase().includes('open-ended')) {
+            question.type = 'text';
         }
-        question.gameId = game?.gameId || gameIdentifier;
-      }
 
-      extractedQuestions.push(question as SurveyQuestion);
+        if (firstLine.toLowerCase().startsWith('game integration:')) {
+            question.type = 'game';
+            question.text = 'Game Data Collection (automated)';
+            const gameIdentifier = firstLine.substring(firstLine.indexOf(':') + 1).trim();
+            let game = availableGamesForParsing.find(g => g?.gameId?.toLowerCase() === gameIdentifier.toLowerCase());
+            if (!game) {
+                game = availableGamesForParsing.find(g => g?.name?.toLowerCase() === gameIdentifier.toLowerCase());
+            }
+            question.gameId = game?.gameId || gameIdentifier;
+        }
+        
+        extractedQuestions.push(question as SurveyQuestion);
     });
 
     if (extractedQuestions.length > 0) {
-      setSurveyData(prev => ({
-        ...prev,
-        title: newTitle,
-        description: newDescription,
-        questions: [...prev.questions, ...extractedQuestions]
-      }));
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: `Extracted ${extractedQuestions.length} question(s). You can now edit them in the Survey Builder.`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+        setSurveyData(prev => ({
+            ...prev,
+            title: newTitle,
+            description: newDescription,
+            questions: [...prev.questions, ...extractedQuestions]
+        }));
+         const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `Extracted ${extractedQuestions.length} question(s). You can now edit them in the Survey Builder.`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
     } else {
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: `I couldn't find any numbered questions in my last response to extract.`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+         const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `I couldn't find any numbered questions in my last response to extract.`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
     }
   };
-
+  
   const handleResetCoderSystemPrompt = () => {
     if (baseCoderTemplateWithContext) {
       setCurrentCoderSystemPrompt(baseCoderTemplateWithContext);
     } else {
-      initializeSystemPrompts();
+      initializeSystemPrompts(); 
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-7xl flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
-        {/* LEFT: Chat / Prompt Config */}
         <div className="w-full md:w-1/3 lg:w-1/3 flex flex-col h-[700px] bg-gray-50">
           <div className="p-4 bg-emerald-500 text-white">
             <h1 className="text-2xl font-bold">AI Survey Creator</h1>
             <p className="text-sm">Chat to create surveys with game integration</p>
           </div>
-
-          <div className="p-4 space-y-3 border-b">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">Coder Model</div>
-              <div className="text-xs">{isLoadingModels ? "Loading…" : ""}</div>
-            </div>
-            <select
-              value={selectedCoderModel}
-              onChange={(e) => setSelectedCoderModel(e.target.value)}
-              className="w-full text-sm border rounded px-2 py-1 bg-white"
-            >
-              <option value="">Auto</option>
-              {!isLoadingModels && availableModels.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)}
-                className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-              >
-                {showSystemPromptEditor ? "Hide Prompt" : "Edit Prompt"}
-              </button>
-              <button
-                onClick={handleResetCoderSystemPrompt}
-                disabled={isLoadingSystemPrompts || !baseCoderTemplateWithContext}
-                className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
-              >
-                Reset Prompt
-              </button>
-            </div>
-
-            {showSystemPromptEditor && (
-              <textarea
-                className="w-full h-40 text-xs border rounded p-2 bg-white"
-                value={currentCoderSystemPrompt ?? ""}
-                onChange={(e) => setCurrentCoderSystemPrompt(e.target.value)}
-              />
-            )}
-          </div>
-
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-gray-500 text-center mt-8">
@@ -1177,7 +1124,7 @@ export default function CollectPage() {
                     <button
                       key={idx}
                       onClick={() => setInputMessage(prompt)}
-                      className="block w-full text-left text-xs bg-white p-2 mb-1 rounded border hover:bg-gray-100"
+                      className="block w/full text-left text-xs bg-white p-2 mb-1 rounded border hover:bg-gray-100"
                     >
                       {prompt}
                     </button>
@@ -1185,42 +1132,121 @@ export default function CollectPage() {
                 </div>
               </div>
             )}
-
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-3 rounded-lg ${
-                  msg.role === 'user'
-                    ? 'bg-emerald-100 text-emerald-900'
-                    : 'bg-white border'
-                }`}>
-                  <div className="text-xs text-gray-500 mb-1">{msg.role === 'user' ? 'You' : 'Assistant'}</div>
-                  <pre className="whitespace-pre-wrap text-sm">{msg.content}</pre>
+                <div
+                  className={`max-w-[80%] p-3 rounded-lg ${
+                    msg.role === 'user'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                  <div className="text-[10px] opacity-70 mt-1">
+                    {msg.timestamp.toLocaleString()}
+                  </div>
                 </div>
               </div>
             ))}
             <div ref={messagesEndRef} />
           </div>
 
-          <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
-            <div className="flex">
-              <input
-                className="flex-1 border rounded-l px-3 py-2 text-sm"
-                placeholder="Describe your survey or ask for question ideas…"
+          <div className="p-4 border-t bg-white">
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Coder Model</label>
+                <select
+                  value={selectedCoderModel}
+                  onChange={(e) => setSelectedCoderModel(e.target.value)}
+                  disabled={isLoadingModels || chatMutation.isPending}
+                  className="mt-1 block w-full py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs"
+                >
+                  <option value="">Auto</option>
+                  {isLoadingModels ? (
+                    <option disabled>Loading models...</option>
+                  ) : availableModels.length === 0 ? (
+                    <option disabled>No models available.</option>
+                  ) : (
+                    availableModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="Describe your survey or ask for question ideas:"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                rows={3}
               />
-              <button
-                type="submit"
-                disabled={chatMutation.isPending}
-                className="px-4 py-2 bg-emerald-500 text-white rounded-r disabled:opacity-50 text-sm"
-              >
-                {chatMutation.isPending ? 'Sending…' : 'Send'}
-              </button>
-            </div>
-          </form>
+
+              <div className="flex items-center justify-between">
+                <div className="space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSystemPromptEditor(!showSystemPromptEditor)}
+                    className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    {showSystemPromptEditor ? "Hide Prompt" : "Edit Prompt"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetCoderSystemPrompt}
+                    disabled={isLoadingSystemPrompts || !baseCoderTemplateWithContext}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    Reset Prompt
+                  </button>
+                </div>
+                <button
+                  type="submit"
+                  disabled={chatMutation.isPending}
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                >
+                  {chatMutation.isPending ? <Spinner className="w-4 h-4 inline mr-1" /> : null}
+                  {chatMutation.isPending ? "Sending..." : "Send"}
+                </button>
+              </div>
+
+              {showSystemPromptEditor && (
+                <div className="mt-2">
+                  {isLoadingSystemPrompts ? (
+                    <div className="flex items-center text-xs text-gray-500">
+                      <Spinner className="w-3 h-3 mr-1" /> Loading.
+                    </div>
+                  ) : (
+                    <>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        System Prompt:
+                      </label>
+                      <textarea
+                        value={currentCoderSystemPrompt || ""}
+                        onChange={(e) => setCurrentCoderSystemPrompt(e.target.value)}
+                        className="w-full h-28 px-2 py-1 border border-gray-300 rounded-md text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 text-gray-900"
+                        placeholder="Coder system prompt."
+                      />
+                      <div className="flex justify-end mt-1">
+                        <button
+                          type="button"
+                          onClick={handleResetCoderSystemPrompt}
+                          disabled={isLoadingSystemPrompts}
+                          className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
+                        >
+                          Reset Prompt
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </form>
+          </div>
         </div>
 
-        {/* RIGHT: Survey Builder */}
         <div className="w-full md:w-2/3 lg:w-2/3 p-6 bg-white">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-emerald-700">Survey Builder</h2>
@@ -1246,10 +1272,10 @@ export default function CollectPage() {
                   }
                   createSurveyMutation.mutate(surveyData);
                 }}
-                disabled={surveyData.questions.length === 0 || !surveyData.title.trim() || (createSurveyMutation as any).isPending}
+                disabled={surveyData.questions.length === 0 || !surveyData.title.trim() || createSurveyMutation.isPending}
                 className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 text-sm"
               >
-                {(createSurveyMutation as any).isPending ? 'Saving...' : 'Save & Share Survey'}
+                {createSurveyMutation.isPending ? 'Saving...' : 'Save & Share Survey'}
               </button>
               {surveyData.savedId && <SaveInstrumentButton surveyId={surveyData.savedId} />}
             </div>
@@ -1263,44 +1289,54 @@ export default function CollectPage() {
                 <input
                   type="text"
                   value={surveyData.title}
+                  // FIX #1
                   onChange={(e) => setSurveyData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="Survey Title (Required)"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
                 />
                 <textarea
                   value={surveyData.description}
+                  // FIX #2
                   onChange={(e) => setSurveyData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Description (optional)"
-                  className="w-full h-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Survey Description (Optional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  rows={3}
                 />
               </div>
 
-              {surveyData.questions.length === 0 ? (
-                <div className="text-sm text-gray-500">
-                  No questions yet. Ask the assistant for questions, then click “Extract Questions”.
-                </div>
-              ) : (
-                <div>
-                  {surveyData.questions.map((q, i) => (
-                    <QuestionEditor
-                      key={q.questionId}
-                      questionId={q.questionId}
-                      index={i}
-                      initialData={{
-                        type: q.type,
-                        text: q.text,
-                        options: q.options,
-                        gameId: q.gameId,
-                        required: q.required,
-                        scaleMinLabel: q.scaleMinLabel,
-                        scaleMaxLabel: q.scaleMaxLabel
-                      }}
-                      onUpdate={handleQuestionUpdate}
-                      onDelete={handleQuestionDelete}
-                    />
-                  ))}
-                </div>
-              )}
+              <div className="space-y-4">
+                {surveyData.questions.map((question, idx) => (
+                  <QuestionEditor
+                    key={question.questionId}
+                    questionId={question.questionId}
+                    initialData={question}
+                    onUpdate={handleQuestionUpdate}
+                    onDelete={handleQuestionDelete}
+                    index={idx}
+                  />
+                ))}
+
+                <button
+                  onClick={() => {
+                    const newQuestion: SurveyQuestion = {
+                      questionId: Math.random().toString(36).substring(2, 9),
+                      type: 'text',
+                      text: '',
+                      options: [],
+                      gameId: '',
+                      required: true
+                    };
+                    // FIX #3
+                    setSurveyData(prev => ({
+                      ...prev,
+                      questions: [...prev.questions, newQuestion]
+                    }));
+                  }}
+                  className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:bg-gray-100"
+                >
+                  + Add Question
+                </button>
+              </div>
             </div>
           )}
         </div>
