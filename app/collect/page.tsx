@@ -991,22 +991,22 @@ export default function CollectPage() {
     let newDescription = surveyData.description;
 
     // Extract Title
-    const titleMatch = content.match(/^(Survey Title|Title):\s*(.*)/im);
+    const titleMatch = content.match(/^[*#\s]*?(?:Survey\s)?(Title):?\s*(.*)/im);
     if (titleMatch && titleMatch[2]) {
         newTitle = titleMatch[2].trim();
         content = content.replace(titleMatch[0], '');
     }
 
     // Isolate the main "Questions" or "Questionnaire" section to prevent parsing footer notes
-    const questionsSectionMatch = content.match(/^#*\s*(?:Survey\s)?(?:Questions|Questionnaire)[\s\S]*/im);
+    const questionsSectionMatch = content.match(/^[*#\s]*?(?:Survey\s)?(?:Questions|Questionnaire):?[\s\S]*/im);
     const questionsText = questionsSectionMatch ? questionsSectionMatch[0] : '';
     
     // Extract metadata from the text *before* the questions section
     const metadataText = questionsSectionMatch ? content.substring(0, questionsSectionMatch.index) : content;
-    const metadataSections = ['Objective', 'Target Audience', 'Overview', 'Purpose', 'Rationale', 'Survey Flow'];
+    const metadataSections = ['Objective', 'Target Audience', 'Overview', 'Purpose', 'Rationale', 'Survey Flow', 'Introduction'];
     let descriptionParts: string[] = [];
     metadataSections.forEach(section => {
-        const regex = new RegExp(`^(${section}[\\s\\S]*?)(?=\\n\\n|$)`, "im");
+        const regex = new RegExp(`^[*#\\s]*?(${section}[\\s\\S]*?)(?=\\n\\n|---|$)`, "im");
         const match = metadataText.match(regex);
         if (match && match[1]) {
             descriptionParts.push(match[1].trim());
@@ -1037,9 +1037,9 @@ export default function CollectPage() {
             required: true,
         };
         
-        const quotedTextMatch = block.match(/“([^”]*)”/);
+        const quotedTextMatch = block.match(/(?:“|Question:)\s*([^”]*)/i);
         if (quotedTextMatch && quotedTextMatch[1]) {
-            question.text = quotedTextMatch[1];
+            question.text = quotedTextMatch[1].trim();
         }
 
         if (block.toLowerCase().includes('likert scale')) {
