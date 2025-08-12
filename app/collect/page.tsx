@@ -998,7 +998,7 @@ export default function CollectPage() {
     }
 
     // Isolate the main "Questions" or "Questionnaire" section to prevent parsing footer notes
-    const questionsSectionMatch = content.match(/^(Questions|Questionnaire)[\s\S]*/im);
+    const questionsSectionMatch = content.match(/^#*\s*(?:Survey\s)?(?:Questions|Questionnaire)[\s\S]*/im);
     const questionsText = questionsSectionMatch ? questionsSectionMatch[0] : '';
     
     // Extract metadata from the text *before* the questions section
