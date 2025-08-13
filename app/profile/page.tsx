@@ -415,7 +415,14 @@ export default function Profile() {
                     <div className="bg-white shadow-md rounded-lg p-4 border border-gray-200">
                         <h3 className="text-xl font-semibold mb-2 text-gray-800">My Games</h3>
                         <p className="text-sm text-gray-600 mb-3">Have a game you built? Submit it to the RandomPlayables platform.</p>
-                        <Link href="/profile/submit-game" className="inline-block px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors">Submit a Game</Link>
+                        <div className="flex space-x-3 items-center">
+                            <Link href="/profile/submit-game" className="inline-block px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors">
+                                Submit a Game
+                            </Link>
+                            <Link href="/submit-guide" className="inline-block px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors">
+                                Submission Guide
+                            </Link>
+                        </div>
                     </div>
                     <div className="mt-6"><GitHubConnectButton /></div>
                     <div className="bg-white shadow-md rounded-lg p-4 border border-gray-200">
