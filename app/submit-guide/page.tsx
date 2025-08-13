@@ -24,9 +24,9 @@ export default function SubmissionGuidePage() {
         <h3 className="text-xl font-medium mt-6 mb-2">Understanding Game Types </h3>
         <p>Before you begin, it's important to know the types of games you can build:</p>
         <ul className="list-disc pl-5">
-          <li><strong>Regular Games:</strong> Standard web games that do not require external AI model calls.</li>
+          <li><strong>Regular Games:</strong> Standard web games that do not require external AI model calls or player-vs-player competition.</li>
           <li><strong>Games that use AI models:</strong> These games may leverage platform APIs for functionalities like embeddings or chat, which can consume a player's API credits. You must declare this during submission.</li>
-          <li><strong>Gauntlet-enabled Games:</strong> These are specifically designed for player-vs-player competition through our Gauntlet system. </li>
+          <li><strong>Gauntlet-enabled Games:</strong> These are specifically designed for player-vs-player competition through our Gauntlet system. See Gowap as an example. </li>
         </ul>
 
         <h3 className="text-xl font-medium mt-6 mb-2">Option A: Using GameLab (Recommended)</h3>
@@ -41,16 +41,16 @@ export default function SubmissionGuidePage() {
 
         <h3 className="text-xl font-medium mt-6 mb-2">Option B: Using an External LLM</h3>
         <p>
-          If you prefer using a mainstream LLM like GPT-4 or Claude, you can ensure compatibility by providing the right context. 
+          If you prefer using a mainstream LLM like Gemini or GPT-5, you can ensure compatibility by providing the right context. 
         </p>
         <ol className="list-decimal pl-5">
-          <li><strong>Provide Context:</strong> Give the LLM the full codebase of the main `randomplayables/rp` repository and an example of an existing game from the platform (like Gowap or Gotham Loops).</li>
+          <li><strong>Provide Context:</strong> Give the LLM the full codebase of the main `randomplayables/rp` repository and an example of an existing game from the platform (like Gowap or Gotham Loops). Use tools like https://repomix.com/ to download codebases in an LLM-friendly-format.</li>
           <li><strong>Prompt for Compatibility:</strong> Clearly instruct the LLM to create a new game that is compatible with the platform's existing architecture, particularly the `apiService.ts` for session and data handling.</li>
         </ol>
 
         <h2 className="text-2xl font-semibold mt-8 mb-4 border-b pb-2">Step 2: Testing Your Game </h2>
         <p>
-          Thorough testing is crucial for a successful submission.
+          Testing you game can make the submission process smoother.
         </p>
         <ol className="list-decimal pl-5">
           <li><strong>Local Testing:</strong> First, ensure the game runs correctly on your local computer.</li>
@@ -59,7 +59,7 @@ export default function SubmissionGuidePage() {
 
         <h2 className="text-2xl font-semibold mt-8 mb-4 border-b pb-2">Step 3: Game Submission </h2>
         <p>
-          Once your game is created and tested, follow these steps to submit it for review.
+          Once your game is created, follow these steps to submit it for review.
         </p>
         <ol className="list-decimal pl-5">
           <li><strong>Create a GitHub Release:</strong> Go to your game's repository on GitHub. Create a new release and use a git tag that matches the version number you intend to submit (e.g., `v1.0.0`). This is a critical step for version control.</li>
