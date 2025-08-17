@@ -50,7 +50,7 @@ export default function SubmissionGuidePage() {
 
         <h2 className="text-2xl font-semibold mt-8 mb-4 border-b pb-2">Step 2: Testing Your Game </h2>
         <p>
-          The recommended way to test your game is with our forthcoming testing tool, which has a development version online at testgame.randomplayables.com. Developers can earn RP points for contributing to the testing tool itself by working on the repository at <a href="https://github.com/randomplayables/testgame" target="_blank" rel="noopener noreferrer">github.com/randomplayables/testgame</a>.
+          The recommended way to test your game is with our forthcoming testing tool, which has a development version online at testgame.randomplayables.com. The GitHub repository for the tool is available at <a href="https://github.com/randomplayables/testgame" target="_blank" rel="noopener noreferrer">github.com/randomplayables/testgame</a>.
         </p>
         <p>
           Alternatively, and as the current option for a complete end-to-end test, you can use the following methods:
