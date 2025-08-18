@@ -226,6 +226,10 @@ export async function executePayout(amount: number): Promise<string> {
             reason = "Stripe account connected but payouts not enabled.";
         }
         console.warn(`  User ${winner.username} (${winner.userId}) won but payout cannot be processed: ${reason}`);
+        
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 6);
+
         payoutRecordsPromises.push(
            PayoutRecordModel.create({
               batchId,
@@ -235,6 +239,7 @@ export async function executePayout(amount: number): Promise<string> {
               probability: winner.winProbability,
               timestamp: new Date(),
               status: 'requires_stripe_setup',
+              expiresAt: expiresAt,
            })
         );
       }
