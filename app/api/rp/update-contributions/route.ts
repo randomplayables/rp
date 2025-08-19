@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { UserContributionModel, PayoutConfigModel, IPayoutConfig } from "@/models/RandomPayables";
+import { UserContributionModel, PayoutConfigModel, IPayoutConfig, PointTransferModel } from "@/models/RandomPayables";
 import GitHubIntegrationModel, { IGitHubIntegrationBase } from "@/models/GitHubIntegration";
 import GameModel from "@/models/Game";
 import { fetchUserRepoActivity } from "@/lib/githubApi";
@@ -65,43 +65,66 @@ async function performContributionsUpdate() {
 
     for (const [userId, username] of allUsers) {
       console.log(`\nUpdating contributions for ${username} (${userId})...`);
+
+      const existingContribution = await UserContributionModel.findOne({ userId }).lean();
+      const existingMetrics = existingContribution?.metrics || {
+          peerReviewPoints: 0,
+          totalPoints: 0,
+      };
+
       const visualizationCount = await UserVisualizationModel.countDocuments({ userId });
       const sketchCount = await UserSketchModel.countDocuments({ userId });
       const instrumentCount = await UserInstrumentModel.countDocuments({ userId });
       const questionCount = await QuestionModel.countDocuments({ userId });
       const answerCount = await AnswerModel.countDocuments({ userId });
-      
       const gamePublicationCount = await GameModel.countDocuments({ authorUsername: username });
-      const pointsPerGame = 50;
-      const gamePublicationPoints = gamePublicationCount * pointsPerGame;
+      
+      const gamePublicationPoints = gamePublicationCount * 50;
       console.log(`  Found ${gamePublicationCount} published games -> ${gamePublicationPoints} points.`);
 
-      let githubRepoPoints = 0;
+      let rawEarnedGithubRepoPoints = 0;
       const userGithubIntegration = githubIntegrations.find(ghInt => ghInt.userId === userId);
       if (userGithubIntegration && userGithubIntegration.githubUsername) {
         const activity = await fetchUserRepoActivity(owner, repo, userGithubIntegration.githubUsername);
         if (activity) {
-          githubRepoPoints = (activity.commits * pointsPerCommit) + (activity.linesChanged * pointsPerLineChanged);
-          console.log(`  GitHub Repo Activity for ${userGithubIntegration.githubUsername}: ${activity.commits} commits, ${activity.linesChanged} lines -> ${githubRepoPoints.toFixed(2)} points`);
+            rawEarnedGithubRepoPoints = (activity.commits * pointsPerCommit) + (activity.linesChanged * pointsPerLineChanged);
+            console.log(`  GitHub Repo Activity for ${userGithubIntegration.githubUsername}: ${activity.commits} commits, ${activity.linesChanged} lines -> ${rawEarnedGithubRepoPoints.toFixed(2)} points`);
         } else { console.log(`  No GitHub repo activity found for ${userGithubIntegration.githubUsername} or error fetching.`); }
       } else { console.log(`  No GitHub integration found for user ${userId}.`); }
+
+      const sent = await PointTransferModel.aggregate([
+          { $match: { senderUserId: userId, pointType: 'githubRepoPoints' } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      const received = await PointTransferModel.aggregate([
+          { $match: { recipientUserId: userId, pointType: 'githubRepoPoints' } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      const netTransfersGithub = (received[0]?.total || 0) - (sent[0]?.total || 0);
+      console.log(`  Net transfers for ${username} (GitHub): ${netTransfersGithub}`);
+      
+      const newMetrics = {
+          codeContributions: sketchCount * 10,
+          contentCreation: (visualizationCount * 8) + (instrumentCount * 8),
+          communityEngagement: (questionCount * 5) + (answerCount * 3),
+          gamePublicationPoints: gamePublicationPoints,
+          githubRepoPoints: rawEarnedGithubRepoPoints + netTransfersGithub,
+          peerReviewPoints: existingMetrics.peerReviewPoints,
+          totalPoints: existingMetrics.totalPoints,
+      };
 
       await UserContributionModel.findOneAndUpdate(
         { userId },
         {
           $set: {
             username,
-            'metrics.codeContributions': sketchCount * 10,
-            'metrics.contentCreation': (visualizationCount * 8) + (instrumentCount * 8),
-            'metrics.communityEngagement': (questionCount * 5) + (answerCount * 3),
-            'metrics.githubRepoPoints': githubRepoPoints,
-            'metrics.gamePublicationPoints': gamePublicationPoints,
+            metrics: newMetrics,
             updatedAt: new Date()
           }
         },
         { new: true, upsert: true }
       );
-      console.log(`  Stored raw metrics for ${username}.`);
+      console.log(`  Stored updated metrics for ${username}.`);
     }
 
     console.log("\nRecalculating all win probabilities based on new metrics...");

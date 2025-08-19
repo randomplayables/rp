@@ -7,8 +7,8 @@ export const allowedOrigins: string[] = [
   "http://localhost:3000",
   "http://172.31.12.157:5173",
   "http://172.31.12.157:3000",
-  "http://54.183.230.70:5173",
-  "http://54.183.230.70:3000",
+  "http://3.101.13.221:5173",
+  "http://3.101.13.221:3000",
   "https://randomplayables.com",
   "https://www.randomplayables.com",
   // keeping this explicit entry since it already exists in the repo
