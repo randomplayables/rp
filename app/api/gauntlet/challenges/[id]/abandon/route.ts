@@ -117,6 +117,7 @@
 
 
 
+// app/api/gauntlet/challenges/[id]/abandon/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import mongoose from "mongoose";
@@ -204,23 +205,17 @@ export async function POST(
 
     if (totalWager > 0) {
         const balanceField = (challenge.wagerSubCategory || 'totalPoints') as keyof ContributionMetrics;
-        let winnerDoc = await UserContributionModel.findOne({ userId: winnerInfo.userId }).session(session);
-        if (!winnerDoc) {
-          winnerDoc = new UserContributionModel({
-            userId: winnerInfo.userId,
-            username: winnerInfo.username,
-            metrics: { // Properly initialize metrics for new docs
-              codeContributions: 0, contentCreation: 0, communityEngagement: 0,
-              githubRepoPoints: 0, gamePublicationPoints: 0, totalPoints: 0, peerReviewPoints: 0
-            }
-          });
+        
+        const updatePayload: any = { $inc: { [`metrics.${balanceField}`]: totalWager } };
+        if (challenge.wagerSubCategory) {
+            updatePayload.$inc['metrics.totalPoints'] = totalWager;
         }
 
-        winnerDoc.metrics[balanceField] = (winnerDoc.metrics[balanceField] || 0) + totalWager;
-        if (challenge.wagerSubCategory) {
-            winnerDoc.metrics.totalPoints = (winnerDoc.metrics.totalPoints || 0) + totalWager;
-        }
-        await winnerDoc.save({ session });
+        await UserContributionModel.updateOne(
+          { userId: winnerInfo.userId },
+          updatePayload,
+          { session, upsert: true }
+        );
     }
 
     await PointTransferModel.create(
@@ -232,7 +227,7 @@ export async function POST(
           recipientUsername: winnerInfo.username,
           amount: abandonerInfo.wager,
           memo: `Gauntlet match abandoned by opponent for game: ${challenge.gameId}, challenge: ${challenge._id}`,
-          pointType: "totalPoints",
+          pointType: challenge.wagerSubCategory ? "totalPoints" : "totalPoints",
           otherCategorySubType: challenge.wagerSubCategory,
           context: { type: "GAUNTLET_ABANDON", challengeId: challenge._id },
         },

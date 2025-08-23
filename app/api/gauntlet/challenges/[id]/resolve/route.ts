@@ -142,6 +142,7 @@
 
 
 
+// app/api/gauntlet/challenges/[id]/resolve/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import mongoose from "mongoose";
@@ -237,23 +238,16 @@ export async function POST(
         const balanceField = (challenge.wagerSubCategory || 'totalPoints') as keyof ContributionMetrics;
         console.log(`Crediting winner ${winnerInfo.username} with ${totalWager} points in category ${balanceField}`);
 
-        let winnerDoc = await UserContributionModel.findOne({ userId: winnerInfo.userId }).session(session);
-        if (!winnerDoc) {
-          winnerDoc = new UserContributionModel({
-            userId: winnerInfo.userId,
-            username: winnerInfo.username,
-            metrics: { // Properly initialize metrics for new docs
-              codeContributions: 0, contentCreation: 0, communityEngagement: 0,
-              githubRepoPoints: 0, gamePublicationPoints: 0, totalPoints: 0, peerReviewPoints: 0
-            }
-          });
-        }
-        
-        winnerDoc.metrics[balanceField] = (winnerDoc.metrics[balanceField] || 0) + totalWager;
+        const updatePayload: any = { $inc: { [`metrics.${balanceField}`]: totalWager } };
         if (challenge.wagerSubCategory) {
-          winnerDoc.metrics.totalPoints = (winnerDoc.metrics.totalPoints || 0) + totalWager;
+          updatePayload.$inc['metrics.totalPoints'] = totalWager;
         }
-        await winnerDoc.save({ session });
+
+        await UserContributionModel.updateOne(
+          { userId: winnerInfo.userId },
+          updatePayload,
+          { session, upsert: true }
+        );
     }
 
     // Record the transfer for auditing (loser's wager)
@@ -266,7 +260,7 @@ export async function POST(
           recipientUsername: winnerInfo.username,
           amount: loserInfo.wager,
           memo: `Gauntlet match loss for game: ${challenge.gameId}, challenge: ${challenge._id}`,
-          pointType: "totalPoints",
+          pointType: challenge.wagerSubCategory ? "totalPoints" : "totalPoints", // The main category is always 'totalPoints' if a sub-category is used
           otherCategorySubType: challenge.wagerSubCategory,
           context: { type: "GAUNTLET_TRANSFER", challengeId: challenge._id },
         },

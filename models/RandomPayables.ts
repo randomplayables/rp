@@ -347,6 +347,7 @@
 
 
 
+// models/RandomPayables.ts
 import mongoose, { Document, Model } from "mongoose";
 
 // Interface for contribution metrics
@@ -424,7 +425,7 @@ export interface IPointTransfer extends Document {
   amount: number;
   memo?: string;
   pointType: 'githubRepoPoints' | 'peerReviewPoints' | 'totalPoints';
-  otherCategorySubType?: string;
+  otherCategorySubType?: string; // ADDED
   context?: any; // ADDED
   timestamp: Date;
 }
@@ -498,7 +499,7 @@ const PointTransferSchema = new mongoose.Schema({
     amount: { type: Number, required: true },
     memo: { type: String },
     pointType: { type: String, required: true },
-    otherCategorySubType: { type: String },
+    otherCategorySubType: { type: String }, // ADDED
     context: { type: mongoose.Schema.Types.Mixed }, // ADDED
     timestamp: { type: Date, default: Date.now },
 });
