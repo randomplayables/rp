@@ -173,7 +173,7 @@ import { prisma } from "@/lib/prisma";
 import mongoose, { Model } from "mongoose";
 import { currentUser } from "@clerk/nextjs/server";
 import { isAdmin } from "@/lib/auth";
-import { updateAllProbabilities } from "@/lib/payablesEngine";
+import { updateAllProbabilities, loadOtherWeights, getWeightedPoints } from "@/lib/payablesEngine";
 
 interface LeanUserContent {
     userId: string;
@@ -201,6 +201,7 @@ async function performContributionsUpdate() {
         throw new Error("Payout configuration or githubRepoDetails not found or invalid.");
     }
     const { owner, repo, pointsPerCommit, pointsPerLineChanged } = payoutConfigDoc.githubRepoDetails;
+    const otherCategoryWeights = await loadOtherWeights();
 
     const allUsers = new Map<string, string>();
     const collections: { model: Model<any>, name: string }[] = [
@@ -233,48 +234,43 @@ async function performContributionsUpdate() {
     for (const [userId, username] of allUsers) {
       console.log(`\nUpdating contributions for ${username} (${userId})...`);
       
-      // Step 1: Calculate raw points from source
-      const rawMetrics = {
+      // Step 1: Calculate raw points from source activities
+      const rawMetricsFromSource = {
         codeContributions: (await UserSketchModel.countDocuments({ userId })) * 10,
         contentCreation: ((await UserVisualizationModel.countDocuments({ userId })) * 8) + ((await UserInstrumentModel.countDocuments({ userId })) * 8),
         communityEngagement: ((await QuestionModel.countDocuments({ userId })) * 5) + ((await AnswerModel.countDocuments({ userId })) * 3),
         gamePublicationPoints: (await GameModel.countDocuments({ authorUsername: username })) * 50,
         peerReviewPoints: (await PeerReviewModel.countDocuments({ reviewerUserId: userId })) * 25,
         githubRepoPoints: 0,
-        totalPoints: 0, // This will be recalculated
       };
 
       const userGithubIntegration = githubIntegrations.find(ghInt => ghInt.userId === userId);
       if (userGithubIntegration && userGithubIntegration.githubUsername) {
         const activity = await fetchUserRepoActivity(owner, repo, userGithubIntegration.githubUsername);
         if (activity) {
-          rawMetrics.githubRepoPoints = (activity.commits * pointsPerCommit) + (activity.linesChanged * pointsPerLineChanged);
+          rawMetricsFromSource.githubRepoPoints = (activity.commits * pointsPerCommit) + (activity.linesChanged * pointsPerLineChanged);
         }
       }
       
       // Step 2: Calculate net transfers for all point types
       const sentTransfers = await PointTransferModel.aggregate([
           { $match: { senderUserId: userId } },
-          { $group: { _id: '$pointType', total: { $sum: '$amount' }, subTypeTotal: { $push: { subType: '$otherCategorySubType', amount: '$amount' } } } }
+          { $group: { _id: { type: '$pointType', subType: '$otherCategorySubType' }, total: { $sum: '$amount' } } }
       ]);
       const receivedTransfers = await PointTransferModel.aggregate([
           { $match: { recipientUserId: userId } },
-          { $group: { _id: '$pointType', total: { $sum: '$amount' }, subTypeTotal: { $push: { subType: '$otherCategorySubType', amount: '$amount' } } } }
+          { $group: { _id: { type: '$pointType', subType: '$otherCategorySubType' }, total: { $sum: '$amount' } } }
       ]);
 
       const netTransfers: Record<string, number> = {};
       
       const processTransfers = (transfers: any[], multiplier: number) => {
           for (const group of transfers) {
-              const pointType = group._id;
-              if (pointType === 'totalPoints') { // "Other Category" transfer
-                  for (const sub of group.subTypeTotal) {
-                      if (sub.subType) {
-                          netTransfers[sub.subType] = (netTransfers[sub.subType] || 0) + (sub.amount * multiplier);
-                      }
-                  }
-              } else {
-                  netTransfers[pointType] = (netTransfers[pointType] || 0) + (group.total * multiplier);
+              const pointType = group._id.type;
+              const subType = group._id.subType;
+              const key = pointType === 'totalPoints' && subType ? subType : pointType;
+              if (key) {
+                netTransfers[key] = (netTransfers[key] || 0) + (group.total * multiplier);
               }
           }
       };
@@ -282,21 +278,28 @@ async function performContributionsUpdate() {
       processTransfers(sentTransfers, -1);
       processTransfers(receivedTransfers, 1);
       
-      // Step 3: Apply transfers to raw metrics
-      const finalMetrics = { ...rawMetrics };
-      finalMetrics.githubRepoPoints += netTransfers['githubRepoPoints'] || 0;
-      finalMetrics.peerReviewPoints += netTransfers['peerReviewPoints'] || 0;
-      finalMetrics.gamePublicationPoints += netTransfers['gamePublicationPoints'] || 0;
-      finalMetrics.codeContributions += netTransfers['codeContributions'] || 0;
-      finalMetrics.contentCreation += netTransfers['contentCreation'] || 0;
-      finalMetrics.communityEngagement += netTransfers['communityEngagement'] || 0;
+      // Step 3: Apply transfers to raw metrics from source to get final raw metrics
+      const finalRawMetrics = {
+          ...rawMetricsFromSource,
+          githubRepoPoints: rawMetricsFromSource.githubRepoPoints + (netTransfers['githubRepoPoints'] || 0),
+          peerReviewPoints: rawMetricsFromSource.peerReviewPoints + (netTransfers['peerReviewPoints'] || 0),
+          gamePublicationPoints: rawMetricsFromSource.gamePublicationPoints + (netTransfers['gamePublicationPoints'] || 0),
+          codeContributions: rawMetricsFromSource.codeContributions + (netTransfers['codeContributions'] || 0),
+          contentCreation: rawMetricsFromSource.contentCreation + (netTransfers['contentCreation'] || 0),
+          communityEngagement: rawMetricsFromSource.communityEngagement + (netTransfers['communityEngagement'] || 0),
+      };
 
-      // Step 4: Recalculate 'totalPoints' aggregate from final sub-components
-      finalMetrics.totalPoints = finalMetrics.gamePublicationPoints + finalMetrics.codeContributions + finalMetrics.contentCreation + finalMetrics.communityEngagement;
+      // Step 4: Recompute 'totalPoints' (the weighted aggregate) from the final raw sub-components
+      const newTotalPoints = getWeightedPoints(finalRawMetrics, otherCategoryWeights);
+      
+      const finalMetricsToSave = {
+        ...finalRawMetrics,
+        totalPoints: newTotalPoints
+      };
 
       await UserContributionModel.findOneAndUpdate(
         { userId },
-        { $set: { username, metrics: finalMetrics, updatedAt: new Date() } },
+        { $set: { username, metrics: finalMetricsToSave, updatedAt: new Date() } },
         { new: true, upsert: true }
       );
       console.log(`  Stored updated metrics for ${username}.`);

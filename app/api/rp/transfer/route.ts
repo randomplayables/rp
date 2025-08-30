@@ -121,9 +121,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { UserContributionModel, PointTransferModel, IUserContribution, ContributionMetrics } from "@/models/RandomPayables";
+import { UserContributionModel, PointTransferModel, ContributionMetrics } from "@/models/RandomPayables";
 import { prisma } from "@/lib/prisma";
-import { updateAllProbabilities } from "@/lib/payablesEngine";
+import { updateAllProbabilities, loadOtherWeights, getWeightedPoints } from "@/lib/payablesEngine";
 import mongoose from "mongoose";
 
 const OTHER_CATEGORY_SUB_TYPES = ['gamePublicationPoints', 'codeContributions', 'contentCreation', 'communityEngagement'];
@@ -189,23 +189,32 @@ export async function POST(request: NextRequest) {
       await session.abortTransaction();
       return NextResponse.json({ error: "Insufficient points in the selected category." }, { status: 400 });
     }
+    
+    const isOtherCategoryTransfer = pointType === 'totalPoints';
+    const weights = isOtherCategoryTransfer ? await loadOtherWeights() : null;
 
-    const senderUpdate: any = { $inc: { [`metrics.${balanceField}`]: -transferAmount } };
-    const recipientUpdate: any = { 
+    // 1. Decrement sender's points
+    const senderUpdateQuery: any = { $inc: { [`metrics.${balanceField}`]: -transferAmount } };
+    await UserContributionModel.updateOne({ userId: clerkUser.id }, senderUpdateQuery, { session });
+    
+    if (isOtherCategoryTransfer) {
+        const updatedSenderMetrics = { ...sender.metrics, [balanceField]: senderBalance - transferAmount };
+        const newSenderTotalPoints = getWeightedPoints(updatedSenderMetrics, weights!);
+        await UserContributionModel.updateOne({ userId: clerkUser.id }, { $set: { 'metrics.totalPoints': newSenderTotalPoints } }, { session });
+    }
+
+    // 2. Increment recipient's points
+    const recipientUpdateQuery: any = {
         $inc: { [`metrics.${balanceField}`]: transferAmount },
         $setOnInsert: { userId: recipientUserId, username: recipientProfile.username }
     };
+    await UserContributionModel.updateOne({ userId: recipientUserId }, recipientUpdateQuery, { upsert: true, session });
     
-    if (pointType === 'totalPoints') {
-        senderUpdate.$inc['metrics.totalPoints'] = -transferAmount;
-        recipientUpdate.$inc['metrics.totalPoints'] = transferAmount;
+    if (isOtherCategoryTransfer) {
+        const recipient = await UserContributionModel.findOne({ userId: recipientUserId }).session(session);
+        const newRecipientTotalPoints = getWeightedPoints(recipient!.metrics, weights!);
+        await UserContributionModel.updateOne({ userId: recipientUserId }, { $set: { 'metrics.totalPoints': newRecipientTotalPoints } }, { session });
     }
-
-    // 1. Decrement sender's points
-    await UserContributionModel.updateOne({ userId: clerkUser.id }, senderUpdate, { session });
-
-    // 2. Increment recipient's points
-    await UserContributionModel.updateOne({ userId: recipientUserId }, recipientUpdate, { upsert: true, session });
 
     // 3. Create a record of the transfer
     await PointTransferModel.create([{

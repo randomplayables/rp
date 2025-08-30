@@ -109,6 +109,7 @@ import { GauntletChallengeModel } from "@/models/Gauntlet";
 import { UserContributionModel } from "@/models/RandomPayables";
 import { currentUser } from "@clerk/nextjs/server";
 import { isAllowedOrigin } from "@/lib/corsConfig";
+import { loadOtherWeights, getWeightedPoints } from "@/lib/payablesEngine";
 
 const getIdFromRequest = (request: NextRequest) => {
   const pathname = new URL(request.url).pathname;
@@ -138,6 +139,8 @@ function getDynamicCorsHeaders(request: NextRequest) {
 export async function OPTIONS(request: NextRequest) {
   return NextResponse.json({}, { status: 200, headers: getDynamicCorsHeaders(request) });
 }
+
+const OTHER_CATEGORY_KEYS = ['gamePublicationPoints', 'codeContributions', 'contentCreation', 'communityEngagement'];
 
 export async function POST(
   request: NextRequest,
@@ -176,12 +179,27 @@ export async function POST(
     }
 
     // Refund the challenger's wager to the correct bucket
-    const balanceField = challenge.wagerSubCategory || 'totalPoints';
-    const refundPayload: any = { $inc: { [`metrics.${balanceField}`]: challenge.challenger.wager }};
-    if (challenge.wagerSubCategory) {
-        refundPayload.$inc['metrics.totalPoints'] = challenge.challenger.wager;
+    const rawKey = challenge.wagerSubCategory || 'totalPoints';
+    const isOtherCategoryWager = OTHER_CATEGORY_KEYS.includes(rawKey);
+
+    const updatedChallengerContribution = await UserContributionModel.findOneAndUpdate(
+        { userId: challenge.challenger.userId },
+        { $inc: { [`metrics.${rawKey}`]: challenge.challenger.wager } },
+        { session, new: true } // Don't upsert, challenger must exist
+    );
+    
+    if (isOtherCategoryWager) {
+        if (!updatedChallengerContribution) {
+            throw new Error("Could not find contribution document for challenger to refund points.");
+        }
+        const weights = await loadOtherWeights();
+        const newTotalPoints = getWeightedPoints(updatedChallengerContribution.metrics, weights);
+        await UserContributionModel.updateOne(
+            { userId: challenge.challenger.userId },
+            { $set: { 'metrics.totalPoints': newTotalPoints } },
+            { session }
+        );
     }
-    await UserContributionModel.updateOne({ userId: challenge.challenger.userId }, refundPayload, { session });
 
     // Update the challenge status to 'cancelled'
     challenge.status = 'cancelled';

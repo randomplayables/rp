@@ -122,9 +122,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import mongoose from "mongoose";
 import { GauntletChallengeModel } from "@/models/Gauntlet";
-import { UserContributionModel, PointTransferModel, ContributionMetrics } from "@/models/RandomPayables";
+import { UserContributionModel, PointTransferModel } from "@/models/RandomPayables";
 import { currentUser } from "@clerk/nextjs/server";
 import { isAllowedOrigin } from "@/lib/corsConfig";
+import { loadOtherWeights, getWeightedPoints } from "@/lib/payablesEngine";
+
 
 function getDynamicCorsHeaders(request: NextRequest) {
   const origin = request.headers.get("origin");
@@ -133,7 +135,7 @@ function getDynamicCorsHeaders(request: NextRequest) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   } as Record<string, string>;
 
-  if (isAllowedOrigin(origin)) {
+  if (origin && isAllowedOrigin(origin)) {
     return {
       ...headers,
       "Access-Control-Allow-Origin": origin as string,
@@ -152,6 +154,8 @@ const getIdFromRequest = (request: NextRequest) => {
   const parts = pathname.split("/");
   return parts[parts.length - 2];
 };
+
+const OTHER_CATEGORY_KEYS = ['gamePublicationPoints', 'codeContributions', 'contentCreation', 'communityEngagement'];
 
 export async function POST(
   request: NextRequest,
@@ -204,18 +208,27 @@ export async function POST(
     const totalWager = (challenge.challenger?.wager || 0) + (challenge.opponent?.wager || 0);
 
     if (totalWager > 0) {
-        const balanceField = (challenge.wagerSubCategory || 'totalPoints') as keyof ContributionMetrics;
+        const rawKey = challenge.wagerSubCategory || 'totalPoints';
+        const isOtherCategoryWager = OTHER_CATEGORY_KEYS.includes(rawKey);
         
-        const updatePayload: any = { $inc: { [`metrics.${balanceField}`]: totalWager } };
-        if (challenge.wagerSubCategory) {
-            updatePayload.$inc['metrics.totalPoints'] = totalWager;
-        }
-
-        await UserContributionModel.updateOne(
+        const updatedWinnerContribution = await UserContributionModel.findOneAndUpdate(
           { userId: winnerInfo.userId },
-          updatePayload,
-          { session, upsert: true }
+          { $inc: { [`metrics.${rawKey}`]: totalWager }, $setOnInsert: { username: winnerInfo.username } },
+          { session, upsert: true, new: true }
         );
+
+        if (isOtherCategoryWager) {
+            if (!updatedWinnerContribution) {
+                throw new Error("Failed to find or create contribution document for the winner.");
+            }
+            const weights = await loadOtherWeights();
+            const newTotalPoints = getWeightedPoints(updatedWinnerContribution.metrics, weights);
+            await UserContributionModel.updateOne(
+                { userId: winnerInfo.userId },
+                { $set: { 'metrics.totalPoints': newTotalPoints } },
+                { session }
+            );
+        }
     }
 
     await PointTransferModel.create(
