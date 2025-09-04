@@ -82,6 +82,8 @@ import { currentUser } from "@clerk/nextjs/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { GauntletChallengeModel, IGauntletParticipant } from "@/models/Gauntlet";
 import { UserContributionModel, ContributionMetrics } from "@/models/RandomPayables";
+// 🔧 Added: use your existing weighting helpers so escrow reflects weights
+import { loadOtherWeights, getWeightedPoints } from "@/lib/payablesEngine";
 
 // GET open gauntlet challenges
 export async function GET(request: NextRequest) {
@@ -120,8 +122,6 @@ export async function POST(request: NextRequest) {
     }
 
     let balanceField: keyof ContributionMetrics = 'totalPoints';
-    // For now, assume wagers come from 'totalPoints' (Other Category)
-    // In the future, this could be expanded to allow wagers from githubRepoPoints etc.
     if (wagerSubCategory) {
         balanceField = wagerSubCategory as keyof ContributionMetrics;
     }
@@ -132,12 +132,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Insufficient points in the selected category for this wager." }, { status: 400 });
     }
 
-    // Deduct points from challenger
-    const updatePayload: any = { $inc: { [`metrics.${balanceField}`]: -wager } };
+    // 🔧 ESCROW: deduct from the wagered bucket (unchanged)
+    await UserContributionModel.updateOne(
+      { userId: clerkUser.id },
+      { $inc: { [`metrics.${balanceField}`]: -wager } }
+    );
+
+    // 🔧 Minimal fix: if this was a sub-bucket wager, recompute totalPoints using weights
+    // (instead of directly decrementing totalPoints by the raw wager)
     if (wagerSubCategory) {
-        updatePayload.$inc['metrics.totalPoints'] = -wager;
+      const refreshed = await UserContributionModel.findOne({ userId: clerkUser.id });
+      if (refreshed) {
+        const weights = await loadOtherWeights();
+        const recomputedTotal = getWeightedPoints(refreshed.metrics as any, weights);
+        await UserContributionModel.updateOne(
+          { userId: clerkUser.id },
+          { $set: { "metrics.totalPoints": recomputedTotal } }
+        );
+      }
     }
-    await UserContributionModel.updateOne({ userId: clerkUser.id }, updatePayload);
 
     const challenger: IGauntletParticipant = {
       userId: clerkUser.id,
