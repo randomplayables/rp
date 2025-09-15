@@ -10,11 +10,11 @@ export default function PrivacyPolicyPage() {
   return (
     <div className="bg-white p-6 md:p-10 rounded-lg shadow-md max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Privacy Policy</h1>
-      <p className="mb-4 text-gray-600">Last updated: August 07, 2025</p>
+      <p className="mb-4 text-gray-600">Last updated: September 15, 2025</p>
 
       <div className="prose prose-lg max-w-none space-y-4">
         <p>
-          Welcome to randomplayables (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;). We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website <Link href="/">randomplayables.com</Link> and our related subdomains (the &quot;Site&quot;). Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site. This privacy policy was written by Gemini 2.5 Pro.
+          Welcome to randomplayables (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;). We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website <Link href="/">randomplayables.com</Link> and our related subdomains (the &quot;Site&quot;). Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site.
         </p>
 
         <h2 className="text-2xl font-semibold mt-8 mb-4">Collection of Your Information</h2>
@@ -60,7 +60,7 @@ export default function PrivacyPolicyPage() {
             <li>Facilitate payouts through the Random Payables system.</li>
             <li>Display your user-generated content and profile.</li>
             <li>Enable user-to-user communications and interactions.</li>
-            <li>Aggregate anonymized data for research and analysis to support our citizen science mission.</li>
+            <li>Share data for research and analysis to support our citizen science mission.</li>
             <li>Monitor and analyze usage and trends to improve your experience with the Site.</li>
             <li>Notify you of updates to the Site.</li>
         </ul>
@@ -70,7 +70,7 @@ export default function PrivacyPolicyPage() {
         <ul>
             <li><strong>By Law or to Protect Rights:</strong> If we believe the release of information about you is necessary to respond to legal process, to investigate or remedy potential violations of our policies, or to protect the rights, property, and safety of others.</li>
             <li><strong>Third-Party Service Providers:</strong> We may share your information with third parties that perform services for us or on our behalf, including payment processing (Stripe), user authentication (Clerk), and hosting (Vercel).</li>
-            <li><strong>Publicly Visible Information:</strong> Your username, profile information, and any content you create (games, visualizations, questions, etc.) may be publicly visible to other users of the Site.</li>
+            <li><strong>Publicly Visible Information:</strong> Your username, profile information, any data you generate (game play, survey responses, contributions), and any content you create (games, visualizations, questions, etc.) will be publicly visible.</li>
         </ul>
 
         <h2 className="text-2xl font-semibold mt-8 mb-4">Security of Your Information</h2>

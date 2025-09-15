@@ -10,11 +10,11 @@ export default function TermsOfServicePage() {
   return (
     <div className="bg-white p-6 md:p-10 rounded-lg shadow-md max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Terms of Service</h1>
-      <p className="mb-4 text-gray-600">Last updated: August 07, 2025</p>
+      <p className="mb-4 text-gray-600">Last updated: September 15, 2025</p>
 
       <div className="prose prose-lg max-w-none space-y-4">
         <p>
-          Please read these Terms of Service (&quot;Terms&quot;) carefully before using the <Link href="/">randomplayables.com</Link> website and its subdomains (the &quot;Service&quot;) operated by randomplayables (&quot;us&quot;, &quot;we&quot;, or &quot;our&quot;). This privacy policy was written by Gemini 2.5 Pro.
+          Please read these Terms of Service (&quot;Terms&quot;) carefully before using the <Link href="/">randomplayables.com</Link> website and its subdomains (the &quot;Service&quot;) operated by randomplayables (&quot;us&quot;, &quot;we&quot;, or &quot;our&quot;).
         </p>
         <p>
           Your access to and use of the Service is conditioned upon your acceptance of and compliance with these Terms. These Terms apply to all visitors, users, and others who wish to access or use the Service.
@@ -22,7 +22,7 @@ export default function TermsOfServicePage() {
 
         <h2 className="text-2xl font-semibold mt-8 mb-4">1. Accounts</h2>
         <p>
-          When you create an account with us, you guarantee that you are above the age of 13, and that the information you provide us is accurate, complete, and current at all times. You are responsible for safeguarding the password that you use to access the Service and for any activities or actions under your password.
+          When you create an account with us, you guarantee that the information you provide us is accurate, complete, and current at all times. You are responsible for safeguarding the password that you use to access the Service and for any activities or actions under your password.
         </p>
 
         <h2 className="text-2xl font-semibold mt-8 mb-4">2. User-Generated Content</h2>
