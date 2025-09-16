@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveModelsForChat, incrementApiUsage, IncrementApiUsageParams } from "@/lib/modelSelection";
 import { callOpenAIChat } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
+import { getApiLimitForTier } from "@/lib/plans";
 
 const FALLBACK_COLLECT_CODER_SYSTEM_PROMPT_TEMPLATE = `
 You are an AI assistant specialized in creating custom surveys for the RandomPlayables platform.
@@ -40,17 +41,6 @@ async function fetchActiveGamesList() {
   }).limit(20).lean();
   return games;
 }
-
-function getMonthlyLimitForTier(tier?: string | null): number {
-    switch (tier) {
-      case "premium":
-        return 500;
-      case "premium_plus":
-        return 1500;
-      default:
-        return 100; 
-    }
-  }
 
 export async function POST(request: NextRequest) {
   try {
@@ -137,7 +127,7 @@ export async function POST(request: NextRequest) {
     if (usageData) {
         finalApiResponse.remainingRequests = Math.max(0, (usageData.monthlyLimit) - (usageData.usageCount));
     } else {
-        const limitForUser = getMonthlyLimitForTier(profile?.subscriptionTier);
+        const limitForUser = getApiLimitForTier(profile?.subscriptionTier);
         finalApiResponse.remainingRequests = limitForUser;
     }
     
