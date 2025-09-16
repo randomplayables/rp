@@ -4,6 +4,7 @@ import { callOpenAIEmbeddings } from "@/lib/aiService";
 import { isModelFree } from "@/lib/modelConfig";
 import { incrementApiUsage, IncrementApiUsageParams } from "@/lib/modelSelection";
 import { prisma } from "@/lib/prisma";
+import { getApiLimitForTier } from "@/lib/plans";
 
 // A simple model resolver for embeddings.
 const getEmbeddingModelForUser = (isSubscribed: boolean): string => {
@@ -11,15 +12,6 @@ const getEmbeddingModelForUser = (isSubscribed: boolean): string => {
   // Using OpenAI's newer, standard embedding model.
   return "text-embedding-3-small";
 };
-
-// Helper function to get monthly limit based on tier
-function getMonthlyLimitForTier(tier?: string | null): number {
-  switch (tier) {
-    case "premium": return 500;
-    case "premium_plus": return 1500;
-    default: return 100;
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +30,7 @@ export async function POST(request: NextRequest) {
         where: { userId: user.id }
     });
 
-    const monthlyLimit = getMonthlyLimitForTier(profile?.subscriptionTier);
+    const monthlyLimit = getApiLimitForTier(profile?.subscriptionTier);
     let currentUsage = usageRecord?.usageCount || 0;
     
     // Check for monthly reset

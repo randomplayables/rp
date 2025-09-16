@@ -5,18 +5,7 @@ import {
   isModelFree, 
   ModelDefinition, // Make sure ModelDefinition is exported from modelConfig.ts
 } from "./modelConfig";
-
-// Helper function to get monthly limit based on tier
-function getMonthlyLimitForTier(tier?: string | null): number {
-  switch (tier) {
-    case "premium":
-      return 500;
-    case "premium_plus":
-      return 1500;
-    default:
-      return 100; // Basic/free tier
-  }
-}
+import { getApiLimitForTier } from "./plans";
 
 async function getUserSubscriptionAndUsage(userId: string) {
   const profile = await prisma.profile.findUnique({
@@ -30,7 +19,7 @@ async function getUserSubscriptionAndUsage(userId: string) {
     where: { userId },
   });
 
-  const monthlyLimit = getMonthlyLimitForTier(subscriptionTier);
+  const monthlyLimit = getApiLimitForTier(subscriptionTier);
   let currentUsageCount = usageRecord?.usageCount || 0;
 
   let needsReset = false;
@@ -146,7 +135,7 @@ export async function incrementApiUsage(params: IncrementApiUsageParams): Promis
       where: { userId },
       select: { subscriptionTier: true }
     });
-    const currentMonthlyLimit = getMonthlyLimitForTier(profile?.subscriptionTier);
+    const currentMonthlyLimit = getApiLimitForTier(profile?.subscriptionTier);
 
     if (!usage) {
       await prisma.apiUsage.create({

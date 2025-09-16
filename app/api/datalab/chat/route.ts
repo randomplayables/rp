@@ -5,6 +5,7 @@ import { resolveModelsForChat, incrementApiUsage, IncrementApiUsageParams } from
 import { fetchRelevantData, DATA_TYPES } from "./datalabHelper";
 import { callOpenAIChat } from "@/lib/aiService";
 import { ChatCompletionMessageParam, ChatCompletionSystemMessageParam } from "openai/resources/chat/completions";
+import { getApiLimitForTier } from "@/lib/plans";
 
 const FALLBACK_DATALAB_CODER_SYSTEM_PROMPT_TEMPLATE = `You are an AI assistant specialized in creating D3.js visualizations and exporting data for a citizen science gaming platform. You have access to data from MongoDB and PostgreSQL based on the user's selection.
 
@@ -201,17 +202,6 @@ d3.select(container)
 Return ONLY the JavaScript code. Do not include explanations unless specifically asked.
 `;
 
-function getMonthlyLimitForTier(tier?: string | null): number {
-  switch (tier) {
-    case "premium":
-      return 500;
-    case "premium_plus":
-      return 1500;
-    default:
-      return 100;
-  }
-}
-
 function extractCodeFromResponse(aiResponseContent: string | null, defaultMessage: string = "AI response:"): { code: string; message_text: string } {
   if (!aiResponseContent) return { code: "", message_text: "No content from AI." };
   let code = "";
@@ -326,7 +316,7 @@ export async function POST(request: NextRequest) {
     if (usageData) {
         finalApiResponse.remainingRequests = Math.max(0, (usageData.monthlyLimit) - (usageData.usageCount));
     } else {
-        const limitForUser = getMonthlyLimitForTier(profile?.subscriptionTier);
+        const limitForUser = getApiLimitForTier(profile?.subscriptionTier);
         finalApiResponse.remainingRequests = limitForUser;
     }
 

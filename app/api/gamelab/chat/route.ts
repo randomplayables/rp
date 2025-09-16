@@ -13,6 +13,7 @@ import {
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_1_STRUCTURE,
   BASE_GAMELAB_CODER_SYSTEM_PROMPT_RPTS_GAUNTLET_STEP_2_CODE
 } from "@/app/gamelab/prompts";
+import { getApiLimitForTier } from "@/lib/plans";
 
 function sanitizeCodeForBrowser(code: string, language: string): string {
   if (language !== 'tsx' && language !== 'jsx' && language !== 'react') {
@@ -36,10 +37,6 @@ function sanitizeCodeForBrowser(code: string, language: string): string {
   }
 
   return sanitizedCode.trim();
-}
-
-function getMonthlyLimitForTier(tier?: string | null): number {
-    switch (tier) { case "premium": return 500; case "premium_plus": return 1500; default: return 100; }
 }
 
 function extractGameLabCodeFromResponse(
@@ -282,7 +279,7 @@ export async function POST(request: NextRequest) {
     }
 
     const usageData = await prisma.apiUsage.findUnique({ where: { userId: clerkUser.id } });
-    finalApiResponse.remainingRequests = usageData ? Math.max(0, usageData.monthlyLimit - usageData.usageCount) : getMonthlyLimitForTier(profile?.subscriptionTier);
+    finalApiResponse.remainingRequests = usageData ? Math.max(0, usageData.monthlyLimit - usageData.usageCount) : getApiLimitForTier(profile?.subscriptionTier);
 
     return NextResponse.json(finalApiResponse);
 

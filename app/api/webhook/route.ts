@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { getApiLimitForTier } from "@/lib/plans";
 
 // Define the specific handlers for events processed by THIS webhook
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
@@ -57,7 +58,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
         console.log(`✅ (Platform Webhook) Updated profile:`, JSON.stringify(updatedProfile));
       }
       
-      const monthlyLimit = planType === "premium_plus" ? 1500 : (planType === "premium" ? 500 : 100); // Assuming 100 for free/null tier
+      const monthlyLimit = getApiLimitForTier(planType);
       
       await prisma.apiUsage.upsert({
         where: { userId },

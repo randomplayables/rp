@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
-
-// Helper function to get monthly limit based on tier
-function getMonthlyLimitForTier(tier?: string | null): number {
-  switch (tier) {
-    case "premium":
-      return 500;
-    case "premium_plus":
-      return 1500;
-    default:
-      return 100; // Basic tier gets 100 requests
-  }
-}
+import { getApiLimitForTier } from "@/lib/plans";
 
 // Get current usage
 export async function GET(request: NextRequest) {
@@ -22,43 +11,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get or create usage record
+    const profile = await prisma.profile.findUnique({
+      where: { userId: clerkUser.id },
+      select: { subscriptionTier: true }
+    });
+    const correctMonthlyLimit = getApiLimitForTier(profile?.subscriptionTier);
+
     let usage = await prisma.apiUsage.findUnique({
       where: { userId: clerkUser.id }
     });
 
-    // If no usage record exists, get subscription info to determine limit
     if (!usage) {
-      const profile = await prisma.profile.findUnique({
-        where: { userId: clerkUser.id },
-        select: { subscriptionTier: true }
-      });
-
-      // Set appropriate limit based on tier
-      const monthlyLimit = getMonthlyLimitForTier(profile?.subscriptionTier);
-      
+      // If no usage record exists, create one with the correct limit.
       usage = await prisma.apiUsage.create({
         data: {
           userId: clerkUser.id,
           usageCount: 0,
-          monthlyLimit,
+          monthlyLimit: correctMonthlyLimit,
           lastResetDate: new Date()
         }
       });
-    }
+    } else {
+      const now = new Date();
+      const lastReset = new Date(usage.lastResetDate);
+      const needsMonthlyReset = now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear();
+      const limitIsIncorrect = usage.monthlyLimit !== correctMonthlyLimit;
 
-    // Check if we need to reset monthly usage
-    const now = new Date();
-    const lastReset = new Date(usage.lastResetDate);
-    if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
-      // Reset monthly usage
-      usage = await prisma.apiUsage.update({
-        where: { userId: clerkUser.id },
-        data: {
-          usageCount: 0,
-          lastResetDate: now
-        }
-      });
+      // If the month has changed OR the stored limit is incorrect, update the record.
+      if (needsMonthlyReset || limitIsIncorrect) {
+        usage = await prisma.apiUsage.update({
+          where: { userId: clerkUser.id },
+          data: {
+            usageCount: needsMonthlyReset ? 0 : usage.usageCount,
+            monthlyLimit: correctMonthlyLimit,
+            lastResetDate: needsMonthlyReset ? now : usage.lastResetDate,
+          }
+        });
+      }
     }
 
     return NextResponse.json({
@@ -93,7 +82,7 @@ export async function POST(request: NextRequest) {
         select: { subscriptionTier: true }
       });
 
-      const monthlyLimit = getMonthlyLimitForTier(profile?.subscriptionTier);
+      const monthlyLimit = getApiLimitForTier(profile?.subscriptionTier);
       
       usage = await prisma.apiUsage.create({
         data: {
@@ -108,10 +97,17 @@ export async function POST(request: NextRequest) {
       const lastReset = new Date(usage.lastResetDate);
       if (now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear()) {
         // Reset monthly usage
+        const profile = await prisma.profile.findUnique({
+          where: { userId: clerkUser.id },
+          select: { subscriptionTier: true }
+        });
+        const monthlyLimit = getApiLimitForTier(profile?.subscriptionTier);
+        
         usage = await prisma.apiUsage.update({
           where: { userId: clerkUser.id },
           data: {
             usageCount: 1,
+            monthlyLimit: monthlyLimit,
             lastResetDate: now
           }
         });
